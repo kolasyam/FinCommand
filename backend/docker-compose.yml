@@ -1,0 +1,101 @@
+# ═══════════════════════════════════════════════
+#  FinCommand Pro — Docker Compose (Development)
+#  Usage: docker-compose up -d
+# ═══════════════════════════════════════════════
+
+version: '3.9'
+
+services:
+
+  # ── PostgreSQL ──
+  postgres:
+    image: postgres:16-alpine
+    container_name: fc_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${DB_NAME:-fincommand}
+      POSTGRES_USER:     ${DB_USER:-fincommand_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    ports:
+      - "${DB_PORT_EXPOSE:-5432}:5432"   # expose for local psql access
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-fincommand_user} -d ${DB_NAME:-fincommand}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - fc_net
+
+  # ── API Server ──
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: fc_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV:               development
+      PORT:                   4000
+      API_PREFIX:             /api/v1
+      DB_HOST:                postgres
+      DB_PORT:                5432
+      DB_NAME:                ${DB_NAME:-fincommand}
+      DB_USER:                ${DB_USER:-fincommand_user}
+      DB_PASSWORD:            ${DB_PASSWORD}
+      JWT_SECRET:             ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_EXPIRES_IN:         ${JWT_EXPIRES_IN:-15m}
+      JWT_REFRESH_SECRET:     ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      BCRYPT_ROUNDS:          ${BCRYPT_ROUNDS:-12}
+      ZOHO_CLIENT_ID:         ${ZOHO_CLIENT_ID:-}
+      ZOHO_CLIENT_SECRET:     ${ZOHO_CLIENT_SECRET:-}
+      ZOHO_REDIRECT_URI:      ${ZOHO_REDIRECT_URI:-http://localhost:4000/api/v1/zoho/callback}
+      ZOHO_SCOPES:            ZohoBooks.fullaccess.all
+      FRONTEND_URL:           ${FRONTEND_URL:-http://localhost:3000}
+      UPLOAD_DIR:             /app/uploads
+      LOG_DIR:                /app/logs
+      MAX_FILE_SIZE_MB:       ${MAX_FILE_SIZE_MB:-50}
+    volumes:
+      - fc_uploads:/app/uploads
+      - fc_logs:/app/logs
+    ports:
+      - "${API_PORT:-4000}:4000"
+    networks:
+      - fc_net
+    labels:
+      - "com.fincommand.service=api"
+
+  # ── Nginx reverse proxy ──
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: fc_nginx
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - fc_net
+
+volumes:
+  pg_data:
+    name: fc_pg_data
+  fc_uploads:
+    name: fc_uploads
+  fc_logs:
+    name: fc_logs
+
+networks:
+  fc_net:
+    name: fc_network
+    driver: bridge

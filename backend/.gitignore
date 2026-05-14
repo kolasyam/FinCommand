@@ -1,0 +1,42 @@
+# ─── Dependencies ───
+node_modules/
+.pnp/
+.pnp.js
+
+# ─── Environment ───
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ─── Uploads & Logs ───
+uploads/
+logs/
+*.log
+
+# ─── Coverage & Build ───
+coverage/
+dist/
+build/
+
+# ─── OS ───
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ─── IDE ───
+.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ─── Docker ───
+.docker/
+
+# ─── Temp ───
+tmp/
+temp/
+*.tmp
