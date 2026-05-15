@@ -70,6 +70,16 @@ app.get(`${API}/health`, (req, res) => {
   });
 });
 
+// ── Root route ──
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Welcome to FinCommand',
+    status:  'ok',
+    service: 'FinCommand Pro API',
+    version: '1.0.0',
+  });
+});
+
 // ── Catch-all 404 ──
 app.use((req, res) => res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` }));
 

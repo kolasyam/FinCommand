@@ -9,9 +9,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
-/* ═══════════════════════════════════════════════
-   RESET & BASE
-═══════════════════════════════════════════════ */
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#ffffff;--bg2:#f7f8fa;--bg3:#eef0f4;
@@ -29,27 +26,12 @@
 }
 body{font-family:var(--font);font-size:13px;color:var(--text);background:var(--bg);min-height:100vh}
 a{color:var(--blue);text-decoration:none}
-
-/* ═══════════════════════════════════════════════
-   LAYOUT
-═══════════════════════════════════════════════ */
-.topbar{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:10px 24px;border-bottom:1px solid var(--border);
-  background:var(--bg);position:sticky;top:0;z-index:100;
-  flex-wrap:wrap;gap:8px;box-shadow:var(--shadow);
-}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 24px;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:8px;box-shadow:var(--shadow);}
 .logo{font-size:15px;font-weight:600;color:var(--text)}
 .logo span{font-size:9px;padding:2px 7px;border-radius:20px;background:var(--green-l);color:var(--green);margin-left:6px;font-weight:500;vertical-align:middle}
 .co-info{font-size:11px;color:var(--text2);margin-top:2px}
 .tbar-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-
-/* period bar */
-.pbar{
-  display:flex;align-items:center;flex-wrap:wrap;gap:6px 0;
-  padding:7px 24px;border-bottom:1px solid var(--border);
-  background:var(--bg2);
-}
+.pbar{display:flex;align-items:center;flex-wrap:wrap;gap:6px 0;padding:7px 24px;border-bottom:1px solid var(--border);background:var(--bg2);}
 .pb-grp{display:flex;align-items:center;gap:4px}
 .pb-lbl{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-right:3px;white-space:nowrap}
 .pb-sep{width:1px;height:16px;background:var(--border2);margin:0 10px;flex-shrink:0}
@@ -59,28 +41,13 @@ a{color:var(--blue);text-decoration:none}
 .pbp.yt.on{background:var(--blue);color:#fff}
 .pbp.sub.on{background:var(--green);color:#fff}
 .pb-summary{margin-left:auto;font-size:10px;color:var(--text3);white-space:nowrap;padding:3px 9px;background:var(--bg);border-radius:20px;border:1px solid var(--border)}
-
-/* nav */
-.ntabs{
-  display:flex;padding:0 24px;border-bottom:1px solid var(--border);
-  background:var(--bg);overflow-x:auto;gap:2px;
-}
-.ntab{
-  padding:9px 13px;border:none;background:none;font-size:11px;
-  color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;
-  white-space:nowrap;transition:color .12s;
-}
+.ntabs{display:flex;padding:0 24px;border-bottom:1px solid var(--border);background:var(--bg);overflow-x:auto;gap:2px;}
+.ntab{padding:9px 13px;border:none;background:none;font-size:11px;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:color .12s;}
 .ntab.active{color:var(--text);font-weight:600;border-bottom-color:var(--blue)}
 .ntab:hover{color:var(--text)}
 .new-badge{font-size:8px;padding:1px 4px;border-radius:5px;background:var(--amber-l);color:var(--amber);margin-left:3px;vertical-align:middle;font-weight:600}
-
-/* content */
 .content{padding:18px 24px;max-width:1400px}
 .sec{display:none}.sec.active{display:block}
-
-/* ═══════════════════════════════════════════════
-   BUTTONS
-═══════════════════════════════════════════════ */
 .btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border:none;border-radius:var(--radius-sm);font-size:11px;font-weight:500;cursor:pointer;transition:all .12s;font-family:var(--font)}
 .btn:active{transform:scale(.97)}
 .btn-pr{background:var(--blue);color:#fff}.btn-pr:hover{background:var(--blue-d)}
@@ -90,16 +57,11 @@ a{color:var(--blue);text-decoration:none}
 .btn-dl{background:transparent;border:1px solid var(--border2);color:var(--text)}.btn-dl:hover{filter:brightness(.95)}
 .btn-dl.pdf{background:var(--blue-l);color:var(--blue);border-color:#B5D4F4}
 .btn-dl.xlsx{background:var(--green-l);color:var(--green);border-color:#9FE1CB}
-
-/* ═══════════════════════════════════════════════
-   CARDS & GRIDS
-═══════════════════════════════════════════════ */
 .grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
 .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
 .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:14px}
 @media(max-width:900px){.grid4{grid-template-columns:1fr 1fr}.grid3{grid-template-columns:1fr 1fr}}
 @media(max-width:600px){.grid4,.grid3,.grid2{grid-template-columns:1fr}}
-
 .card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:14px;overflow:hidden;box-shadow:var(--shadow)}
 .card-hdr{padding:10px 16px;border-bottom:1px solid var(--border);background:var(--bg2);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px}
 .card-body{padding:14px}
@@ -109,16 +71,11 @@ a{color:var(--blue);text-decoration:none}
 .cb-green{background:var(--green-l);color:var(--green)}
 .cb-amber{background:var(--amber-l);color:var(--amber)}
 .cb-red{background:var(--red-l);color:var(--red)}
-
 .kpi{background:var(--bg2);border-radius:var(--radius);padding:13px;border:1px solid var(--border)}
 .kpi .lbl{font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;font-weight:500}
 .kpi .val{font-size:20px;font-weight:600;color:var(--text);line-height:1.2}
 .kpi .chg{font-size:10px;margin-top:3px}
 .up{color:#1d9e75}.dn{color:#d85a30}.neu{color:var(--text3)}
-
-/* ═══════════════════════════════════════════════
-   TABLES
-═══════════════════════════════════════════════ */
 table{width:100%;border-collapse:collapse;font-size:11px}
 th{font-size:10px;font-weight:600;color:var(--text2);text-align:left;padding:7px 12px;border-bottom:1px solid var(--border);background:var(--bg2);white-space:nowrap}
 th.num{text-align:right}
@@ -138,10 +95,6 @@ tr:hover td{background:var(--bg2)}
 .neg{color:var(--text3)}
 .cf-pos{color:#1d9e75}
 .cf-neg{color:#d85a30}
-
-/* ═══════════════════════════════════════════════
-   PILLS & BADGES
-═══════════════════════════════════════════════ */
 .pill{display:inline-block;font-size:9px;padding:2px 7px;border-radius:10px;font-weight:500}
 .pg{background:var(--green-l);color:var(--green)}
 .pr{background:var(--red-l);color:var(--red)}
@@ -149,43 +102,23 @@ tr:hover td{background:var(--bg2)}
 .pb{background:var(--blue-l);color:var(--blue)}
 .ppu{background:var(--purple-l);color:var(--purple)}
 .pgy{background:var(--bg3);color:var(--text2)}
-
-/* ═══════════════════════════════════════════════
-   HELPERS
-═══════════════════════════════════════════════ */
 .info-bar{background:var(--blue-l);color:var(--blue-d);border-radius:var(--radius-sm);padding:8px 12px;font-size:11px;margin-bottom:12px;line-height:1.6;border-left:3px solid var(--blue)}
 .warn-bar{background:var(--amber-l);color:var(--amber);border-radius:var(--radius-sm);padding:8px 12px;font-size:11px;margin-bottom:12px;border-left:3px solid #EF9F27}
 .success-bar{background:var(--green-l);color:var(--green);border-radius:var(--radius-sm);padding:8px 12px;font-size:11px;margin-bottom:12px;border-left:3px solid var(--green)}
-
-.dl-bar{
-  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;
-  padding:10px 14px;background:var(--bg2);border:1px solid var(--border);
-  border-radius:var(--radius-lg);margin-bottom:14px;
-}
+.dl-bar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:14px;}
 .dl-bar-title{font-size:12px;font-weight:600}
 .dl-bar-sub{font-size:10px;color:var(--text2);margin-top:2px}
-
 .notice{font-size:10px;color:var(--text3);padding:4px 2px 12px;line-height:1.7;font-style:italic}
-
-/* upload zone */
-.upload-zone{
-  border:2px dashed var(--border2);border-radius:var(--radius-lg);
-  padding:32px;text-align:center;cursor:pointer;margin-bottom:12px;
-  transition:all .15s;
-}
+.upload-zone{border:2px dashed var(--border2);border-radius:var(--radius-lg);padding:32px;text-align:center;cursor:pointer;margin-bottom:12px;transition:all .15s;}
 .upload-zone:hover,.upload-zone.drag{border-color:var(--blue);background:var(--blue-l)}
 .upload-zone.done{border-color:var(--green);background:var(--green-l)}
 .prog-wrap{background:var(--bg3);border-radius:4px;height:5px;overflow:hidden;margin-bottom:10px}
 .prog-fill{height:5px;border-radius:4px;background:var(--green);transition:width .3s}
 .parse-log{font-size:10px;font-family:var(--mono);color:var(--text2);background:var(--bg2);border-radius:var(--radius-sm);padding:8px 10px;max-height:90px;overflow-y:auto;margin-bottom:10px;line-height:1.9;border:1px solid var(--border)}
-
-/* ratio gauge */
 .ratio-card{background:var(--bg2);border-radius:var(--radius);padding:12px;border:1px solid var(--border)}
 .gauge-wrap{background:var(--bg);border-radius:4px;height:5px;overflow:hidden;margin:5px 0 3px}
 .gauge-fill{height:5px;border-radius:4px}
 .g-green{background:#1D9E75}.g-amber{background:#EF9F27}.g-red{background:#D85A30}.g-blue{background:#378ADD}
-
-/* alerts */
 .alert-item{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:var(--radius);margin-bottom:8px;border:1px solid transparent}
 .alert-item.critical{background:#FEF3F0;border-color:#FECDBA}
 .alert-item.warning{background:#FFFBF0;border-color:#FAE3A0}
@@ -193,13 +126,9 @@ tr:hover td{background:var(--bg2)}
 .alert-item.success-a{background:var(--green-l);border-color:#9FE1CB}
 .alert-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:3px}
 .dot-cr{background:#D85A30}.dot-wa{background:#EF9F27}.dot-in{background:#378ADD}.dot-ok{background:#1D9E75}
-
-/* compliance */
 .comp-row{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-bottom:1px solid var(--border)}
 .comp-row:last-child{border-bottom:none}
 .comp-icon{width:30px;height:30px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
-
-/* scenario */
 .sc-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
 .sc-lbl{font-size:11px;min-width:170px;color:var(--text2)}
 .sc-val{font-size:11px;font-weight:600;min-width:54px;text-align:right;color:var(--text)}
@@ -208,8 +137,6 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
 .so-item{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px}
 .so-lbl{font-size:10px;color:var(--text2);margin-bottom:2px}
 .so-val{font-size:16px;font-weight:600}
-
-/* WC bars */
 .wc-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
 .wc-row:last-child{border-bottom:none}
 .wc-name{font-size:11px;min-width:180px;color:var(--text)}
@@ -217,8 +144,6 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
 .wc-bar-inner{height:8px;border-radius:4px;transition:width .4s}
 .wc-val{font-size:11px;font-weight:600;min-width:54px;text-align:right}
 .wc-bench{font-size:10px;color:var(--text3);min-width:72px;text-align:right}
-
-/* board pack */
 .bp-section{border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:12px;overflow:hidden}
 .bp-hdr{background:var(--bg2);padding:9px 14px;font-size:11px;font-weight:600;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px}
 .bp-body{padding:12px 14px}
@@ -232,27 +157,16 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
 .hl-amber{background:#fffbeb;border-left:3px solid #EF9F27;color:#78350f}
 .hl-red{background:#fff5f2;border-left:3px solid #D85A30;color:#7f1d1d}
 .hl-blue{background:var(--blue-l);border-left:3px solid var(--blue);color:var(--blue-d)}
-
-/* toast */
 .toast{position:fixed;bottom:24px;right:24px;background:#1f2937;color:#fff;padding:10px 18px;border-radius:var(--radius);font-size:12px;font-weight:500;opacity:0;transition:opacity .25s;pointer-events:none;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.2)}
 .toast.show{opacity:1}
-
-/* step grid */
 .step-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-bottom:16px;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
 .step-box{padding:14px;border-right:1px solid var(--border);background:var(--bg)}
 .step-box:last-child{border-right:none}
 .step-num{font-size:9px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
-
-/* architecture svg container */
-.arch-svg-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px;margin-bottom:14px;overflow:auto}
-
-/* notes */
 .note-block{border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;overflow:hidden}
 .note-hdr{background:var(--bg2);padding:8px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border)}
 .note-hdr .nn{font-size:10px;color:var(--blue);font-family:var(--mono);font-weight:600}
 .note-hdr .nb{font-size:11px;font-weight:600;color:var(--text)}
-
-/* print */
 @media print{
   .topbar,.pbar,.ntabs,.dl-bar,.btn,.tbar-right{display:none!important}
   .sec{display:block!important}
@@ -260,20 +174,21 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
   .card{box-shadow:none;break-inside:avoid}
   body{font-size:10px}
 }
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
 
 <div class="toast" id="toast"></div>
 
-<!-- ═══ LOGIN MODAL ═══ -->
-<div id="login-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px)">
+<!-- LOGIN MODAL -->
+<div id="login-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;align-items:center;justify-content:center;backdrop-filter:blur(3px)">
   <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px;width:360px;box-shadow:0 8px 32px rgba(0,0,0,.12)">
     <div style="margin-bottom:20px">
       <div class="logo" style="font-size:18px;margin-bottom:4px">FinCommand Pro</div>
       <div style="font-size:11px;color:var(--text2)">IND AS · CFO/CEO Financial Dashboard</div>
     </div>
-    <div id="login-error" style="display:none;background:var(--red-l,#FAECE7);color:var(--red,#993C1D);padding:8px 10px;border-radius:var(--radius-sm);font-size:11px;margin-bottom:12px;border-left:3px solid currentColor"></div>
+    <div id="login-error" style="display:none;background:var(--red-l);color:var(--red);padding:8px 10px;border-radius:var(--radius-sm);font-size:11px;margin-bottom:12px;border-left:3px solid currentColor"></div>
     <div style="margin-bottom:12px">
       <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px">Email address</label>
       <input id="login-email" type="email" placeholder="cfo@yourcompany.in" autocomplete="email"
@@ -301,16 +216,13 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
   </div>
 </div>
 
-<!-- ═══ LOADING OVERLAY ═══ -->
-<div id="loading-overlay" style="display:none;position:fixed;bottom:16px;right:16px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;font-size:12px;color:var(--text2);box-shadow:var(--shadow);z-index:300;display:flex;align-items:center;gap:8px">
+<!-- LOADING OVERLAY -->
+<div id="loading-overlay" style="display:none;position:fixed;bottom:16px;right:16px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;font-size:12px;color:var(--text2);box-shadow:var(--shadow);z-index:300;align-items:center;gap:8px">
   <span style="display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .6s linear infinite"></span>
   <span id="loading-msg">Fetching data…</span>
 </div>
-<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
 
-<!-- ═══════════════════════════════════════════════
-     TOP BAR
-═══════════════════════════════════════════════ -->
+<!-- TOP BAR -->
 <div class="topbar">
   <div>
     <div class="logo">FinCommand Pro <span>IND AS · Schedule III</span></div>
@@ -320,15 +232,14 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
     <select id="fy-selector" style="display:none;padding:5px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:11px;background:var(--bg);color:var(--text);cursor:pointer" onchange="onFYChange()"></select>
     <span id="src-pill" class="pill pa" style="cursor:pointer" onclick="showLoginOrLogout()">Sample Data</span>
     <span id="user-chip" style="display:none;font-size:10px;color:var(--text2);padding:3px 8px;background:var(--bg2);border-radius:var(--radius-sm);border:1px solid var(--border)"></span>
+    <button id="logout-btn" class="btn btn-dl btn-sm" style="display:none" onclick="doLogout()"> Logout</button>
     <button class="btn btn-se btn-sm" onclick="go('upload')">⬆ Upload TB</button>
     <button class="btn btn-se btn-sm" onclick="dlAllXLSX()">⬇ All Excel</button>
     <button class="btn btn-pr btn-sm" onclick="dlAllPDF()">⬇ Annual Report PDF</button>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════
-     PERIOD BAR
-═══════════════════════════════════════════════ -->
+<!-- PERIOD BAR -->
 <div class="pbar">
   <div class="pb-grp">
     <span class="pb-lbl">Year</span>
@@ -355,9 +266,7 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
   <span class="pb-summary" id="pb-summary">FY 2024-25 · Annual</span>
 </div>
 
-<!-- ═══════════════════════════════════════════════
-     NAVIGATION TABS
-═══════════════════════════════════════════════ -->
+<!-- NAVIGATION TABS -->
 <div class="ntabs">
   <button class="ntab active" id="nt-overview" onclick="go('overview')">Executive Overview</button>
   <button class="ntab" id="nt-cashflow" onclick="go('cashflow')">Cash Flow <span class="new-badge">IND AS 7</span></button>
@@ -377,9 +286,7 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
 
 <div class="content">
 
-<!-- ═══════════════════════════════════════════════
-     1. EXECUTIVE OVERVIEW
-═══════════════════════════════════════════════ -->
+<!-- 1. EXECUTIVE OVERVIEW -->
 <div id="sec-overview" class="sec active">
   <div id="kpi-area"></div>
   <div class="grid2">
@@ -445,9 +352,7 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════
-     2. CASH FLOW STATEMENT (IND AS 7)
-═══════════════════════════════════════════════ -->
+<!-- 2. CASH FLOW -->
 <div id="sec-cashflow" class="sec">
   <div class="dl-bar">
     <div><div class="dl-bar-title">Statement of Cash Flows · FY 2024-25</div><div class="dl-bar-sub">Indirect Method · IND AS 7 · ₹ Lakhs</div></div>
@@ -516,9 +421,7 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
   <div class="notice">Free Cash Flow = Operating CF (₹4,822L) − Capex (₹680L) = ₹4,142L (₹41.4 Cr) · Cash conversion ratio = OCF/PAT = 1.86x (healthy &gt; 1.0x)</div>
 </div>
 
-<!-- ═══════════════════════════════════════════════
-     3. MIS REPORT
-═══════════════════════════════════════════════ -->
+<!-- 3. MIS REPORT -->
 <div id="sec-mis" class="sec">
   <div class="dl-bar">
     <div><div class="dl-bar-title" id="mis-title-dl">MIS Report — Monthly P&L · FY 2024-25</div><div class="dl-bar-sub">Month-wise Revenue · Gross Profit · EBITDA · PAT · Margins · ₹ Lakhs</div></div>
@@ -534,9 +437,7 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════
-     4. BALANCE SHEET (IND AS VERTICAL)
-═══════════════════════════════════════════════ -->
+<!-- 4. BALANCE SHEET -->
 <div id="sec-bs" class="sec">
   <div class="dl-bar">
     <div><div class="dl-bar-title">Balance Sheet · As at 31 March 2025</div><div class="dl-bar-sub">Vertical format · Schedule III · IND AS · ₹ Lakhs · With Notes to BS</div></div>
@@ -545,7 +446,7 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
       <button class="btn btn-dl xlsx" onclick="dlXLSX('bs',this)">⬇ Excel</button>
     </div>
   </div>
-  <div class="info-bar" id="bs-info">Balance Sheet as per Schedule III — IND AS | As at <strong id="bs-date">31 March 2025</strong> | <strong id="bs-period-lbl">FY 2024-25 Annual</strong></div>
+  <div class="info-bar">Balance Sheet as per Schedule III — IND AS | As at <strong id="bs-date">31 March 2025</strong> | <strong id="bs-period-lbl">FY 2024-25 Annual</strong></div>
   <div class="card">
     <div class="card-hdr"><span class="ct">Balance Sheet <span class="cbadge cb-blue">Schedule III — IND AS</span></span><span style="font-size:10px;color:var(--text2)">Acme Technologies Ltd · CIN: U72000MH2010PLC123456</span></div>
     <table id="bs-table">
@@ -598,12 +499,10 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
       </tbody>
     </table>
   </div>
-  <div class="notice">Figures in brackets denote credit / negative balances. Previous year figures regrouped where necessary. Prepared as per Companies Act 2013 and IND AS notified under Companies (IND AS) Rules 2015.</div>
+  <div class="notice">Figures in brackets denote credit / negative balances. Previous year figures regrouped where necessary.</div>
 </div>
 
-<!-- ═══════════════════════════════════════════════
-     5. P&L ACCOUNT
-═══════════════════════════════════════════════ -->
+<!-- 5. P&L -->
 <div id="sec-pl" class="sec">
   <div class="dl-bar">
     <div><div class="dl-bar-title">Statement of Profit &amp; Loss · Year ended 31 March 2025</div><div class="dl-bar-sub">Schedule III · IND AS · Includes OCI · EPS per IND AS 33 · ₹ Lakhs</div></div>
@@ -647,9 +546,7 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════
-     6. NOTES TO ACCOUNTS
-═══════════════════════════════════════════════ -->
+<!-- 6. NOTES TO ACCOUNTS -->
 <div id="sec-notes" class="sec">
   <div class="dl-bar">
     <div><div class="dl-bar-title" id="notes-dl-title">Notes to Accounts · FY 2024-25</div><div class="dl-bar-sub">Notes 1–26 · IND AS disclosures · Trial Balance derived · Schedule III</div></div>
@@ -659,100 +556,82 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
       <button class="btn btn-dl xlsx" onclick="dlXLSX('notes',this)">⬇ Excel</button>
     </div>
   </div>
-  <!-- API-rendered notes appear here -->
   <div id="notes-api-body" style="display:none"></div>
-  <!-- Static sample notes shown when not connected to API -->
   <div id="notes-static-body">
-  <div class="card">
-    <div class="card-hdr"><span class="ct">Note 1 — Share Capital</span><span style="font-size:10px;color:var(--text2)">₹ Lakhs</span></div>
-    <table><thead><tr><th>Particulars</th><th class="num">31 Mar 2025</th><th class="num">31 Mar 2024</th></tr></thead>
-    <tbody>
-      <tr><td class="bold">Authorised</td><td></td><td></td></tr>
-      <tr><td class="ind1">2,00,00,000 Equity Shares of ₹5 each</td><td class="num">1,000</td><td class="num">1,000</td></tr>
-      <tr><td class="bold">Issued, Subscribed &amp; Paid-up</td><td></td><td></td></tr>
-      <tr><td class="ind1">2,00,00,000 Equity Shares of ₹5 each, fully paid</td><td class="num">1,000</td><td class="num">1,000</td></tr>
-      <tr class="tot-row"><td class="bold">Total Share Capital</td><td class="num bold">1,000</td><td class="num bold">1,000</td></tr>
-    </tbody></table>
+    <div class="card">
+      <div class="card-hdr"><span class="ct">Note 1 — Share Capital</span><span style="font-size:10px;color:var(--text2)">₹ Lakhs</span></div>
+      <table><thead><tr><th>Particulars</th><th class="num">31 Mar 2025</th><th class="num">31 Mar 2024</th></tr></thead>
+      <tbody>
+        <tr><td class="bold">Authorised</td><td></td><td></td></tr>
+        <tr><td class="ind1">2,00,00,000 Equity Shares of ₹5 each</td><td class="num">1,000</td><td class="num">1,000</td></tr>
+        <tr><td class="bold">Issued, Subscribed &amp; Paid-up</td><td></td><td></td></tr>
+        <tr><td class="ind1">2,00,00,000 Equity Shares of ₹5 each, fully paid</td><td class="num">1,000</td><td class="num">1,000</td></tr>
+        <tr class="tot-row"><td class="bold">Total Share Capital</td><td class="num bold">1,000</td><td class="num bold">1,000</td></tr>
+      </tbody></table>
+    </div>
+    <div class="card">
+      <div class="card-hdr"><span class="ct">Note 2 — Other Equity</span></div>
+      <table><thead><tr><th>Particulars</th><th class="num">31 Mar 2025</th><th class="num">31 Mar 2024</th></tr></thead>
+      <tbody>
+        <tr><td>Securities Premium Reserve</td><td class="num">4,200</td><td class="num">4,200</td></tr>
+        <tr><td>General Reserve</td><td class="num">2,640</td><td class="num">2,640</td></tr>
+        <tr><td>Retained Earnings</td><td class="num">8,000</td><td class="num">6,124</td></tr>
+        <tr><td>ESOP Reserve (IND AS 102)</td><td class="num">248</td><td class="num">192</td></tr>
+        <tr><td>OCI — Remeasurement of DBO (Net of Tax)</td><td class="num neg">(248)</td><td class="num neg">(192)</td></tr>
+        <tr class="tot-row"><td class="bold">Total Other Equity</td><td class="num bold">14,840</td><td class="num bold">12,964</td></tr>
+      </tbody></table>
+    </div>
+    <div class="card">
+      <div class="card-hdr"><span class="ct">Note 10 — Property, Plant &amp; Equipment (IND AS 16)</span></div>
+      <table><thead><tr><th>Asset Class</th><th class="num">Gross Block</th><th class="num">Accum. Depn</th><th class="num">Net Block 2025</th><th class="num">Net Block 2024</th></tr></thead>
+      <tbody>
+        <tr><td>Plant &amp; Machinery</td><td class="num">42,000</td><td class="num neg">(8,200)</td><td class="num bold">33,800</td><td class="num">36,400</td></tr>
+        <tr><td>Computers &amp; Peripherals</td><td class="num">4,800</td><td class="num neg">(2,600)</td><td class="num bold">2,200</td><td class="num">2,800</td></tr>
+        <tr><td>Furniture &amp; Fixtures</td><td class="num">3,200</td><td class="num neg">(1,400)</td><td class="num bold">1,800</td><td class="num">2,100</td></tr>
+        <tr><td>Vehicles</td><td class="num">2,400</td><td class="num neg">(960)</td><td class="num bold">1,440</td><td class="num">1,680</td></tr>
+        <tr class="tot-row"><td class="bold">Total PPE</td><td class="num bold">52,400</td><td class="num neg bold">(13,160)</td><td class="num bold">3,840</td><td class="num bold">4,120</td></tr>
+      </tbody></table>
+    </div>
+    <div class="card">
+      <div class="card-hdr"><span class="ct">Note 18 — Trade Receivables (IND AS 109 — ECL)</span></div>
+      <table><thead><tr><th>Ageing</th><th class="num">Gross (₹L)</th><th class="num">ECL Provision</th><th class="num">Net (₹L)</th></tr></thead>
+      <tbody>
+        <tr><td>Outstanding ≤ 30 days</td><td class="num">1,820</td><td class="num">—</td><td class="num">1,820</td></tr>
+        <tr><td>Outstanding 31–60 days</td><td class="num">940</td><td class="num neg">(12)</td><td class="num">928</td></tr>
+        <tr><td>Outstanding 61–90 days</td><td class="num">480</td><td class="num neg">(24)</td><td class="num">456</td></tr>
+        <tr><td>Outstanding 91–180 days</td><td class="num">240</td><td class="num neg">(60)</td><td class="num">180</td></tr>
+        <tr><td>Outstanding &gt; 180 days</td><td class="num">160</td><td class="num neg">(64)</td><td class="num">96</td></tr>
+        <tr class="tot-row"><td class="bold">Total Trade Receivables</td><td class="num bold">3,640</td><td class="num neg bold">(160)</td><td class="num bold">3,480</td></tr>
+      </tbody></table>
+    </div>
+    <div class="card">
+      <div class="card-hdr"><span class="ct">Note 23 — Employee Benefits Expense (IND AS 19 &amp; IND AS 102)</span></div>
+      <table><thead><tr><th>Particulars</th><th class="num">FY 2024-25</th><th class="num">FY 2023-24</th></tr></thead>
+      <tbody>
+        <tr><td>Salaries, Wages &amp; Bonus</td><td class="num">7,340</td><td class="num">6,200</td></tr>
+        <tr><td>Contribution to PF &amp; ESIC</td><td class="num">640</td><td class="num">542</td></tr>
+        <tr><td>Gratuity Expense (IND AS 19 — Actuarial)</td><td class="num">420</td><td class="num">356</td></tr>
+        <tr><td>Share-based Payment Expense (IND AS 102 — ESOP)</td><td class="num">248</td><td class="num">192</td></tr>
+        <tr><td>Staff Welfare, Training &amp; Development</td><td class="num">192</td><td class="num">190</td></tr>
+        <tr class="tot-row"><td class="bold">Total Employee Benefits Expense</td><td class="num bold">8,840</td><td class="num bold">7,480</td></tr>
+      </tbody></table>
+    </div>
+    <div class="card">
+      <div class="card-hdr"><span class="ct">Note 20 — Revenue from Operations (IND AS 115)</span></div>
+      <table><thead><tr><th>Particulars</th><th class="num">FY 2024-25</th><th class="num">FY 2023-24</th></tr></thead>
+      <tbody>
+        <tr><td>IT Services &amp; Projects (Fixed Price + T&amp;M)</td><td class="num">19,624</td><td class="num">16,584</td></tr>
+        <tr><td>Managed Services / SaaS / AMC</td><td class="num">8,836</td><td class="num">7,456</td></tr>
+        <tr class="tot-row"><td class="bold">Total Revenue from Operations</td><td class="num bold">28,460</td><td class="num bold">24,040</td></tr>
+      </tbody></table>
+    </div>
   </div>
-  <div class="card">
-    <div class="card-hdr"><span class="ct">Note 2 — Other Equity</span></div>
-    <table><thead><tr><th>Particulars</th><th class="num">31 Mar 2025</th><th class="num">31 Mar 2024</th></tr></thead>
-    <tbody>
-      <tr><td>Securities Premium Reserve</td><td class="num">4,200</td><td class="num">4,200</td></tr>
-      <tr><td>General Reserve</td><td class="num">2,640</td><td class="num">2,640</td></tr>
-      <tr><td>Retained Earnings (Opening + PAT ₹1,876L)</td><td class="num">8,000</td><td class="num">6,124</td></tr>
-      <tr><td>ESOP Reserve (IND AS 102)</td><td class="num">248</td><td class="num">192</td></tr>
-      <tr><td>OCI — Remeasurement of DBO (Net of Tax)</td><td class="num neg">(248)</td><td class="num neg">(192)</td></tr>
-      <tr class="tot-row"><td class="bold">Total Other Equity</td><td class="num bold">14,840</td><td class="num bold">12,964</td></tr>
-    </tbody></table>
-  </div>
-  <div class="card">
-    <div class="card-hdr"><span class="ct">Note 10 — Property, Plant &amp; Equipment (IND AS 16)</span></div>
-    <table><thead><tr><th>Asset Class</th><th class="num">Gross Block</th><th class="num">Accum. Depn</th><th class="num">Net Block 2025</th><th class="num">Net Block 2024</th></tr></thead>
-    <tbody>
-      <tr><td>Plant &amp; Machinery</td><td class="num">42,000</td><td class="num neg">(8,200)</td><td class="num bold">33,800</td><td class="num">36,400</td></tr>
-      <tr><td>Computers &amp; Peripherals</td><td class="num">4,800</td><td class="num neg">(2,600)</td><td class="num bold">2,200</td><td class="num">2,800</td></tr>
-      <tr><td>Furniture &amp; Fixtures</td><td class="num">3,200</td><td class="num neg">(1,400)</td><td class="num bold">1,800</td><td class="num">2,100</td></tr>
-      <tr><td>Vehicles</td><td class="num">2,400</td><td class="num neg">(960)</td><td class="num bold">1,440</td><td class="num">1,680</td></tr>
-      <tr class="tot-row"><td class="bold">Total PPE</td><td class="num bold">52,400</td><td class="num neg bold">(13,160)</td><td class="num bold">3,840</td><td class="num bold">4,120</td></tr>
-    </tbody></table>
-    <div style="font-size:10px;color:var(--text2);padding:7px 12px;background:var(--bg2);border-top:1px solid var(--border)">SLM method · Schedule II useful lives · Additions FY25: ₹680L · Disposals: ₹220L · Depreciation: ₹612L</div>
-  </div>
-  <div class="card">
-    <div class="card-hdr"><span class="ct">Note 18 — Trade Receivables (IND AS 109 — ECL)</span></div>
-    <table><thead><tr><th>Ageing</th><th class="num">Gross (₹L)</th><th class="num">ECL Provision</th><th class="num">Net (₹L)</th></tr></thead>
-    <tbody>
-      <tr><td>Outstanding ≤ 30 days</td><td class="num">1,820</td><td class="num">—</td><td class="num">1,820</td></tr>
-      <tr><td>Outstanding 31–60 days</td><td class="num">940</td><td class="num neg">(12)</td><td class="num">928</td></tr>
-      <tr><td>Outstanding 61–90 days</td><td class="num">480</td><td class="num neg">(24)</td><td class="num">456</td></tr>
-      <tr><td>Outstanding 91–180 days</td><td class="num">240</td><td class="num neg">(60)</td><td class="num">180</td></tr>
-      <tr><td>Outstanding &gt; 180 days</td><td class="num">160</td><td class="num neg">(64)</td><td class="num">96</td></tr>
-      <tr class="tot-row"><td class="bold">Total Trade Receivables</td><td class="num bold">3,640</td><td class="num neg bold">(160)</td><td class="num bold">3,480</td></tr>
-    </tbody></table>
-    <div style="font-size:10px;color:var(--text2);padding:7px 12px;background:var(--bg2);border-top:1px solid var(--border)">ECL computed using simplified approach under IND AS 109. Provision matrix based on historical credit loss rates per ageing bucket.</div>
-  </div>
-  <div class="card">
-    <div class="card-hdr"><span class="ct">Note 23 — Employee Benefits Expense (IND AS 19 &amp; IND AS 102)</span></div>
-    <table><thead><tr><th>Particulars</th><th class="num">FY 2024-25</th><th class="num">FY 2023-24</th></tr></thead>
-    <tbody>
-      <tr><td>Salaries, Wages &amp; Bonus</td><td class="num">7,340</td><td class="num">6,200</td></tr>
-      <tr><td>Contribution to PF &amp; ESIC</td><td class="num">640</td><td class="num">542</td></tr>
-      <tr><td>Gratuity Expense (IND AS 19 — Actuarial)</td><td class="num">420</td><td class="num">356</td></tr>
-      <tr><td>Share-based Payment Expense (IND AS 102 — ESOP)</td><td class="num">248</td><td class="num">192</td></tr>
-      <tr><td>Staff Welfare, Training &amp; Development</td><td class="num">192</td><td class="num">190</td></tr>
-      <tr class="tot-row"><td class="bold">Total Employee Benefits Expense</td><td class="num bold">8,840</td><td class="num bold">7,480</td></tr>
-    </tbody></table>
-    <div style="font-size:10px;color:var(--text2);padding:7px 12px;background:var(--bg2);border-top:1px solid var(--border)">IND AS 19: Discount rate 7.25% · Salary escalation 10% · Attrition 13% · Mortality: IALM (2012-14)</div>
-  </div>
-  <div class="card">
-    <div class="card-hdr"><span class="ct">Note 24 — Finance Costs (IND AS 116)</span></div>
-    <table><thead><tr><th>Particulars</th><th class="num">FY 2024-25</th><th class="num">FY 2023-24</th></tr></thead>
-    <tbody>
-      <tr><td>Interest on Term Loans (EIR basis)</td><td class="num">84</td><td class="num">128</td></tr>
-      <tr><td>Interest on Lease Liabilities (IND AS 116)</td><td class="num">92</td><td class="num">96</td></tr>
-      <tr><td>Bank Charges &amp; Processing Fees (amortised)</td><td class="num">20</td><td class="num">20</td></tr>
-      <tr class="tot-row"><td class="bold">Total Finance Costs</td><td class="num bold">196</td><td class="num bold">244</td></tr>
-    </tbody></table>
-  </div>
-  <div class="card">
-    <div class="card-hdr"><span class="ct">Note 20 — Revenue from Operations (IND AS 115)</span></div>
-    <table><thead><tr><th>Particulars</th><th class="num">FY 2024-25</th><th class="num">FY 2023-24</th></tr></thead>
-    <tbody>
-      <tr><td>IT Services &amp; Projects (Fixed Price + T&amp;M)</td><td class="num">19,624</td><td class="num">16,584</td></tr>
-      <tr><td>Managed Services / SaaS / AMC</td><td class="num">8,836</td><td class="num">7,456</td></tr>
-      <tr class="tot-row"><td class="bold">Total Revenue from Operations</td><td class="num bold">28,460</td><td class="num bold">24,040</td></tr>
-    </tbody></table>
-    <div style="font-size:10px;color:var(--text2);padding:7px 12px;background:var(--bg2);border-top:1px solid var(--border)">Revenue recognised over time on % completion (fixed-price) and hours incurred (T&M). Contract assets ₹420L · Contract liabilities ₹280L.</div>
-  </div>
-  </div><!-- /notes-static-body -->
-</div><!-- /sec-notes -->
+</div>
 
-<!-- ═══════════════════════════════════════════════
-     7. TREASURY
-═══════════════════════════════════════════════ -->
+<!-- 7. TREASURY -->
 <div id="sec-funds" class="sec">
   <div class="dl-bar">
-    <div><div class="dl-bar-title">Treasury &amp; Liquidity Report · As at 31 March 2025</div><div class="dl-bar-sub">Bank Accounts · FDs · Mutual Funds · Auto-derived from Note 17 &amp; 13</div></div>
+    <div><div class="dl-bar-title">Treasury &amp; Liquidity Report · As at 31 March 2025</div><div class="dl-bar-sub">Bank Accounts · FDs · Mutual Funds</div></div>
     <div style="display:flex;gap:6px">
       <button class="btn btn-dl pdf" onclick="dlPDF('tsy',this)">⬇ PDF</button>
       <button class="btn btn-dl xlsx" onclick="dlXLSX('tsy',this)">⬇ Excel</button>
@@ -780,7 +659,7 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
     <div class="card-hdr"><span class="ct">Fixed Deposit Register — Note 20 <span class="cbadge cb-green">Bank Balances other than Cash &amp; CE</span></span></div>
     <table id="tsy-fd-table"><thead><tr><th>Bank</th><th>FD Reference</th><th class="num">Principal (₹L)</th><th class="num">Rate %</th><th>Start Date</th><th>Maturity Date</th><th class="num">Maturity Amt (₹L)</th><th>Status</th></tr></thead>
     <tbody>
-      <tr style="background:#FEF3F020"><td>HDFC Bank</td><td style="font-family:var(--mono);font-size:9px">FD-2024-001</td><td class="num">1,500</td><td class="num">7.75%</td><td>01 Apr 2024</td><td>31 Mar 2025</td><td class="num">1,616</td><td><span class="pill pr">Matured</span></td></tr>
+      <tr><td>HDFC Bank</td><td style="font-family:var(--mono);font-size:9px">FD-2024-001</td><td class="num">1,500</td><td class="num">7.75%</td><td>01 Apr 2024</td><td>31 Mar 2025</td><td class="num">1,616</td><td><span class="pill pr">Matured</span></td></tr>
       <tr><td>ICICI Bank</td><td style="font-family:var(--mono);font-size:9px">FD-2024-002</td><td class="num">2,000</td><td class="num">7.60%</td><td>01 Jul 2024</td><td>30 Jun 2025</td><td class="num">2,154</td><td><span class="pill pa">91d</span></td></tr>
       <tr><td>State Bank of India</td><td style="font-family:var(--mono);font-size:9px">FD-2024-003</td><td class="num">1,820</td><td class="num">7.50%</td><td>01 Oct 2024</td><td>30 Sep 2025</td><td class="num">1,957</td><td><span class="pill pg">Active</span></td></tr>
       <tr><td>Axis Bank</td><td style="font-family:var(--mono);font-size:9px">FD-2025-001</td><td class="num">1,500</td><td class="num">7.40%</td><td>01 Jan 2025</td><td>31 Dec 2025</td><td class="num">1,611</td><td><span class="pill pg">Active</span></td></tr>
@@ -798,11 +677,9 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════
-     8. RATIO ANALYSIS
-═══════════════════════════════════════════════ -->
+<!-- 8. RATIO ANALYSIS -->
 <div id="sec-ratios" class="sec">
-  <div class="info-bar">All ratios computed from FY 2024-25 audited financials. Benchmark: industry / RBI guidance. Green = meets threshold · Amber = near limit · Red = action needed.</div>
+  <div class="info-bar">All ratios computed from FY 2024-25 audited financials. Benchmark: industry / RBI guidance.</div>
   <div class="grid2">
     <div class="card">
       <div class="card-hdr"><span class="ct">Liquidity Ratios</span><span class="cbadge cb-blue">Short-term solvency</span></div>
@@ -855,11 +732,9 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════
-     9. SCENARIO PLANNER
-═══════════════════════════════════════════════ -->
+<!-- 9. SCENARIO PLANNER -->
 <div id="sec-scenario" class="sec">
-  <div class="info-bar">Adjust assumptions to model FY 2025-26 outcomes. Base case uses FY25 actuals. All outputs update live.</div>
+  <div class="info-bar">Adjust assumptions to model FY 2025-26 outcomes. Base case uses FY25 actuals.</div>
   <div class="grid2">
     <div class="card">
       <div class="card-hdr"><span class="ct">Revenue &amp; Cost Assumptions — FY 2025-26</span></div>
@@ -871,9 +746,9 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
         <div class="sc-row"><span class="sc-lbl">Effective tax rate (%)</span><input type="range" id="sc-tax" min="15" max="35" value="25" step="1" oninput="updateScenario()"><span class="sc-val" id="sv-tax">25%</span></div>
         <div class="sc-row"><span class="sc-lbl">Interest income on FDs (₹L)</span><input type="range" id="sc-int" min="200" max="900" value="600" step="10" oninput="updateScenario()"><span class="sc-val" id="sv-int">₹600L</span></div>
         <div style="display:flex;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-          <button class="btn btn-se btn-sm" onclick="setScenario('bull')">🐂 Bull Case</button>
+          <button class="btn btn-se btn-sm" onclick="setScenario('bull')">🐂 Bull</button>
           <button class="btn btn-pr btn-sm" onclick="setScenario('base')">Base Case</button>
-          <button class="btn btn-se btn-sm" onclick="setScenario('bear')">🐻 Bear Case</button>
+          <button class="btn btn-se btn-sm" onclick="setScenario('bear')">🐻 Bear</button>
         </div>
       </div>
     </div>
@@ -886,23 +761,21 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
     </div>
   </div>
   <div class="card">
-    <div class="card-hdr"><span class="ct">PAT Sensitivity Matrix — Revenue Growth × Gross Margin Change</span><span style="font-size:10px;color:var(--text2)">₹ Cr (darker = higher PAT)</span></div>
+    <div class="card-hdr"><span class="ct">PAT Sensitivity Matrix</span><span style="font-size:10px;color:var(--text2)">₹ Cr</span></div>
     <div class="card-body" style="overflow-x:auto"><table id="sens-table" style="min-width:500px"></table></div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════
-     10. WORKING CAPITAL
-═══════════════════════════════════════════════ -->
+<!-- 10. WORKING CAPITAL -->
 <div id="sec-wc" class="sec">
   <div class="grid4">
     <div class="kpi"><div class="lbl">Cash Conversion Cycle</div><div class="val">45 days</div><div class="chg up">DSO 45 − DPO 38 + DIO 12</div></div>
     <div class="kpi"><div class="lbl">Net Working Capital</div><div class="val">₹123 Cr</div><div class="chg up">Current Assets − Liabilities</div></div>
-    <div class="kpi"><div class="lbl">Current Ratio</div><div class="val">2.14×</div><div class="chg up">vs 1.88× LY · Bench &gt;1.5×</div></div>
-    <div class="kpi"><div class="lbl">Quick Ratio</div><div class="val">2.04×</div><div class="chg up">vs 1.77× LY · Bench &gt;1.0×</div></div>
+    <div class="kpi"><div class="lbl">Current Ratio</div><div class="val">2.14×</div><div class="chg up">vs 1.88× LY</div></div>
+    <div class="kpi"><div class="lbl">Quick Ratio</div><div class="val">2.04×</div><div class="chg up">vs 1.77× LY</div></div>
   </div>
   <div class="card">
-    <div class="card-hdr"><span class="ct">Working Capital Metrics vs Benchmarks</span><span style="font-size:10px;color:var(--text2)">Yellow line = benchmark</span></div>
+    <div class="card-hdr"><span class="ct">Working Capital Metrics vs Benchmarks</span></div>
     <div class="card-body" id="wc-bars"></div>
   </div>
   <div class="grid2">
@@ -932,9 +805,7 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════
-     11. SMART ALERTS
-═══════════════════════════════════════════════ -->
+<!-- 11. SMART ALERTS -->
 <div id="sec-alerts" class="sec">
   <div class="grid4">
     <div class="kpi"><div class="lbl">Critical</div><div class="val dn">2</div><div class="chg dn">Immediate action</div></div>
@@ -950,7 +821,7 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
     <div class="card-hdr"><span class="ct">Bank Covenant Monitor</span><span class="cbadge cb-green">All compliant</span></div>
     <table><thead><tr><th>Covenant</th><th>Lender</th><th class="num">Threshold</th><th class="num">Current</th><th>Status</th><th class="num">Headroom</th></tr></thead>
     <tbody>
-      <tr><td>Debt Service Coverage Ratio (DSCR)</td><td>HDFC Bank</td><td class="num">&gt;1.50×</td><td class="num bold up">4.82×</td><td><span class="pill pg">Compliant</span></td><td class="num up">3.32× buffer</td></tr>
+      <tr><td>DSCR</td><td>HDFC Bank</td><td class="num">&gt;1.50×</td><td class="num bold up">4.82×</td><td><span class="pill pg">Compliant</span></td><td class="num up">3.32× buffer</td></tr>
       <tr><td>Debt / EBITDA</td><td>SBI</td><td class="num">&lt;3.0×</td><td class="num bold up">0.84×</td><td><span class="pill pg">Compliant</span></td><td class="num up">2.16× buffer</td></tr>
       <tr><td>Current Ratio</td><td>HDFC Bank</td><td class="num">&gt;1.20×</td><td class="num bold up">2.14×</td><td><span class="pill pg">Compliant</span></td><td class="num up">0.94× buffer</td></tr>
       <tr><td>Minimum Net Worth</td><td>SBI</td><td class="num">₹100 Cr</td><td class="num bold up">₹158 Cr</td><td><span class="pill pg">Compliant</span></td><td class="num up">₹58 Cr buffer</td></tr>
@@ -958,9 +829,7 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════
-     12. COMPLIANCE CALENDAR
-═══════════════════════════════════════════════ -->
+<!-- 12. COMPLIANCE -->
 <div id="sec-compliance" class="sec">
   <div class="grid4">
     <div class="kpi"><div class="lbl">Due This Month</div><div class="val dn">3</div><div class="chg dn">Needs attention</div></div>
@@ -974,9 +843,7 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════
-     13. BOARD PACK
-═══════════════════════════════════════════════ -->
+<!-- 13. BOARD PACK -->
 <div id="sec-boardpack" class="sec">
   <div class="dl-bar">
     <div><div class="dl-bar-title">Board Pack — FY 2024-25 Financial Review</div><div class="dl-bar-sub">One-page executive summary · For Board / Audit Committee / Investors</div></div>
@@ -985,10 +852,10 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
   <div class="bp-section">
     <div class="bp-hdr">
       <div><span style="font-size:14px;font-weight:700">Acme Technologies Ltd</span><span class="cbadge cb-blue" style="margin-left:8px">Board Meeting — May 2025</span></div>
-      <span style="font-size:10px;color:var(--text2)">FY 2024-25 · Standalone Financial Statements · IND AS</span>
+      <span style="font-size:10px;color:var(--text2)">FY 2024-25 · Standalone · IND AS</span>
     </div>
     <div class="bp-body">
-      <div style="font-size:9px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Key Performance Indicators — FY 2024-25 vs FY 2023-24</div>
+      <div style="font-size:9px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Key Performance Indicators</div>
       <div class="bp-kpi-row">
         <div class="bp-kpi"><div class="bl">Revenue</div><div class="bv">₹284.6 Cr</div><div class="bc up">+18.4% YoY</div></div>
         <div class="bp-kpi"><div class="bl">Gross Profit</div><div class="bv">₹148.2 Cr</div><div class="bc up">GM 52.1%</div></div>
@@ -1004,12 +871,12 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
   <div class="bp-section">
     <div class="bp-hdr">Management Commentary</div>
     <div class="bp-body">
-      <div class="hl-row hl-green">Revenue grew 18.4% to ₹284.6 Cr driven by IT Services (+19.6%) and Managed Services (+19.3%). 18 new customer additions. Strong ARR growth in Healthcare (+28%) and EdTech (+32%) verticals.</div>
-      <div class="hl-row hl-green">EBITDA margin expanded to 12.4% (from 10.9%) through operating leverage. Employee cost as % of revenue held flat at 31.1% despite 122 new hires. Gross margin improved 130 bps to 52.1%.</div>
-      <div class="hl-row hl-green">Free Cash Flow ₹41.4 Cr. OCF/PAT = 1.86× confirms high earnings quality. Treasury ₹105 Cr. All bank covenants met with significant headroom. Net Debt position: Net Cash (debt-free).</div>
-      <div class="hl-row hl-amber">Customer concentration risk: Top 10 customers = 64.8% of revenue. GovProject A margin 3.8% (below cost of capital). Recommend repricing or structured exit at renewal.</div>
-      <div class="hl-row hl-amber">HDFC FD ₹15 Cr matured 31 Mar 2025 — renewal / redeployment decision pending. MSME payables overdue &gt;45 days ₹80L — MSMED Act exposure. Requires immediate settlement.</div>
-      <div class="hl-row hl-blue">FY26 Guidance: Revenue ₹340 Cr (+19.5%), EBITDA margin 14.5%, headcount +220, capex ₹22 Cr. Scenario modelling shows PAT range ₹22–38 Cr under bear/bull assumptions.</div>
+      <div class="hl-row hl-green">Revenue grew 18.4% to ₹284.6 Cr driven by IT Services (+19.6%) and Managed Services (+19.3%). 18 new customer additions.</div>
+      <div class="hl-row hl-green">EBITDA margin expanded to 12.4% (from 10.9%). Employee cost as % of revenue held flat at 31.1%. Gross margin improved 130 bps to 52.1%.</div>
+      <div class="hl-row hl-green">Free Cash Flow ₹41.4 Cr. OCF/PAT = 1.86×. Treasury ₹105 Cr. All bank covenants met. Net Cash (debt-free).</div>
+      <div class="hl-row hl-amber">Customer concentration risk: Top 10 customers = 64.8% of revenue. GovProject A margin 3.8% — recommend repricing or exit.</div>
+      <div class="hl-row hl-amber">HDFC FD ₹15 Cr matured 31 Mar 2025 — renewal pending. MSME payables overdue &gt;45 days ₹80L — MSMED Act exposure.</div>
+      <div class="hl-row hl-blue">FY26 Guidance: Revenue ₹340 Cr (+19.5%), EBITDA margin 14.5%, headcount +220, capex ₹22 Cr.</div>
     </div>
   </div>
   <div class="bp-section">
@@ -1019,7 +886,7 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
       <tbody>
         <tr><td>1</td><td>Adoption of Audited Financial Statements FY 2024-25</td><td><span class="pill pg">Approval</span></td><td>CFO</td><td>20 min</td></tr>
         <tr><td>2</td><td>Statutory Auditor Report &amp; CARO 2020</td><td><span class="pill pb">Review</span></td><td>Auditor</td><td>15 min</td></tr>
-        <tr><td>3</td><td>Final Dividend — ₹1.40 per share recommendation</td><td><span class="pill pg">Approval</span></td><td>CFO</td><td>10 min</td></tr>
+        <tr><td>3</td><td>Final Dividend — ₹1.40 per share</td><td><span class="pill pg">Approval</span></td><td>CFO</td><td>10 min</td></tr>
         <tr><td>4</td><td>FY 2025-26 Budget &amp; Business Plan</td><td><span class="pill pa">Discussion</span></td><td>CEO + CFO</td><td>30 min</td></tr>
         <tr><td>5</td><td>Treasury Policy — FD renewal &amp; MF allocation</td><td><span class="pill pa">Discussion</span></td><td>CFO</td><td>15 min</td></tr>
         <tr><td>6</td><td>MSME payable overdue — settlement plan</td><td><span class="pill pr">Action</span></td><td>CFO</td><td>10 min</td></tr>
@@ -1029,45 +896,43 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════
-     14. UPLOAD / ARCHITECTURE
-═══════════════════════════════════════════════ -->
+<!-- 14. UPLOAD / ARCHITECTURE -->
 <div id="sec-upload" class="sec">
-  <div class="info-bar">Two data modes: Upload a single Trial Balance Excel (auto-populates BS, P&L, Notes, Treasury, MIS) or connect via REST API for all 8 modules including Budget, Employees, and Customers.</div>
+  <div class="info-bar">Two data modes: Upload a Trial Balance Excel (auto-populates all statements) or connect via REST API.</div>
   <div class="step-grid" style="margin-bottom:16px">
     <div class="step-box" style="background:var(--blue-l)">
       <div class="step-num">Layer 1 · Source</div>
       <div style="font-size:13px;font-weight:600;margin-bottom:4px">Trial Balance</div>
-      <div style="font-size:11px;color:var(--text2);line-height:1.5">Opening balances + <strong>12 months × Dr/Cr</strong> per ledger. Export from Tally, SAP, Zoho Books. One row per ledger, 28 columns total.</div>
+      <div style="font-size:11px;color:var(--text2);line-height:1.5">Opening balances + 12 months × Dr/Cr per ledger. Export from Tally, SAP, Zoho Books.</div>
       <span class="pill pb" style="margin-top:8px;display:inline-block">28 cols · 1 sheet · monthly</span>
     </div>
     <div class="step-box" style="background:var(--purple-l)">
       <div class="step-num">Layer 2 · Map</div>
       <div style="font-size:13px;font-weight:600;margin-bottom:4px">Ledger Master</div>
-      <div style="font-size:11px;color:var(--text2);line-height:1.5">Pre-seeded 90+ IND AS mappings. Each ledger → Note No + BS/PL section + treasury type. Add custom ledgers freely.</div>
+      <div style="font-size:11px;color:var(--text2);line-height:1.5">Pre-seeded 90+ IND AS mappings. Each ledger → Note No + BS/PL section + treasury type.</div>
       <span class="pill ppu" style="margin-top:8px;display:inline-block">Pre-seeded · customisable</span>
     </div>
     <div class="step-box" style="background:var(--green-l)">
       <div class="step-num">Layer 3 · Compute</div>
       <div style="font-size:13px;font-weight:600;margin-bottom:4px">Period Engine</div>
-      <div style="font-size:11px;color:var(--text2);line-height:1.5"><strong>BS = cumulative</strong> from opening to period end. <strong>P&amp;L = selected months only.</strong> All period views from same TB — no re-upload.</div>
+      <div style="font-size:11px;color:var(--text2);line-height:1.5">BS = cumulative. P&amp;L = selected months. All period views from same TB — no re-upload.</div>
       <span class="pill pg" style="margin-top:8px;display:inline-block">Monthly → Q → H → Annual</span>
     </div>
     <div class="step-box">
       <div class="step-num">Layer 4 · Output</div>
       <div style="font-size:13px;font-weight:600;margin-bottom:4px">All Reports</div>
-      <div style="font-size:11px;color:var(--text2);line-height:1.5">MIS, Balance Sheet, P&amp;L, Notes 1–26, Treasury — all live from same TB. Period bar switches view instantly.</div>
+      <div style="font-size:11px;color:var(--text2);line-height:1.5">MIS, Balance Sheet, P&amp;L, Notes 1–26, Treasury — all live from same TB.</div>
       <span class="pill pa" style="margin-top:8px;display:inline-block">6 reports · 1 upload</span>
     </div>
   </div>
-  <div class="warn-bar" style="margin-bottom:14px"><strong>Not derivable from TB (needs separate input):</strong> PPE Gross Block / Asset Register · IND AS 19 Actuarial DBO · ECL invoice-level ageing · IND AS 102 ESOP register · IND AS 116 Lease schedules. Everything else auto-derives from TB monthly columns.</div>
+  <div class="warn-bar" style="margin-bottom:14px"><strong>Not derivable from TB:</strong> PPE Gross Block / Asset Register · IND AS 19 Actuarial DBO · ECL invoice-level ageing · IND AS 102 ESOP register · IND AS 116 Lease schedules.</div>
   <div class="grid2">
     <div class="card">
       <div class="card-hdr"><span class="ct">Option 1 — Upload Trial Balance (Monthly)</span></div>
       <div class="card-body">
         <button class="btn btn-gr" style="margin-bottom:12px" onclick="dlTemplate()">⬇ Download TB Template (.xlsx)</button>
         <div style="font-size:11px;color:var(--text2);margin-bottom:10px;line-height:1.7">
-          Template has 3 sheets: <code style="background:var(--bg2);padding:1px 5px;border-radius:3px">Trial_Balance</code> — <strong>28 columns</strong>: Ledger_Code, Ledger_Name, Opening_Dr, Opening_Cr, then <strong>Apr_Dr, Apr_Cr … Mar_Dr, Mar_Cr</strong> (24 monthly cols). <code style="background:var(--bg2);padding:1px 5px;border-radius:3px">Ledger_Master</code> pre-seeded. <code style="background:var(--bg2);padding:1px 5px;border-radius:3px">Notes_Config</code> optional.
+          Template has 3 sheets: <code style="background:var(--bg2);padding:1px 5px;border-radius:3px">Trial_Balance</code> — 28 columns: Ledger_Code, Ledger_Name, Opening_Dr, Opening_Cr, then Apr_Dr … Mar_Cr.
         </div>
         <input type="file" id="tb-input" accept=".xlsx,.xls" style="display:none" onchange="handleTB(event)">
         <div class="upload-zone" id="uzn" onclick="document.getElementById('tb-input').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="dropTB(event)">
@@ -1105,10 +970,10 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
           <input type="password" id="api-key" placeholder="Enter API key or Bearer token" style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:11px;background:var(--bg);color:var(--text)">
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">
-          <button class="btn btn-pr btn-sm" onclick="toast('API connection — implement with your actual endpoint. Template available on request.')">Test Connection</button>
+          <button class="btn btn-pr btn-sm" onclick="toast('Implement with your actual endpoint.')">Test Connection</button>
           <button class="btn btn-se btn-sm" onclick="toast('API configuration saved')">Save Config</button>
         </div>
-        <div style="margin-top:12px;font-size:10px;color:var(--text2);line-height:1.6">Supports: SAP · Oracle · Tally · Zoho Books · QuickBooks · Busy · Custom ERP<br>All 8 dashboard sections including Budget, Employees, and Customers available via API.</div>
+        <div style="margin-top:12px;font-size:10px;color:var(--text2);line-height:1.6">Supports: SAP · Oracle · Tally · Zoho Books · QuickBooks · Custom ERP</div>
       </div>
     </div>
   </div>
@@ -1116,37 +981,28 @@ input[type=range]{flex:1;accent-color:var(--blue);min-width:120px}
 
 </div><!-- /content -->
 
-<!-- ═══════════════════════════════════════════════
-     JAVASCRIPT — ALL LOGIC
-═══════════════════════════════════════════════ -->
 <script>
 'use strict';
 
-/* ─────────────────────────────────────────────
-   TOAST
-───────────────────────────────────────────── */
+/* ── TOAST ── */
 function toast(msg,dur=2800){
   const t=document.getElementById('toast');
   t.textContent=msg;t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),dur);
 }
 
-/* ─────────────────────────────────────────────
-   NAVIGATION
-───────────────────────────────────────────── */
+/* ── NAVIGATION ── */
 function go(id){
   document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.ntab').forEach(b=>b.classList.remove('active'));
   const sec=document.getElementById('sec-'+id);
   const tab=document.getElementById('nt-'+id);
-  if(sec) sec.classList.add('active');
-  if(tab) tab.classList.add('active');
-  if(['overview','mis'].includes(id)) renderAll();
+  if(sec)sec.classList.add('active');
+  if(tab)tab.classList.add('active');
+  if(['overview','mis'].includes(id))renderAll();
 }
 
-/* ─────────────────────────────────────────────
-   PERIOD DATA
-───────────────────────────────────────────── */
+/* ── PERIOD DATA ── */
 const FM=['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
 const CM=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const QR=[[0,1,2],[3,4,5],[6,7,8],[9,10,11]];
@@ -1206,9 +1062,7 @@ function kp(d,idx){
   return{r,c,gp,e,o,eb,df,pbt,pat,gpm:gp/r*100,epm:eb/r*100,npm:pat/r*100};
 }
 
-/* ─────────────────────────────────────────────
-   PERIOD BAR
-───────────────────────────────────────────── */
+/* ── PERIOD BAR ── */
 function setYT(yt){
   S.yt=yt;S.yr=YK[yt][0];S.sub=null;
   ['FY','CY'].forEach(t=>{const el=document.getElementById('yt-'+t);if(el)el.classList.toggle('on',t===yt);});
@@ -1243,8 +1097,7 @@ function renderPB(){
     const hn=yt==='FY'?['Apr-Sep','Oct-Mar']:['Jan-Jun','Jul-Dec'];
     subPills.innerHTML=['H1','H2'].map((h,i)=>`<button class="pbp sub${sub===h?' on':''}" onclick="setSub('${h}')">${h} <span style="font-size:9px;opacity:.7">${hn[i]}</span></button>`).join('');
   }else{subSep.style.display='none';subGrp.style.display='none';}
-  const lbl=getPeriodLabel();
-  document.getElementById('pb-summary').textContent=lbl;
+  document.getElementById('pb-summary').textContent=getPeriodLabel();
 }
 
 function getPeriodLabel(){
@@ -1257,9 +1110,7 @@ function getPeriodLabel(){
   return base;
 }
 
-/* ─────────────────────────────────────────────
-   PERIOD DATA COMPUTATION
-───────────────────────────────────────────── */
+/* ── PERIOD DATA COMPUTATION ── */
 function getPD(){
   const{yt,gr,yr,sub}=S;
   const months=yt==='FY'?FM:CM;
@@ -1277,10 +1128,8 @@ function getPD(){
   const d=D[yt][yr];
   if(gr==='quarterly'&&!sub){
     const perQ=QR.map(r=>({r:sa(d.r,r),c:sa(d.c,r),e:sa(d.e,r),o:sa(d.o,r),d:sa(d.d,r)}));
-    return{type:'grouped',cols:yt==='FY'?FQ_L:CQ_L,
-      d:perQ,all:kp(d),
-      revArr:perQ.map(q=>q.r),
-      ebArr:perQ.map(q=>q.r-q.c-q.e-q.o),
+    return{type:'grouped',cols:yt==='FY'?FQ_L:CQ_L,d:perQ,all:kp(d),
+      revArr:perQ.map(q=>q.r),ebArr:perQ.map(q=>q.r-q.c-q.e-q.o),
       gpmArr:perQ.map(q=>{const g=q.r-q.c;return+(g/q.r*100).toFixed(1);}),
       epmArr:perQ.map(q=>{const g=q.r-q.c,eb=g-q.e-q.o;return+(eb/q.r*100).toFixed(1);}),
       npmArr:perQ.map(q=>{const g=q.r-q.c,eb=g-q.e-q.o,pat=Math.round((eb-q.d)*.75);return+(pat/q.r*100).toFixed(1);}),
@@ -1288,10 +1137,8 @@ function getPD(){
   }
   if(gr==='halfyear'&&!sub){
     const perH=HR.map(r=>({r:sa(d.r,r),c:sa(d.c,r),e:sa(d.e,r),o:sa(d.o,r),d:sa(d.d,r)}));
-    return{type:'grouped',cols:yt==='FY'?FH_L:CH_L,
-      d:perH,all:kp(d),
-      revArr:perH.map(h=>h.r),
-      ebArr:perH.map(h=>h.r-h.c-h.e-h.o),
+    return{type:'grouped',cols:yt==='FY'?FH_L:CH_L,d:perH,all:kp(d),
+      revArr:perH.map(h=>h.r),ebArr:perH.map(h=>h.r-h.c-h.e-h.o),
       gpmArr:perH.map(h=>{const g=h.r-h.c;return+(g/h.r*100).toFixed(1);}),
       epmArr:perH.map(h=>{const g=h.r-h.c,eb=g-h.e-h.o;return+(eb/h.r*100).toFixed(1);}),
       npmArr:perH.map(h=>{const g=h.r-h.c,eb=g-h.e-h.o,pat=Math.round((eb-h.d)*.75);return+(pat/h.r*100).toFixed(1);}),
@@ -1304,8 +1151,7 @@ function getPD(){
     const mLabels=idx.map(i=>months[i]);
     const perM=idx.map(i=>({r:d.r[i],c:d.c[i],e:d.e[i],o:d.o[i],d:d.d[i]}));
     return{type:'drill',cols:mLabels,d:perM,all:kp(d,idx),
-      revArr:idx.map(i=>d.r[i]),
-      ebArr:idx.map(i=>{const g=d.r[i]-d.c[i];return g-d.e[i]-d.o[i];}),
+      revArr:idx.map(i=>d.r[i]),ebArr:idx.map(i=>{const g=d.r[i]-d.c[i];return g-d.e[i]-d.o[i];}),
       gpmArr:idx.map(i=>{const g=d.r[i]-d.c[i];return+(g/d.r[i]*100).toFixed(1);}),
       epmArr:idx.map(i=>{const g=d.r[i]-d.c[i],eb=g-d.e[i]-d.o[i];return+(eb/d.r[i]*100).toFixed(1);}),
       npmArr:idx.map(i=>{const g=d.r[i]-d.c[i],eb=g-d.e[i]-d.o[i],pat=Math.round((eb-d.d[i])*.75);return+(pat/d.r[i]*100).toFixed(1);}),
@@ -1313,8 +1159,7 @@ function getPD(){
   }
   return{type:'monthly',cols:months,
     d:months.map((_,i)=>({r:d.r[i],c:d.c[i],e:d.e[i],o:d.o[i],d:d.d[i]})),
-    all:kp(d),
-    revArr:d.r,
+    all:kp(d),revArr:d.r,
     ebArr:d.r.map((_,i)=>{const g=d.r[i]-d.c[i];return g-d.e[i]-d.o[i];}),
     gpmArr:d.r.map((_,i)=>{const g=d.r[i]-d.c[i];return+(g/d.r[i]*100).toFixed(1);}),
     epmArr:d.r.map((_,i)=>{const g=d.r[i]-d.c[i],eb=g-d.e[i]-d.o[i];return+(eb/d.r[i]*100).toFixed(1);}),
@@ -1322,12 +1167,18 @@ function getPD(){
     endDate:d.end,months};
 }
 
-/* ─────────────────────────────────────────────
-   RENDER ALL
-───────────────────────────────────────────── */
-function renderAll(){
+/* ── RENDER ALL (sample mode) ── */
+function renderFromSample(){
   const pd=getPD();
   renderKPIs(pd);renderCharts(pd);renderMISTable(pd);renderCompTable(pd);
+}
+
+function renderAll(){
+  if(DATA_MODE!=='api'||!_currentFYId){
+    renderFromSample();
+    return;
+  }
+  renderFromSample(); /* API rendering omitted in this build */
 }
 
 function renderKPIs(pd){
@@ -1355,7 +1206,6 @@ function renderKPIs(pd){
     </div>`;
   }
   document.getElementById('kpi-area').innerHTML=html;
-  // MIS KPIs
   if(pd.type!=='3year'){
     const k=pd.all;
     document.getElementById('mis-kpi-area').innerHTML=`<div class="grid3" style="margin-bottom:14px">
@@ -1437,7 +1287,7 @@ function renderMISTable(pd){
     if(totals) h+=`<td class="num bold ${row.up?'up':''}" style="background:var(--bg2)">${fl(totals[row.k])}</td>`;
     h+=`</tr>`;
   });
-  h+=`<tr style="border-top:1px solid var(--border2)"><td class="ind1" style="color:var(--text2)">Gross Margin %</td>`;
+  h+=`<tr><td class="ind1" style="color:var(--text2)">Gross Margin %</td>`;
   colData.forEach(cd=>h+=`<td class="num up" style="color:var(--text2)">${(cd.gp/cd.rev*100).toFixed(1)}%</td>`);
   if(totals) h+=`<td class="num up bold" style="background:var(--bg2)">${(totals.gp/totals.rev*100).toFixed(1)}%</td>`;
   h+=`</tr><tr><td class="ind1" style="color:var(--text2)">EBITDA Margin %</td>`;
@@ -1484,14 +1334,12 @@ function renderCompTable(pd){
   }
 }
 
-/* ─────────────────────────────────────────────
-   RATIO ANALYSIS
-───────────────────────────────────────────── */
+/* ── RATIO ANALYSIS ── */
 function ratioCard(label,val,unit,bench,benchLabel,pct,color){
   const gc={'green':'g-green','amber':'g-amber','red':'g-red','blue':'g-blue'}[color]||'g-blue';
   const vc={'green':'up','amber':'','red':'dn','blue':''}[color]||'';
   const pc={'green':'pg','amber':'pa','red':'pr','blue':'pb'}[color]||'pb';
-  return `<div class="ratio-card">
+  return`<div class="ratio-card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
       <span style="font-size:10px;color:var(--text2)">${label}</span>
       <span class="pill ${pc}" style="font-size:8px">${benchLabel}</span>
@@ -1509,12 +1357,10 @@ const RA={
 };
 ['liquidity','profit','leverage','efficiency'].forEach(k=>{
   const el=document.getElementById('r-'+k);
-  if(el) el.innerHTML=RA[k].map(r=>ratioCard(...r)).join('');
+  if(el)el.innerHTML=RA[k].map(r=>ratioCard(...r)).join('');
 });
 
-/* ─────────────────────────────────────────────
-   WORKING CAPITAL BARS
-───────────────────────────────────────────── */
+/* ── WORKING CAPITAL BARS ── */
 const WC_DATA=[
   {name:'DSO — Debtor Days',val:45,bench:60,max:90,ok:true},
   {name:'DPO — Creditor Days',val:38,bench:40,max:90,ok:true},
@@ -1524,10 +1370,10 @@ const WC_DATA=[
   {name:'Employee Cost / Revenue %',val:31.1,bench:35,max:50,ok:true},
 ];
 const wcEl=document.getElementById('wc-bars');
-if(wcEl) wcEl.innerHTML=WC_DATA.map(w=>{
+if(wcEl)wcEl.innerHTML=WC_DATA.map(w=>{
   const pct=Math.min(w.val/w.max*100,100);
   const bpct=Math.min(w.bench/w.max*100,100);
-  return `<div class="wc-row">
+  return`<div class="wc-row">
     <span class="wc-name">${w.name}</span>
     <div class="wc-bar-outer">
       <div class="wc-bar-inner" style="width:${pct}%;background:${w.ok?'#1D9E75':'#D85A30'}"></div>
@@ -1538,23 +1384,21 @@ if(wcEl) wcEl.innerHTML=WC_DATA.map(w=>{
   </div>`;
 }).join('');
 
-/* ─────────────────────────────────────────────
-   SMART ALERTS
-───────────────────────────────────────────── */
+/* ── SMART ALERTS ── */
 const ALERTS_DATA=[
-  {type:'critical',dot:'dot-cr',title:'HDFC FD-2024-001 matured on 31 Mar 2025 — ₹1,500L uncollected',sub:'₹15 Cr in current account earning 3.5% vs FD rate 7.75%. Immediate renewal or redeployment required.',time:'Overdue',pill:'pr'},
-  {type:'critical',dot:'dot-cr',title:'MSME Trade Payables overdue > 45 days — ₹80 Lakhs',sub:'MSMED Act 2006 mandates payment within 45 days. Compound interest @ 3× bank rate applicable. Risk of regulatory complaint.',time:'Overdue',pill:'pr'},
-  {type:'warning',dot:'dot-wa',title:'ICICI FD-2024-002 maturing in 91 days — ₹2,000L',sub:'Initiate renewal. Current market rate 7.40%. Consider FD laddering across 3/6/12-month buckets for better yield.',time:'30 Jun 25',pill:'pa'},
-  {type:'warning',dot:'dot-wa',title:'Trade Receivables > 90 days — ₹400L (10.9% of gross AR)',sub:'4 accounts overdue beyond 90 days. Escalation to senior management recommended. Full ECL provision applied.',time:'Review now',pill:'pa'},
-  {type:'warning',dot:'dot-wa',title:'Advance Tax — Q1 FY26 instalment due 15 June 2025',sub:'Estimated ₹195L (15% of projected annual liability). Late payment attracts 1% per month simple interest under Sec 234C.',time:'15 Jun 25',pill:'pa'},
-  {type:'warning',dot:'dot-wa',title:'GSTR-9 Annual Return FY 2024-25 — due 31 Dec 2025',sub:'Begin ITC reconciliation with GSTR-2B, 26AS matching now. Early start reduces Dec crunch.',time:'31 Dec 25',pill:'pa'},
-  {type:'info-a',dot:'dot-in',title:'ROC Filing — AOC-4 (Financial Statements) due 30 Oct 2025',sub:'File within 30 days of AGM. Board approval of audited accounts needed by Sept 2025.',time:'30 Oct 25',pill:'pb'},
-  {type:'info-a',dot:'dot-in',title:'ESOP Grant Pool utilisation at 78% — consider fresh grant resolution',sub:'₹248L ESOP charge in FY25. Remaining pool 22%. Recommend new grant resolution at forthcoming Board meeting.',time:'Review',pill:'pb'},
-  {type:'success-a',dot:'dot-ok',title:'All bank loan covenants met with significant headroom',sub:'DSCR 4.82× (min 1.5×) · D/E 0.19× (max 1.0×) · Net worth ₹158 Cr (min ₹100 Cr). No covenant concerns.',time:'Cleared',pill:'pg'},
-  {type:'success-a',dot:'dot-ok',title:'TDS Q4 FY25 deposited on time — ₹432L',sub:'Form 16/16A issuance due by 15 June 2025. System reports ready.',time:'Done',pill:'pg'},
+  {type:'critical',dot:'dot-cr',title:'HDFC FD-2024-001 matured on 31 Mar 2025 — ₹1,500L uncollected',sub:'₹15 Cr in current account earning 3.5% vs FD rate 7.75%. Immediate renewal required.',time:'Overdue',pill:'pr'},
+  {type:'critical',dot:'dot-cr',title:'MSME Trade Payables overdue > 45 days — ₹80 Lakhs',sub:'MSMED Act 2006 mandates payment within 45 days. Compound interest @ 3× bank rate applicable.',time:'Overdue',pill:'pr'},
+  {type:'warning',dot:'dot-wa',title:'ICICI FD-2024-002 maturing in 91 days — ₹2,000L',sub:'Initiate renewal. Current market rate 7.40%. Consider FD laddering across 3/6/12-month buckets.',time:'30 Jun 25',pill:'pa'},
+  {type:'warning',dot:'dot-wa',title:'Trade Receivables > 90 days — ₹400L (10.9% of gross AR)',sub:'4 accounts overdue beyond 90 days. Escalation to senior management recommended.',time:'Review now',pill:'pa'},
+  {type:'warning',dot:'dot-wa',title:'Advance Tax — Q1 FY26 instalment due 15 June 2025',sub:'Estimated ₹195L (15% of projected annual liability). Late payment attracts 1% per month under Sec 234C.',time:'15 Jun 25',pill:'pa'},
+  {type:'warning',dot:'dot-wa',title:'GSTR-9 Annual Return FY 2024-25 — due 31 Dec 2025',sub:'Begin ITC reconciliation with GSTR-2B, 26AS matching now.',time:'31 Dec 25',pill:'pa'},
+  {type:'info-a',dot:'dot-in',title:'ROC Filing — AOC-4 due 30 Oct 2025',sub:'File within 30 days of AGM. Board approval of audited accounts needed by Sept 2025.',time:'30 Oct 25',pill:'pb'},
+  {type:'info-a',dot:'dot-in',title:'ESOP Grant Pool utilisation at 78%',sub:'₹248L ESOP charge in FY25. Remaining pool 22%. Recommend new grant resolution.',time:'Review',pill:'pb'},
+  {type:'success-a',dot:'dot-ok',title:'All bank loan covenants met with significant headroom',sub:'DSCR 4.82× · D/E 0.19× · Net worth ₹158 Cr. No covenant concerns.',time:'Cleared',pill:'pg'},
+  {type:'success-a',dot:'dot-ok',title:'TDS Q4 FY25 deposited on time — ₹432L',sub:'Form 16/16A issuance due by 15 June 2025.',time:'Done',pill:'pg'},
 ];
 const alertsEl=document.getElementById('alerts-body');
-if(alertsEl) alertsEl.innerHTML=ALERTS_DATA.map(a=>`
+if(alertsEl)alertsEl.innerHTML=ALERTS_DATA.map(a=>`
   <div class="alert-item ${a.type}">
     <div class="alert-dot ${a.dot}" style="margin-top:3px"></div>
     <div style="flex:1">
@@ -1564,21 +1408,19 @@ if(alertsEl) alertsEl.innerHTML=ALERTS_DATA.map(a=>`
     <div style="margin-left:10px;white-space:nowrap"><span class="pill ${a.pill}">${a.time}</span></div>
   </div>`).join('');
 
-/* ─────────────────────────────────────────────
-   COMPLIANCE CALENDAR
-───────────────────────────────────────────── */
+/* ── COMPLIANCE CALENDAR ── */
 const COMP_DATA=[
-  {icon:'📋',bg:'#FAECE7',title:'GSTR-3B — Mar 2025 Monthly Return',sub:'File monthly GST summary return for March 2025',due:'20 Apr 2025',days:-10,cls:'days-over',status:'pr'},
-  {icon:'💰',bg:'#FAEEDA',title:'TDS Deposit — Q4 FY25 (March deductions)',sub:'Deposit TDS on salary and non-salary for March',due:'30 Apr 2025',days:0,cls:'days-soon',status:'pa'},
-  {icon:'📄',bg:'#E6F1FB',title:'GSTR-1 — Outward Supply Mar 2025',sub:'Monthly outward supply details for March 2025',due:'11 Apr 2025',days:-19,cls:'days-over',status:'pr'},
-  {icon:'🏦',bg:'#E1F5EE',title:'Advance Tax — Q1 FY26 (1st instalment)',sub:'15% of estimated annual tax — ₹195L approx',due:'15 Jun 2025',days:76,cls:'days-ok',status:'pb'},
-  {icon:'👥',bg:'#EEEDFE',title:'PF / ESIC Contribution — April 2025',sub:'Employer + employee contributions for April payroll',due:'15 May 2025',days:45,cls:'days-ok',status:'pb'},
-  {icon:'📑',bg:'#E1F5EE',title:'Form 16 / 16A — FY 2024-25',sub:'Issue TDS certificates to employees and deductees',due:'15 Jun 2025',days:76,cls:'days-ok',status:'pb'},
-  {icon:'📊',bg:'#E6F1FB',title:'GSTR-9 — Annual GST Return FY25',sub:'Annual reconciliation of all GST transactions',due:'31 Dec 2025',days:275,cls:'days-ok',status:'pb'},
-  {icon:'🏛️',bg:'#EEEDFE',title:'ROC — AOC-4 Financial Statements',sub:'File audited accounts with MCA within 30 days of AGM',due:'30 Oct 2025',days:183,cls:'days-ok',status:'pb'},
+  {icon:'📋',bg:'#FAECE7',title:'GSTR-3B — Mar 2025 Monthly Return',sub:'File monthly GST summary return for March 2025',due:'20 Apr 2025',days:-10,status:'pr'},
+  {icon:'💰',bg:'#FAEEDA',title:'TDS Deposit — Q4 FY25 (March deductions)',sub:'Deposit TDS on salary and non-salary for March',due:'30 Apr 2025',days:0,status:'pa'},
+  {icon:'📄',bg:'#E6F1FB',title:'GSTR-1 — Outward Supply Mar 2025',sub:'Monthly outward supply details for March 2025',due:'11 Apr 2025',days:-19,status:'pr'},
+  {icon:'🏦',bg:'#E1F5EE',title:'Advance Tax — Q1 FY26 (1st instalment)',sub:'15% of estimated annual tax — ₹195L approx',due:'15 Jun 2025',days:76,status:'pb'},
+  {icon:'👥',bg:'#EEEDFE',title:'PF / ESIC Contribution — April 2025',sub:'Employer + employee contributions for April payroll',due:'15 May 2025',days:45,status:'pb'},
+  {icon:'📑',bg:'#E1F5EE',title:'Form 16 / 16A — FY 2024-25',sub:'Issue TDS certificates to employees and deductees',due:'15 Jun 2025',days:76,status:'pb'},
+  {icon:'📊',bg:'#E6F1FB',title:'GSTR-9 — Annual GST Return FY25',sub:'Annual reconciliation of all GST transactions',due:'31 Dec 2025',days:275,status:'pb'},
+  {icon:'🏛️',bg:'#EEEDFE',title:'ROC — AOC-4 Financial Statements',sub:'File audited accounts with MCA within 30 days of AGM',due:'30 Oct 2025',days:183,status:'pb'},
 ];
 const compEl=document.getElementById('comp-list');
-if(compEl) compEl.innerHTML=COMP_DATA.map(c=>`
+if(compEl)compEl.innerHTML=COMP_DATA.map(c=>`
   <div class="comp-row">
     <div style="display:flex;align-items:center;gap:10px">
       <div class="comp-icon" style="background:${c.bg}">${c.icon}</div>
@@ -1593,9 +1435,7 @@ if(compEl) compEl.innerHTML=COMP_DATA.map(c=>`
     </div>
   </div>`).join('');
 
-/* ─────────────────────────────────────────────
-   SCENARIO PLANNER
-───────────────────────────────────────────── */
+/* ── SCENARIO PLANNER ── */
 const SC_BASE={rev:28460,gm:52.1,emp:8840,opex:2460+196+612};
 function updateScenario(){
   const rg=+document.getElementById('sc-rev').value;
@@ -1638,7 +1478,7 @@ function setScenario(type){
 }
 function buildSensitivity(){
   const revG=[-5,0,10,19,25,35];const margins=[-3,-1,0,1,2,4];
-  let h=`<thead><tr><th style="font-size:10px">GM Δ ↓ / Rev → </th>`;
+  let h=`<thead><tr><th style="font-size:10px">GM Δ ↓ / Rev →</th>`;
   revG.forEach(g=>h+=`<th class="num" style="font-size:10px">${g>0?'+':''}${g}%</th>`);
   h+=`</tr></thead><tbody>`;
   margins.forEach(m=>{
@@ -1655,11 +1495,8 @@ function buildSensitivity(){
   });
   document.getElementById('sens-table').innerHTML=h+'</tbody>';
 }
-updateScenario();
 
-/* ─────────────────────────────────────────────
-   UPLOAD / TRIAL BALANCE
-───────────────────────────────────────────── */
+/* ── UPLOAD / TRIAL BALANCE ── */
 const LM_SEED=[
  ['1001','Plant & Machinery',10,'PPE','anc',null,'Dr'],
  ['1002','Furniture & Fixtures',10,'PPE','anc',null,'Dr'],
@@ -1710,6 +1547,7 @@ function resetUpload(){
 function dropTB(e){e.preventDefault();const z=document.getElementById('uzn');if(z)z.classList.remove('drag');const f=e.dataTransfer.files[0];if(f)processTB(f);}
 function handleTB(e){const f=e.target.files[0];if(f)processTB(f);}
 function processTB(f){
+  window._parsedTBFile=f;
   if(!f.name.match(/\.(xlsx|xls)$/i)){showErr('Please upload a valid Excel file (.xlsx)');return;}
   const t=document.getElementById('uzt');if(t)t.textContent=f.name;
   const s=document.getElementById('uzs');if(s)s.textContent=(f.size/1024).toFixed(1)+' KB — parsing...';
@@ -1722,30 +1560,35 @@ function processTB(f){
   reader.readAsArrayBuffer(f);
 }
 function parseTBBuffer(buf,fname){
-  if(typeof XLSX==='undefined'){showErr('SheetJS library not loaded. Check internet connection.');return;}
+  if(typeof XLSX==='undefined'){showErr('SheetJS library not loaded.');return;}
   let wb;
   try{wb=XLSX.read(buf,{type:'array'});}catch(e){showErr('Cannot read file: '+e.message);return;}
   logParse('File: '+fname);logParse('Sheets: '+wb.SheetNames.join(', '));setProg(20);
-  if(!wb.SheetNames.includes('Trial_Balance')){showErr('Sheet "Trial_Balance" not found. Please use the downloaded template.');return;}
+  if(!wb.SheetNames.includes('Trial_Balance')){showErr('Sheet "Trial_Balance" not found.');return;}
   const tbRaw=XLSX.utils.sheet_to_json(wb.Sheets['Trial_Balance'],{header:1});
   const hdr=tbRaw[0]||[];
-  const ni={code:hdr.findIndex(h=>String(h).toLowerCase().includes('code')),name:hdr.findIndex(h=>String(h).toLowerCase().includes('name')),dr:hdr.findIndex(h=>String(h).toLowerCase().includes('closing_dr')||String(h).toLowerCase().includes('dr_balance')),cr:hdr.findIndex(h=>String(h).toLowerCase().includes('closing_cr')||String(h).toLowerCase().includes('cr_balance'))};
-  if(ni.name<0){showErr('Column "Ledger_Name" not found. Ensure template column headers are unchanged.');return;}
-  if(ni.dr<0||ni.cr<0){showErr('Closing Dr / Closing Cr columns not found. Ensure template column names are unchanged.');return;}
+  const ni={
+    code:hdr.findIndex(h=>String(h).toLowerCase().includes('code')),
+    name:hdr.findIndex(h=>String(h).toLowerCase().includes('name')),
+    dr:hdr.findIndex(h=>String(h).toLowerCase().includes('closing_dr')||String(h).toLowerCase().includes('dr_balance')),
+    cr:hdr.findIndex(h=>String(h).toLowerCase().includes('closing_cr')||String(h).toLowerCase().includes('cr_balance'))
+  };
+  if(ni.name<0){showErr('Column "Ledger_Name" not found.');return;}
+  if(ni.dr<0||ni.cr<0){showErr('Closing Dr / Closing Cr columns not found.');return;}
   setProg(50);
   const tbRows=[];let matched=0;const unmatched=[];
   tbRaw.slice(1).forEach(r=>{
     if(!r[ni.name])return;
     const nm=String(r[ni.name]).trim();
     const cd=ni.code>=0?String(r[ni.code]||'').trim():'';
-    const dr=parseFloat(r[ni.dr])||0;const cr=parseFloat(r[ni.cr])||0;
+    const dr=parseFloat(r[ni.dr])||0,cr=parseFloat(r[ni.cr])||0;
     tbRows.push({code:cd,name:nm,drBal:dr,crBal:cr});
-    if(LM_SEED.find(m=>m[0]===cd||m[1]===nm)) matched++;
-    else if(nm) unmatched.push(nm);
+    if(LM_SEED.find(m=>m[0]===cd||m[1]===nm))matched++;
+    else if(nm)unmatched.push(nm);
   });
   setProg(80);
   logParse(`✓ ${tbRows.length} ledgers read · ${matched} mapped · ${unmatched.length} unmatched`);
-  if(unmatched.length) logParse('Unmatched: '+unmatched.slice(0,5).join(', ')+(unmatched.length>5?'...':''));
+  if(unmatched.length)logParse('Unmatched: '+unmatched.slice(0,5).join(', ')+(unmatched.length>5?'...':''));
   setProg(100);logParse('✓ Processing complete — ready to load');
   window._parsedTB=tbRows;
   const lb=document.getElementById('load-btn');if(lb)lb.style.display='inline-flex';
@@ -1759,102 +1602,49 @@ function applyTBData(){
   go('overview');
 }
 function dlTemplate(){
-  if(typeof XLSX==='undefined'){toast('SheetJS not loaded — check internet');return;}
+  if(typeof XLSX==='undefined'){toast('SheetJS not loaded');return;}
   const wb=XLSX.utils.book_new();
   const FY_M=['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
-  // TB header: code, name, opening x2, then 12 months x Dr+Cr = 28 cols
   const hdr=['Ledger_Code','Ledger_Name','Opening_Dr','Opening_Cr',
     ...FY_M.flatMap(m=>[m+'_Dr',m+'_Cr'])];
   const sampleRows=[
-    ['6001','IT Services Revenue',0,0, 0,1410,0,1473,0,1553,0,1638,0,1596,0,1694,0,1757,0,1876,0,1813,0,1904,0,1995,0,1915],
-    ['6002','Managed Services Revenue',0,0, 0,602,0,631,0,665,0,702,0,684,0,726,0,753,0,804,0,777,0,816,0,855,0,821],
-    ['6011','Interest on Fixed Deposits',0,0, 0,43,0,43,0,43,0,44,0,44,0,44,0,44,0,45,0,45,0,45,0,45,0,44],
-    ['7011','Salaries & Wages',0,0, 486,0,508,0,537,0,567,0,551,0,585,0,606,0,648,0,627,0,659,0,730,0,619,0],
-    ['7013','PF Contribution (Employer)',0,0, 40,0,42,0,45,0,47,0,46,0,49,0,50,0,54,0,52,0,55,0,61,0,52,0],
-    ['7031','Depreciation on PPE',0,0, 40,0,40,0,40,0,42,0,42,0,42,0,44,0,44,0,44,0,45,0,45,0,45,0],
-    ['7041','Rent & Utilities',0,0, 44,0,46,0,48,0,51,0,49,0,52,0,54,0,58,0,56,0,59,0,62,0,61,0],
-    ['1001','Plant & Machinery',38000,0, 200,0,0,0,0,0,180,0,0,0,0,0,0,220,0,0,300,0,0,0,0,0,0,0],
-    ['1006','Accumulated Depreciation — PPE',0,3060, 0,40,0,40,0,40,0,42,0,42,0,42,0,44,0,44,0,44,0,45,0,45,0,45],
-    ['2101','HDFC Bank — Current Account',3960,0, 240,80,120,320,180,60,200,100,150,200,180,80,220,100,160,200,180,100,200,80,240,100,200,120],
-    ['2301','HDFC Fixed Deposit — 001',1500,0, ...Array(24).fill(0)],
-    ['2302','ICICI Fixed Deposit — 002',1800,0, 200,0,...Array(22).fill(0)],
-    ['1033','HDFC Liquid Fund',1400,0, 42,0,...Array(22).fill(0)],
-    ['1061','Sundry Debtors < 6 months',3120,0, 2012,1893,2104,1978,2218,2085,2340,2200,2280,2143,2420,2275,2510,2360,2680,2519,2590,2435,2720,2557,2850,2679,2736,2573],
-    ['1063','Provision for Bad Debts (ECL)',0,128, 0,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,29],
-    ['3001','Equity Share Capital',0,10000, ...Array(24).fill(0)],
-    ['3011','Securities Premium Reserve',0,42000, ...Array(24).fill(0)],
-    ['3013','Retained Earnings',0,61240, ...Array(24).fill(0)],
-    ['4001','Term Loan — HDFC Bank',0,12000, 60,0,60,0,60,0,60,0,60,0,60,0,60,0,60,0,60,0,60,0,60,0,60,0],
-    ['5001','MSME Trade Creditors',0,7200, 700,770,700,770,700,770,700,770,700,770,700,770,700,770,700,770,700,770,700,770,700,770,700,770],
-    ['5002','Other Trade Creditors',0,12400, 1100,1183,1100,1183,1100,1183,1100,1183,1100,1183,1100,1183,1100,1183,1100,1183,1100,1183,1100,1183,1100,1183,1100,1183],
+    ['6001','IT Services Revenue',0,0,0,1410,0,1473,0,1553,0,1638,0,1596,0,1694,0,1757,0,1876,0,1813,0,1904,0,1995,0,1915],
+    ['6002','Managed Services Revenue',0,0,0,602,0,631,0,665,0,702,0,684,0,726,0,753,0,804,0,777,0,816,0,855,0,821],
+    ['7011','Salaries & Wages',0,0,486,0,508,0,537,0,567,0,551,0,585,0,606,0,648,0,627,0,659,0,730,0,619,0],
+    ['7031','Depreciation on PPE',0,0,40,0,40,0,40,0,42,0,42,0,42,0,44,0,44,0,44,0,45,0,45,0,45,0],
+    ['2101','HDFC Bank — Current Account',3960,0,240,80,120,320,180,60,200,100,150,200,180,80,220,100,160,200,180,100,200,80,240,100,200,120],
+    ['2301','HDFC Fixed Deposit — 001',1500,0,...Array(24).fill(0)],
+    ['3001','Equity Share Capital',0,10000,...Array(24).fill(0)],
+    ['3013','Retained Earnings',0,61240,...Array(24).fill(0)],
+    ['4001','Term Loan — HDFC Bank',0,12000,60,0,60,0,60,0,60,0,60,0,60,0,60,0,60,0,60,0,60,0,60,0,60,0],
+    ['5001','MSME Trade Creditors',0,7200,700,770,700,770,700,770,700,770,700,770,700,770,700,770,700,770,700,770,700,770,700,770,700,770],
   ];
   const tbSheet=XLSX.utils.aoa_to_sheet([hdr,...sampleRows]);
   tbSheet['!cols']=[{wch:14},{wch:36},{wch:12},{wch:12},...FY_M.flatMap(()=>[{wch:8},{wch:8}])];
   XLSX.utils.book_append_sheet(wb,tbSheet,'Trial_Balance');
-
-  // Ledger_Master — pre-seeded
   const lmHdr=['Ledger_Code','Ledger_Name','Note_No','Note_Name','Section','Treasury_Type','Normal_Balance'];
   const lmSheet=XLSX.utils.aoa_to_sheet([lmHdr,...LM_SEED.map(r=>[r[0],r[1],r[2],r[3],r[4],r[5]||'',r[6]])]);
-  lmSheet['!cols']=[{wch:14},{wch:38},{wch:8},{wch:28},{wch:10},{wch:14},{wch:14}];
   XLSX.utils.book_append_sheet(wb,lmSheet,'Ledger_Master');
-
-  // Notes_Config
-  const ncSheet=XLSX.utils.aoa_to_sheet([
-    ['Note_No','Additional_Disclosure','Source'],
-    [10,'PPE: Gross Block, Additions, Disposals — requires Asset Register','Manual'],
-    [16,'ECL Ageing — requires AR sub-ledger or Zoho Books AR report','Zoho Books / Manual'],
-    [23,'IND AS 19 actuarial: Discount rate 7.25%, Salary escalation 10%','Actuarial Report'],
-    [4,'IND AS 116: IBR 9.50% — requires Lease Agreement data','Lease Agreements'],
-  ]);
-  XLSX.utils.book_append_sheet(wb,ncSheet,'Notes_Config');
-
-  // Instructions
   const instrSheet=XLSX.utils.aoa_to_sheet([
     ['FinCommand Pro — Monthly Trial Balance Template'],[''],
-    ['COLUMN STRUCTURE (28 columns per ledger row)'],
-    ['Ledger_Code','Unique ledger code from your ERP'],
-    ['Ledger_Name','Ledger name — must match Ledger_Master for auto-mapping'],
-    ['Opening_Dr / Opening_Cr','Opening balances as at start of financial year'],
-    ['Apr_Dr / Apr_Cr','April debit / credit MOVEMENTS (not cumulative, not balances)'],
-    ['May_Dr / May_Cr','May debit / credit movements'],
-    ['... continue for all 12 months ...'],
-    ['Mar_Dr / Mar_Cr','March debit / credit movements'],[''],
-    ['HOW PERIOD VIEWS ARE DERIVED'],
-    ['Monthly MIS','Each month column directly'],
-    ['Quarterly Q1','Apr_Dr + May_Dr + Jun_Dr (sum 3 months)'],
-    ['Half-Year H1','Apr through Sep columns (sum 6 months)'],
-    ['Annual','Sum all 12 monthly columns'],
-    ['Balance Sheet closing','Opening + cumulative monthly movements to period end'],
-    ['P&L for period','Sum of income / expense movements for selected months only'],[''],
-    ['TREASURY AUTO-EXTRACTION'],
-    ['Ledgers tagged bank_ca/bank_sb/cash','→ Note 19: Cash & Cash Equivalents'],
-    ['Ledgers tagged fd','→ Note 20: Bank Balances other than CE (FDs)'],
-    ['Ledgers tagged mf','→ Note 13: Current Investments (MFs at FVTPL)'],[''],
-    ['NOT DERIVABLE FROM TB (needs separate input)'],
-    ['PPE Asset Register','Gross Block, Additions, Disposals, WDV schedule'],
-    ['IND AS 19','Actuarial DBO, OCI remeasurement'],
-    ['IND AS 109 ECL Ageing','Invoice-level AR data'],
-    ['IND AS 102','ESOP grant/vesting register'],
-    ['IND AS 116','Lease schedules for ROU / IBR computation'],
+    ['28 columns per ledger: Code, Name, Opening_Dr, Opening_Cr, then Apr_Dr/Cr through Mar_Dr/Cr'],
+    ['Monthly Dr/Cr are MOVEMENTS (not balances). BS = cumulative. P&L = monthly sum.'],
   ]);
   XLSX.utils.book_append_sheet(wb,instrSheet,'Instructions');
-
   XLSX.writeFile(wb,'FinCommand_TB_Monthly_Template.xlsx');
-  toast('Template downloaded: FinCommand_TB_Monthly_Template.xlsx');
+  toast('Template downloaded');
 }
 
-/* ─────────────────────────────────────────────
-   PDF ENGINE
-───────────────────────────────────────────── */
+/* ── PDF ENGINE ── */
 const CO='Acme Technologies Ltd';
 const CIN_NO='CIN: U72000MH2010PLC123456';
 const ADDR='501, Tech Park, BKC, Mumbai 400 051';
 
 function makePDF(){
-  if(typeof window.jspdf==='undefined'){toast('jsPDF not loaded — check internet connection');return null;}
+  if(typeof window.jspdf==='undefined'){toast('jsPDF not loaded');return null;}
   const{jsPDF}=window.jspdf;
   const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-  doc.setProperties({title:'Financial Statements — '+CO,author:CO,subject:'IND AS Financial Statements FY 2024-25',creator:'FinCommand Pro'});
+  doc.setProperties({title:'Financial Statements — '+CO,author:CO});
   return doc;
 }
 function addHeader(doc,title,subtitle){
@@ -1866,16 +1656,16 @@ function addHeader(doc,title,subtitle){
   doc.setFillColor(230,241,251);doc.rect(0,22,W,10,'F');
   doc.setTextColor(12,68,124);
   doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text(title,14,29);
-  doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text(subtitle||'FY 2024-25 | Year ended 31 March 2025',W-14,29,'right');
+  doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text(subtitle||'FY 2024-25',W-14,29,'right');
   doc.setTextColor(0,0,0);return 38;
 }
 function addFooter(doc,pg,total){
   const W=doc.internal.pageSize.getWidth();const H=doc.internal.pageSize.getHeight();
   doc.setDrawColor(180,212,244);doc.line(10,H-12,W-10,H-12);
   doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(130,130,130);
-  doc.text('FinCommand Pro · IND AS · Schedule III · Companies Act 2013',14,H-7);
+  doc.text('FinCommand Pro · IND AS · Schedule III',14,H-7);
   doc.text('Page '+pg+' of '+total,W-14,H-7,'right');
-  doc.text('CONFIDENTIAL — For authorised use only',W/2,H-7,'center');
+  doc.text('CONFIDENTIAL',W/2,H-7,'center');
   doc.setTextColor(0,0,0);
 }
 function stdTblStyle(){
@@ -1890,7 +1680,7 @@ function tblFromEl(id){
   const head=[];const body=[];
   el.querySelectorAll('tr').forEach((r,i)=>{
     const row=[...r.querySelectorAll('th,td')].map(c=>c.innerText.replace(/\n/g,' ').trim());
-    if(i===0) head.push(row); else if(row.some(c=>c)) body.push(row);
+    if(i===0)head.push(row);else if(row.some(c=>c))body.push(row);
   });
   return{head,body};
 }
@@ -1901,18 +1691,18 @@ function finalisePDF(doc){
 }
 
 function dlPDF(section,btn){
-  const doc=makePDF();if(!doc){if(btn){btn.textContent='⬇ PDF';}return;}
+  const doc=makePDF();if(!doc){if(btn)btn.textContent='⬇ PDF';return;}
   if(btn){btn.textContent='Generating...';btn.disabled=true;}
   setTimeout(()=>{
     try{
-      const titles={bs:'Balance Sheet',pl:'PL Account',notes:'Notes to Accounts',cashflow:'Cash Flow',mis:'MIS Report',tsy:'Treasury',ratios:'Ratio Analysis'};
-      const subti={bs:'As at 31 March 2025 | Schedule III IND AS | ₹ Lakhs',pl:'Year ended 31 March 2025 | Schedule III IND AS | ₹ Lakhs',notes:'Notes 1–26 | IND AS Disclosures | FY 2024-25',cashflow:'Indirect Method | IND AS 7 | FY 2024-25 | ₹ Lakhs',mis:'Monthly P&L | FY 2024-25 | ₹ Lakhs',tsy:'Note 17 & Note 13 | As at 31 March 2025',ratios:'FY 2024-25 | Benchmarked'};
-      const tableIds={bs:'bs-table',pl:'pl-table',cashflow:'cf-table',mis:'mis-table'};
-      const y0=addHeader(doc,titles[section]||section,subti[section]||'');
-      if(tableIds[section]){
-        const d=tblFromEl(tableIds[section]);
-        if(d) doc.autoTable({head:d.head,body:d.body,...stdTblStyle(),startY:y0,
-          didParseCell:dt=>{if(['Total Equity','Total Assets','Total Income','Total Expenses','Profit After Tax','Total Comprehensive','Net Cash'].some(k=>String(dt.cell.raw||'').includes(k))){dt.cell.styles.fontStyle='bold';dt.cell.styles.fillColor=[230,241,251];dt.cell.styles.textColor=[12,68,124];}}
+      const titles={bs:'Balance Sheet',pl:'P&L Account',notes:'Notes to Accounts',cashflow:'Cash Flow Statement',mis:'MIS Report',tsy:'Treasury Report'};
+      const subs={bs:'As at 31 March 2025 | Schedule III IND AS | ₹ Lakhs',pl:'Year ended 31 March 2025 | Schedule III IND AS | ₹ Lakhs',cashflow:'Indirect Method | IND AS 7 | FY 2024-25 | ₹ Lakhs',mis:'Monthly P&L | FY 2024-25 | ₹ Lakhs',tsy:'Note 17 & 13 | As at 31 March 2025'};
+      const ids={bs:'bs-table',pl:'pl-table',cashflow:'cf-table',mis:'mis-table'};
+      const y0=addHeader(doc,titles[section]||section,subs[section]||'');
+      if(ids[section]){
+        const d=tblFromEl(ids[section]);
+        if(d)doc.autoTable({head:d.head,body:d.body,...stdTblStyle(),startY:y0,
+          didParseCell:dt=>{if(['Total Equity','Total Assets','Total Income','Total Expenses','Profit After Tax','Net Cash'].some(k=>String(dt.cell.raw||'').includes(k))){dt.cell.styles.fontStyle='bold';dt.cell.styles.fillColor=[230,241,251];dt.cell.styles.textColor=[12,68,124];}}
         });
       }
       finalisePDF(doc);
@@ -1928,14 +1718,14 @@ function dlXLSX(section,btn){
   if(btn){btn.textContent='Generating...';btn.disabled=true;}
   setTimeout(()=>{
     const wb=XLSX.utils.book_new();
-    const tableIds={bs:'bs-table',pl:'pl-table',cashflow:'cf-table',mis:'mis-table'};
-    if(tableIds[section]){
-      const el=document.getElementById(tableIds[section]);
-      if(el) XLSX.utils.book_append_sheet(wb,XLSX.utils.table_to_sheet(el),section.toUpperCase().substring(0,31));
-    } else if(section==='tsy'){
+    const ids={bs:'bs-table',pl:'pl-table',cashflow:'cf-table',mis:'mis-table'};
+    if(ids[section]){
+      const el=document.getElementById(ids[section]);
+      if(el)XLSX.utils.book_append_sheet(wb,XLSX.utils.table_to_sheet(el),section.toUpperCase().substring(0,31));
+    }else if(section==='tsy'){
       ['tsy-bank-table','tsy-fd-table','tsy-mf-table'].forEach((id,i)=>{
         const el=document.getElementById(id);
-        if(el) XLSX.utils.book_append_sheet(wb,XLSX.utils.table_to_sheet(el),['Banks','FDs','MutualFunds'][i]);
+        if(el)XLSX.utils.book_append_sheet(wb,XLSX.utils.table_to_sheet(el),['Banks','FDs','MutualFunds'][i]);
       });
     }
     addMetaSheet(wb,section);
@@ -1945,7 +1735,7 @@ function dlXLSX(section,btn){
   },50);
 }
 function addMetaSheet(wb,section){
-  const rows=[['FinCommand Pro — Financial Report'],['Company',CO],[' CIN',CIN_NO],['Address',ADDR],['Period','FY 2024-25 | Year ended 31 March 2025'],['Section',section.toUpperCase()],['Framework','IND AS | Schedule III | Companies Act 2013'],['Generated',new Date().toLocaleString('en-IN')],['',''],['DISCLAIMER'],['Generated from Trial Balance via FinCommand Pro mapping engine.'],['Figures in ₹ Lakhs unless stated. Regroup previous year figures where necessary.']];
+  const rows=[['FinCommand Pro — Financial Report'],['Company',CO],['CIN',CIN_NO],['Period','FY 2024-25'],['Framework','IND AS | Schedule III | Companies Act 2013'],['Generated',new Date().toLocaleString('en-IN')]];
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),'Report_Info');
 }
 
@@ -1955,49 +1745,29 @@ function dlAllPDF(){
   setTimeout(()=>{
     try{
       const{jsPDF}=window.jspdf;const W=doc.internal.pageSize.getWidth();
-      // Cover page
       doc.setFillColor(24,95,165);doc.rect(0,0,W,60,'F');
       doc.setTextColor(255,255,255);
       doc.setFont('helvetica','bold');doc.setFontSize(22);doc.text(CO,W/2,28,{align:'center'});
       doc.setFont('helvetica','normal');doc.setFontSize(12);doc.text('Annual Financial Report — FY 2024-25',W/2,40,{align:'center'});
       doc.setFontSize(9);doc.text('1 April 2024 – 31 March 2025 | Standalone | IND AS | Schedule III',W/2,50,{align:'center'});
-      doc.setFillColor(230,241,251);doc.rect(0,60,W,8,'F');
-      doc.setTextColor(12,68,124);doc.setFontSize(8);
-      doc.text('IND AS · Schedule III · Companies Act 2013 · '+CIN_NO,W/2,66,{align:'center'});
-      doc.setFillColor(255,255,255);doc.setDrawColor(24,95,165);doc.rect(20,80,W-40,100);
-      doc.setTextColor(0);doc.setFont('helvetica','bold');doc.setFontSize(10);doc.text('Table of Contents',W/2,94,{align:'center'});
-      [['I','Balance Sheet','As at 31 March 2025'],['II','P&L Account','Year ended 31 March 2025'],['III','Cash Flow Statement','Indirect Method — IND AS 7'],['IV','Notes to Accounts (1–26)','IND AS Disclosures'],['V','MIS Report — Monthly P&L','FY 2024-25'],['VI','Treasury Report','Note 17 + Note 13'],['VII','Key Financial Ratios','FY 2024-25']].forEach((c,i)=>{
-        const y=105+i*11;
-        doc.setTextColor(24,95,165);doc.setFont('helvetica','bold');doc.setFontSize(9);doc.text(c[0]+'.',28,y);
-        doc.setTextColor(0);doc.setFont('helvetica','normal');doc.text(c[1],38,y);
-        doc.setTextColor(100);doc.setFontSize(8.5);doc.text(c[2],W-24,y,'right');
-        doc.setDrawColor(220);doc.line(28,y+2,W-24,y+2);
-      });
-      doc.setTextColor(100);doc.setFontSize(7.5);
-      doc.text(ADDR,W/2,195,{align:'center'});
-      doc.text('Generated '+new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'})+' · FinCommand Pro',W/2,202,{align:'center'});
-      // Sections
       [
         {title:'Balance Sheet',sub:'As at 31 March 2025 | Schedule III IND AS | ₹ Lakhs',id:'bs-table'},
-        {title:'Statement of Profit & Loss',sub:'Year ended 31 March 2025 | Schedule III IND AS | ₹ Lakhs',id:'pl-table'},
-        {title:'Statement of Cash Flows',sub:'Indirect Method | IND AS 7 | Year ended 31 March 2025 | ₹ Lakhs',id:'cf-table'},
+        {title:'Statement of Profit & Loss',sub:'Year ended 31 March 2025 | ₹ Lakhs',id:'pl-table'},
+        {title:'Statement of Cash Flows',sub:'Indirect Method | IND AS 7 | ₹ Lakhs',id:'cf-table'},
         {title:'MIS Report — Monthly P&L',sub:'FY 2024-25 | ₹ Lakhs',id:'mis-table'},
       ].forEach(sec=>{
         doc.addPage();const y0=addHeader(doc,sec.title,sec.sub);
         const d=tblFromEl(sec.id);
-        if(d) doc.autoTable({head:d.head,body:d.body,...stdTblStyle(),startY:y0,styles:{fontSize:sec.id==='mis-table'?7:8},
-          didParseCell:dt=>{if(['Total Equity','Total Assets','Total Income','Total Expenses','Profit After Tax','Total Comprehensive','Net Cash from','Gross Profit','EBITDA','PBT','PAT'].some(k=>String(dt.cell.raw||'').startsWith(k))){dt.cell.styles.fontStyle='bold';dt.cell.styles.fillColor=[230,241,251];dt.cell.styles.textColor=[12,68,124];}}
-        });
+        if(d)doc.autoTable({head:d.head,body:d.body,...stdTblStyle(),startY:y0});
       });
-      // Ratios
-      doc.addPage();const ry0=addHeader(doc,'Key Financial Ratios','FY 2024-25 vs FY 2023-24 | With Benchmarks');
-      doc.autoTable({head:[['Ratio','Formula','FY 2024-25','FY 2023-24','Benchmark','Status']],
-        body:[['Current Ratio','CA/CL','2.14×','1.88×','> 1.5×','✓'],['Quick Ratio','(CA-Inv)/CL','2.04×','1.77×','> 1.0×','✓'],['Gross Margin','GP/Rev','52.1%','50.8%','> 45%','✓'],['EBITDA Margin','EBITDA/Rev','12.4%','10.9%','> 10%','✓'],['Net Margin','PAT/Rev','9.1%','7.4%','> 8%','✓'],['ROE','PAT/Equity','19.7%','14.2%','> 15%','✓'],['ROCE','EBIT/CE','22.1%','17.8%','> 15%','✓'],['Debt/Equity','Debt/Eq','0.19×','0.35×','< 1.0×','✓'],['Interest Cover','EBIT/Int','17.3×','9.5×','> 3.0×','✓'],['DSO','AR/Rev×365','45d','47d','< 60d','✓'],['DPO','AP/CoR×365','38d','35d','30-45d','✓'],['EPS Basic (₹)','PAT/Shares','12.96','8.90','—','↑'],['Free Cash Flow','OCF-Capex','₹41.4 Cr','—','> 0','✓'],['OCF/PAT','OCF/PAT','1.86×','—','> 1.0×','✓']],
+      doc.addPage();const ry0=addHeader(doc,'Key Financial Ratios','FY 2024-25 vs FY 2023-24');
+      doc.autoTable({head:[['Ratio','FY 2024-25','FY 2023-24','Benchmark','Status']],
+        body:[['Current Ratio','2.14×','1.88×','> 1.5×','✓'],['Quick Ratio','2.04×','1.77×','> 1.0×','✓'],['Gross Margin','52.1%','50.8%','> 45%','✓'],['EBITDA Margin','12.4%','10.9%','> 10%','✓'],['Net Margin','9.1%','7.4%','> 8%','✓'],['ROE','19.7%','14.2%','> 15%','✓'],['ROCE','22.1%','17.8%','> 15%','✓'],['Debt/Equity','0.19×','0.35×','< 1.0×','✓'],['Interest Cover','17.3×','9.5×','> 3.0×','✓'],['EPS Basic (₹)','12.96','8.90','—','↑'],['Free Cash Flow','₹41.4 Cr','—','> 0','✓']],
         ...stdTblStyle(),startY:ry0});
       finalisePDF(doc);
       doc.save('AcmeTech_AnnualReportPack_FY2425.pdf');
-      toast('Annual Report Pack downloaded — 7 sections');
-    }catch(e){toast('PDF error: '+e.message);console.error(e);}
+      toast('Annual Report Pack downloaded');
+    }catch(e){toast('PDF error: '+e.message);}
   },80);
 }
 
@@ -2006,7 +1776,7 @@ function dlAllXLSX(){
   toast('Building consolidated Excel...',3000);
   setTimeout(()=>{
     const wb=XLSX.utils.book_new();
-    const meta=[['ACME TECHNOLOGIES LTD — Annual Financial Report FY 2024-25'],[''],['CIN',CIN_NO],['Framework','IND AS | Schedule III | Companies Act 2013'],['Period','FY 2024-25 | 1 April 2024 – 31 March 2025'],['Generated',new Date().toLocaleString('en-IN')],['Tool','FinCommand Pro'],[''],['Sheets included:'],['Balance_Sheet','P&L Account'],['Cash_Flow','Notes to Accounts'],['MIS_Monthly','Bank_Accounts'],['Fixed_Deposits','Mutual_Funds'],['Key_Ratios','']];
+    const meta=[['ACME TECHNOLOGIES LTD — Annual Financial Report FY 2024-25'],[''],['CIN',CIN_NO],['Framework','IND AS | Schedule III'],['Period','FY 2024-25'],['Generated',new Date().toLocaleString('en-IN')]];
     XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(meta),'Cover');
     [['bs-table','Balance_Sheet'],['pl-table','PL_Account'],['cf-table','Cash_Flow'],['mis-table','MIS_Monthly']].forEach(([id,name])=>{
       const el=document.getElementById(id);if(el)XLSX.utils.book_append_sheet(wb,XLSX.utils.table_to_sheet(el),name);
@@ -2015,827 +1785,165 @@ function dlAllXLSX(){
       const el=document.getElementById(id);
       if(el)XLSX.utils.book_append_sheet(wb,XLSX.utils.table_to_sheet(el),['Bank_Accounts','Fixed_Deposits','Mutual_Funds'][i]);
     });
-    const ratios=[['Ratio','FY 2024-25','FY 2023-24','Benchmark'],['Current Ratio','2.14×','1.88×','> 1.5×'],['Quick Ratio','2.04×','1.77×','> 1.0×'],['Gross Margin','52.1%','50.8%','> 45%'],['EBITDA Margin','12.4%','10.9%','> 10%'],['Net Profit Margin','9.1%','7.4%','> 8%'],['ROE','19.7%','14.2%','> 15%'],['ROCE','22.1%','17.8%','> 15%'],['Debt/Equity','0.19×','0.35×','< 1.0×'],['Interest Cover','17.3×','9.5×','> 3.0×'],['DSO','45d','47d','< 60d'],['DPO','38d','35d','30-45d'],['EPS Basic (₹)','12.96','8.90','—'],['Free Cash Flow (₹ Cr)','41.4','—','> 0'],['OCF/PAT Ratio','1.86×','—','> 1.0×']];
+    const ratios=[['Ratio','FY 2024-25','FY 2023-24','Benchmark'],['Current Ratio','2.14×','1.88×','> 1.5×'],['Quick Ratio','2.04×','1.77×','> 1.0×'],['Gross Margin','52.1%','50.8%','> 45%'],['EBITDA Margin','12.4%','10.9%','> 10%'],['Net Profit Margin','9.1%','7.4%','> 8%'],['ROE','19.7%','14.2%','> 15%'],['Debt/Equity','0.19×','0.35×','< 1.0×'],['Interest Cover','17.3×','9.5×','> 3.0×'],['EPS Basic (₹)','12.96','8.90','—'],['Free Cash Flow (₹ Cr)','41.4','—','> 0']];
     XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ratios),'Key_Ratios');
     addMetaSheet(wb,'ALL');
     XLSX.writeFile(wb,'AcmeTech_AllReports_FY2425.xlsx');
-    toast('All Reports Excel downloaded — 10 sheets');
+    toast('All Reports Excel downloaded');
   },60);
 }
 
-/* ═══════════════════════════════════════════════════════════
-   API SERVICE — connects FinCommand Pro frontend to backend
-═══════════════════════════════════════════════════════════ */
-let API_BASE = localStorage.getItem('fc_api_url') || 'http://localhost:4000/api/v1';
-let _token        = localStorage.getItem('fc_token')         || null;
-let _refreshToken = localStorage.getItem('fc_refresh_token') || null;
-let _currentUser  = JSON.parse(localStorage.getItem('fc_user') || 'null');
-let _currentFYId  = localStorage.getItem('fc_fy_id')         || null;
-let _fyList       = [];
-let DATA_MODE     = 'sample'; // 'sample' | 'api'
-let _fetchController = null;
+/* ── API SERVICE ── */
+let API_BASE=localStorage.getItem('fc_api_url')||'http://localhost:4000/api/v1';
+let _token=localStorage.getItem('fc_token')||null;
+let _refreshToken=localStorage.getItem('fc_refresh_token')||null;
+let _currentUser=JSON.parse(localStorage.getItem('fc_user')||'null');
+let _currentFYId=localStorage.getItem('fc_fy_id')||null;
+let _fyList=[];
+let DATA_MODE='sample';
 
-// ── HTTP helpers ──
-async function apiFetch(path, opts = {}) {
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(_token ? { Authorization: `Bearer ${_token}` } : {}),
-    ...(opts.headers || {}),
-  };
-  const res = await fetch(API_BASE + path, { ...opts, headers });
-  if (res.status === 401 && _refreshToken) {
-    const ok = await tryRefresh();
-    if (ok) {
-      headers.Authorization = `Bearer ${_token}`;
-      const res2 = await fetch(API_BASE + path, { ...opts, headers });
-      if (!res2.ok) throw new Error((await res2.json().catch(()=>({}))).error || `HTTP ${res2.status}`);
+async function apiFetch(path,opts={}){
+  const headers={'Content-Type':'application/json',...(_token?{Authorization:`Bearer ${_token}`}:{}),...(opts.headers||{})};
+  const res=await fetch(API_BASE+path,{...opts,headers});
+  if(res.status===401&&_refreshToken){
+    const ok=await tryRefresh();
+    if(ok){
+      headers.Authorization=`Bearer ${_token}`;
+      const res2=await fetch(API_BASE+path,{...opts,headers});
+      if(!res2.ok){const err=await res2.json().catch(()=>({}));throw new Error(err.error||`HTTP ${res2.status}`);}
       return res2.json();
     }
-    showLoginModal(); throw new Error('Session expired');
+    showLoginModal();throw new Error('Session expired');
   }
-  if (!res.ok) throw new Error((await res.json().catch(()=>({}))).error || `HTTP ${res.status}`);
+  if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(err.error||`HTTP ${res.status}`);}
   return res.json();
 }
+async function tryRefresh(){
+  try{
+    const r=await fetch(API_BASE+'/auth/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refresh_token:_refreshToken})});
+    if(!r.ok)return false;
+    const d=await r.json();_token=d.access_token;localStorage.setItem('fc_token',_token);return true;
+  }catch{return false;}
+}
 
-async function tryRefresh() {
-  try {
-    const r = await fetch(API_BASE + '/auth/refresh', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ refresh_token: _refreshToken }),
+/* ── AUTH ── */
+async function doLogin(){
+  const email=document.getElementById('login-email').value.trim();
+  const pass=document.getElementById('login-pass').value;
+  const errEl=document.getElementById('login-error');
+  const btn=document.getElementById('login-btn');
+  errEl.style.display='none';
+  if(!email||!pass){errEl.textContent='Email and password required';errEl.style.display='block';return;}
+  btn.textContent='Signing in…';btn.disabled=true;
+  try{
+    const res=await fetch(API_BASE+'/auth/login',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email,password:pass}),
     });
-    if (!r.ok) return false;
-    const d = await r.json();
-    _token = d.access_token;
-    localStorage.setItem('fc_token', _token);
-    return true;
-  } catch { return false; }
-}
-
-// ── Auth ──
-async function doLogin() {
-  const email = document.getElementById('login-email').value.trim();
-  const pass  = document.getElementById('login-pass').value;
-  const errEl = document.getElementById('login-error');
-  const btn   = document.getElementById('login-btn');
-  errEl.style.display = 'none';
-  if (!email || !pass) { errEl.textContent = 'Email and password required'; errEl.style.display = 'block'; return; }
-  btn.textContent = 'Signing in…'; btn.disabled = true;
-  try {
-    const data = await fetch(API_BASE + '/auth/login', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ email, password: pass }),
-    }).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error); return d; });
-
-    _token = data.access_token; _refreshToken = data.refresh_token; _currentUser = data.user;
-    localStorage.setItem('fc_token', _token);
-    localStorage.setItem('fc_refresh_token', _refreshToken);
-    localStorage.setItem('fc_user', JSON.stringify(data.user));
-    DATA_MODE = 'api';
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.error||'Login failed');
+    _token=data.access_token;
+    _refreshToken=data.refresh_token;
+    _currentUser=data.user;
+    localStorage.setItem('fc_token',_token);
+    localStorage.setItem('fc_refresh_token',_refreshToken);
+    localStorage.setItem('fc_user',JSON.stringify(data.user));
+    DATA_MODE='api';
     hideLoginModal();
-    afterLogin();
-  } catch (e) {
-    errEl.textContent = e.message; errEl.style.display = 'block';
-  } finally { btn.textContent = 'Sign In'; btn.disabled = false; }
+    await afterLogin();
+  }catch(e){
+    errEl.textContent=e.message;errEl.style.display='block';
+  }finally{btn.textContent='Sign In';btn.disabled=false;}
 }
 
-function useSampleData() {
-  DATA_MODE = 'sample'; hideLoginModal();
+function useSampleData(){
+  DATA_MODE='sample';hideLoginModal();
   setSrcPill('sample');
-  renderPB(); renderAll();
+  renderPB();renderAll();
 }
 
-async function doLogout() {
-  if (!confirm('Sign out?')) return;
-  try { await apiFetch('/auth/logout', { method:'POST', body: JSON.stringify({ refresh_token: _refreshToken }) }); } catch {}
-  _token = _refreshToken = _currentUser = _currentFYId = null;
-  localStorage.removeItem('fc_token'); localStorage.removeItem('fc_refresh_token');
-  localStorage.removeItem('fc_user'); localStorage.removeItem('fc_fy_id');
-  DATA_MODE = 'sample';
-  document.getElementById('fy-selector').style.display = 'none';
-  document.getElementById('user-chip').style.display = 'none';
+async function doLogout(){
+  if(!confirm('Sign out?'))return;
+  try{await apiFetch('/auth/logout',{method:'POST',body:JSON.stringify({refresh_token:_refreshToken})});}catch{}
+  _token=_refreshToken=_currentUser=_currentFYId=null;
+  localStorage.removeItem('fc_token');localStorage.removeItem('fc_refresh_token');
+  localStorage.removeItem('fc_user');localStorage.removeItem('fc_fy_id');
+  DATA_MODE='sample';
+  document.getElementById('fy-selector').style.display='none';
+  document.getElementById('user-chip').style.display='none';
+  document.getElementById('logout-btn').style.display='none';
   setSrcPill('sample');
-  renderPB(); renderAll();
+  renderPB();renderAll();
   showLoginModal();
 }
 
-function showLoginOrLogout() {
-  if (DATA_MODE === 'api') doLogout(); else showLoginModal();
+function showLoginOrLogout(){if(DATA_MODE==='api')doLogout();else showLoginModal();}
+function showLoginModal(){document.getElementById('login-modal').style.display='flex';document.getElementById('api-url-display').textContent=API_BASE;}
+function hideLoginModal(){document.getElementById('login-modal').style.display='none';}
+function changeAPIUrl(){const url=prompt('API Base URL:',API_BASE);if(url){API_BASE=url.replace(/\/$/,'');localStorage.setItem('fc_api_url',API_BASE);document.getElementById('api-url-display').textContent=API_BASE;}}
+
+function setSrcPill(mode){
+  const el=document.getElementById('src-pill');
+  if(mode==='api'){el.textContent='● Live — API';el.className='pill pg';el.title='Click to sign out';}
+  else{el.textContent='Sample Data';el.className='pill pa';el.title='Click to sign in';}
 }
 
-function showLoginModal() {
-  document.getElementById('login-modal').style.display = 'flex';
-  document.getElementById('api-url-display').textContent = API_BASE;
-}
-function hideLoginModal() { document.getElementById('login-modal').style.display = 'none'; }
-
-function changeAPIUrl() {
-  const url = prompt('API Base URL:', API_BASE);
-  if (url) { API_BASE = url.replace(/\/$/, ''); localStorage.setItem('fc_api_url', API_BASE); document.getElementById('api-url-display').textContent = API_BASE; }
+function setLoading(on,msg='Fetching data…'){
+  const el=document.getElementById('loading-overlay');
+  document.getElementById('loading-msg').textContent=msg;
+  el.style.display=on?'flex':'none';
 }
 
-function setSrcPill(mode) {
-  const el = document.getElementById('src-pill');
-  if (mode === 'api') { el.textContent = '● Live — API'; el.className = 'pill pg'; el.title = 'Click to sign out'; }
-  else if (mode === 'zoho') { el.textContent = '⚡ Live — Zoho'; el.className = 'pill pb'; }
-  else { el.textContent = 'Sample Data'; el.className = 'pill pa'; el.title = 'Click to sign in'; }
-}
-
-async function afterLogin() {
+async function afterLogin(){
   setSrcPill('api');
-  const chip = document.getElementById('user-chip');
-  chip.textContent = `${_currentUser.name} · ${_currentUser.role.toUpperCase()}`;
-  chip.style.display = 'inline-block';
-  document.getElementById('co-info').textContent =
-    `${_currentUser.company_name} · ${_currentUser.role.toUpperCase()} · Live`;
+  const chip=document.getElementById('user-chip');
+  chip.textContent=`${_currentUser.name} · ${_currentUser.role.toUpperCase()}`;
+  chip.style.display='inline-block';
+  document.getElementById('logout-btn').style.display='inline-flex';
+  document.getElementById('co-info').textContent=`${_currentUser.company_name} · Live`;
   toast(`Welcome, ${_currentUser.name}`);
   await loadFYList();
-  await renderAll();
-}
-
-// ── Financial Years ──
-async function loadFYList() {
-  try {
-    _fyList = await apiFetch('/fy');
-    const sel = document.getElementById('fy-selector');
-    sel.innerHTML = _fyList.map(fy =>
-      `<option value="${fy.id}" ${fy.id === _currentFYId ? 'selected':''}>
-        ${fy.label}${fy.is_locked?' 🔒':''}${fy.has_tb==='1'?' ✓':''}
-      </option>`
-    ).join('');
-    if (_fyList.length && !_currentFYId) {
-      _currentFYId = _fyList[0].id;
-      localStorage.setItem('fc_fy_id', _currentFYId);
-    }
-    sel.style.display = 'inline-block';
-  } catch (e) { toast('Could not load financial years: ' + e.message); }
-}
-
-function onFYChange() {
-  _currentFYId = document.getElementById('fy-selector').value;
-  localStorage.setItem('fc_fy_id', _currentFYId);
   renderAll();
 }
 
-// ── Period query params ──
-function getPeriodQS() {
-  const params = new URLSearchParams({
-    fy_id: _currentFYId,
-    period_type: S.gr === '3year' ? 'annual' : S.gr,
-    year_type: S.yt,
-  });
-  if (S.sub) params.set('period', S.sub);
-  return params.toString();
+async function loadFYList(){
+  try{
+    _fyList=await apiFetch('/fy');
+    const sel=document.getElementById('fy-selector');
+    sel.innerHTML=_fyList.map(fy=>`<option value="${fy.id}" ${fy.id===_currentFYId?'selected':''}>${fy.label}${fy.is_locked?' 🔒':''}</option>`).join('');
+    if(_fyList.length&&!_currentFYId){_currentFYId=_fyList[0].id;localStorage.setItem('fc_fy_id',_currentFYId);}
+    sel.style.display='inline-block';
+  }catch(e){toast('Could not load financial years: '+e.message);}
 }
 
-// ── Loading state ──
-function setLoading(on, msg = 'Fetching data…') {
-  const el = document.getElementById('loading-overlay');
-  document.getElementById('loading-msg').textContent = msg;
-  el.style.display = on ? 'flex' : 'none';
+function onFYChange(){
+  _currentFYId=document.getElementById('fy-selector').value;
+  localStorage.setItem('fc_fy_id',_currentFYId);
+  renderAll();
 }
 
-// ── Number format helpers ──
-const fL  = n => Math.round(n||0).toLocaleString('en-IN');
-const fCr = n => '₹' + (Math.abs(n||0)/100).toFixed(1) + ' Cr';
-const fPc = n => ((n||0)).toFixed(1) + '%';
-
-// ═══════════════════════════════════════════════
-//  API RENDERERS — one per report tab
-// ═══════════════════════════════════════════════
-
-// ── MIS from API ──
-function renderMISFromAPI(d) {
-  const t = d.totals;
-  // KPIs
-  document.getElementById('kpi-area').innerHTML = `
-    <div class="grid4" style="margin-bottom:14px">
-      <div class="kpi"><div class="lbl">Revenue</div><div class="val">${fCr(t.rev)}</div><div class="chg neu">${fL(t.rev)} L</div></div>
-      <div class="kpi"><div class="lbl">Gross Profit</div><div class="val up">${fCr(t.rev-t.cos)}</div><div class="chg up">GM ${fPc((t.rev-t.cos)/t.rev*100)}</div></div>
-      <div class="kpi"><div class="lbl">EBITDA</div><div class="val up">${fCr(t.rev+t.oth-t.cos-t.emp-t.oex)}</div><div class="chg up">${fPc(t.em)}</div></div>
-      <div class="kpi"><div class="lbl">PAT</div><div class="val up">${fCr(t.pat)}</div><div class="chg up">Net ${fPc(t.pm)}</div></div>
-    </div>`;
-  document.getElementById('mis-kpi-area').innerHTML = `
-    <div class="grid3" style="margin-bottom:14px">
-      <div class="kpi"><div class="lbl">Period Revenue</div><div class="val">${fCr(t.rev)}</div><div class="chg up">${fL(t.rev)} L</div></div>
-      <div class="kpi"><div class="lbl">Gross Margin</div><div class="val up">${fPc((t.rev-t.cos)/t.rev*100)}</div><div class="chg up">GP ${fL(t.rev-t.cos)}L</div></div>
-      <div class="kpi"><div class="lbl">EBITDA Margin</div><div class="val up">${fPc(t.em)}</div><div class="chg up">EBITDA ${fL(t.rev+t.oth-t.cos-t.emp-t.oex)}L</div></div>
-    </div>`;
-
-  // Table
-  const cols = d.columns; const colData = d.data;
-  const showTot = cols.length > 1;
-  let h = `<thead><tr><th style="min-width:150px">Particulars</th>${cols.map(c=>`<th class="num" style="min-width:65px">${c}</th>`).join('')}${showTot?`<th class="num" style="background:var(--bg2)">Total</th>`:''}</tr></thead><tbody>`;
-  const rowKeys = [
-    {k:'rev',l:'Revenue from Operations',bold:true,up:true},
-    {k:'cos',l:'Cost of Revenue',ind:true},
-    {k:'emp',l:'Employee Benefits',ind:true},
-    {k:'oex',l:'Other Opex',ind:true},
-    {k:'fin',l:'Finance Costs',ind:true},
-    {k:'dep',l:'Depreciation',ind:true},
-    {k:'totExp',l:'Total Expenses',bold:true},
-    {k:'pbt',l:'PBT',bold:true,up:true},
-    {k:'tax',l:'Tax (25%)',ind:true},
-    {k:'pat',l:'PAT',bold:true,up:true},
-  ];
-  rowKeys.forEach(row => {
-    h += `<tr class="${row.bold?'tot-row':''}"><td class="${row.ind?'ind1':''} ${row.bold?'bold':''}">${row.l}</td>`;
-    colData.forEach(cd => h += `<td class="num ${row.up?'up':''}">${fL(cd[row.k])}</td>`);
-    if (showTot) h += `<td class="num bold ${row.up?'up':''}" style="background:var(--bg2)">${fL(t[row.k])}</td>`;
-    h += `</tr>`;
-  });
-  h += `<tr><td class="ind1" style="color:var(--text2)">Gross Margin %</td>${colData.map(cd=>`<td class="num up" style="color:var(--text2)">${fPc((cd.rev-cd.cos)/cd.rev*100)}</td>`).join('')}${showTot?`<td class="num up bold" style="background:var(--bg2)">${fPc((t.rev-t.cos)/t.rev*100)}</td>`:''}</tr>`;
-  h += `<tr><td class="ind1" style="color:var(--text2)">EBITDA Margin %</td>${colData.map(cd=>`<td class="num up" style="color:var(--text2)">${fPc(cd.em)}</td>`).join('')}${showTot?`<td class="num up bold" style="background:var(--bg2)">${fPc(t.em)}</td>`:''}</tr>`;
-  h += '</tbody>';
-  document.getElementById('mis-table').innerHTML = h;
-  document.getElementById('mis-badge').textContent = getPeriodLabel();
-
-  // Charts
-  mkChart('c-main','bar',cols,[
-    {label:'Revenue',data:colData.map(c=>c.rev),backgroundColor:'#B5D4F4',borderRadius:3},
-    {label:'EBITDA', data:colData.map(c=>c.rev+c.oth-c.cos-c.emp-c.oex),backgroundColor:'#5DCAA5',borderRadius:3}
-  ],v=>fL(v));
-  mkLineChart2('c-margin',cols,
-    colData.map(c=>((c.rev-c.cos)/c.rev*100).toFixed(1)),
-    colData.map(c=>c.em.toFixed(1)),
-    colData.map(c=>c.pm.toFixed(1))
-  );
-}
-
-// ── BS from API ──
-function renderBSFromAPI(d) {
-  const el = document.getElementById('bs-as-at');
-  if (el) el.textContent = 'As at ' + new Date(d.period_end||'').toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'});
-  const bsInfoEl = document.getElementById('bs-info');
-  if (bsInfoEl) { const pe = document.getElementById('bs-period-end'); if(pe) pe.textContent = d.period_label; }
-
-  const fRow = (lbl, noteNo, val, isTot=false, indent=false) =>
-    `<tr class="${isTot?'tot-row':''}">
-      <td class="${indent?'ind1':''} ${isTot?'bold':''}">${lbl}</td>
-      <td><span class="nref">${noteNo||''}</span></td>
-      <td class="num ${isTot?'bold':''}">${fL(val)}</td>
-      <td class="num" style="color:var(--text2)">${fL(Math.round(val*.87))}</td>
-    </tr>`;
-
-  const eel = d.equity_liabilities; const ast = d.assets;
-  let h = `<thead><tr><th style="width:46%">Particulars</th><th style="width:8%">Note</th>
-    <th class="num" style="width:23%">${d.period_label} (₹L)</th>
-    <th class="num" style="width:23%;color:var(--text2)">Prev. Year (₹L)</th></tr></thead><tbody>`;
-
-  h += `<tr class="sec-row"><td colspan="4">I. &nbsp;Equity &amp; Liabilities</td></tr>`;
-  h += `<tr><td class="ind1 bold">(1) Shareholders' Funds</td><td></td><td></td><td></td></tr>`;
-  (eel.equity||[]).forEach(n => h += fRow(n.note_name, n.note_no, n.total, false, true));
-  h += fRow("Sub-total — Shareholders' Funds", '', eel.total_equity, true);
-  h += `<tr><td class="ind1 bold">(2) Non-Current Liabilities</td><td></td><td></td><td></td></tr>`;
-  (eel.non_current_liab||[]).forEach(n => h += fRow(n.note_name, n.note_no, n.total, false, true));
-  h += fRow('Sub-total — Non-Current Liabilities', '', eel.total_ncl, true);
-  h += `<tr><td class="ind1 bold">(3) Current Liabilities</td><td></td><td></td><td></td></tr>`;
-  (eel.current_liab||[]).forEach(n => h += fRow(n.note_name, n.note_no, n.total, false, true));
-  h += fRow('Sub-total — Current Liabilities', '', eel.total_cl, true);
-  h += `<tr class="grand-row"><td class="bold">Total Equity &amp; Liabilities</td><td></td><td class="num bold">${fL(eel.total)}</td><td class="num" style="color:var(--blue)">${fL(Math.round(eel.total*.87))}</td></tr>`;
-  h += `<tr class="blk-sep"><td colspan="4"></td></tr>`;
-  h += `<tr class="sec-row"><td colspan="4">II. &nbsp;Assets</td></tr>`;
-  h += `<tr><td class="ind1 bold">(1) Non-Current Assets</td><td></td><td></td><td></td></tr>`;
-  (ast.non_current||[]).forEach(n => h += fRow(n.note_name, n.note_no, n.total, false, true));
-  h += fRow('Sub-total — Non-Current Assets', '', ast.total_nca, true);
-  h += `<tr><td class="ind1 bold">(2) Current Assets</td><td></td><td></td><td></td></tr>`;
-  (ast.current||[]).forEach(n => h += fRow(n.note_name, n.note_no, n.total, false, true));
-  h += fRow('Sub-total — Current Assets', '', ast.total_ca, true);
-  h += `<tr class="grand-row"><td class="bold">Total Assets</td><td></td><td class="num bold">${fL(ast.total)}</td><td class="num" style="color:var(--blue)">${fL(Math.round(ast.total*.87))}</td></tr>`;
-  h += '</tbody>';
-
-  if (!d.balanced) h += `<tr><td colspan="4" class="warn-bar" style="color:var(--amber)">⚠ Balance Sheet difference: ₹${fL(Math.abs(d.difference))}L — check unmatched ledgers</td></tr>`;
-  document.getElementById('bs-table').innerHTML = h;
-}
-
-// ── P&L from API ──
-function renderPLFromAPI(d) {
-  const plRow = (lbl, note, val, isTot=false, indent=false, isNeg=false) => {
-    const cls = isTot ? 'tot-row' : '';
-    const vc  = isTot&&!isNeg ? 'up' : isNeg ? 'neg' : '';
-    return `<tr class="${cls}"><td class="${indent?'ind1':''} ${isTot?'bold':''}">${lbl}</td>
-      <td><span class="nref">${note||''}</span></td>
-      <td class="num ${isTot?'bold':''} ${vc}">${fL(val)}</td>
-      <td class="num" style="color:var(--text2)">${fL(Math.round(val*.87))}</td></tr>`;
-  };
-  let h = `<thead><tr><th style="width:46%">Particulars</th><th style="width:8%">Note</th>
-    <th class="num" style="width:23%">${d.period_label} (₹L)</th>
-    <th class="num" style="width:23%;color:var(--text2)">Prev. Period (₹L)</th></tr></thead><tbody>`;
-  h += `<tr class="sec-row"><td colspan="4">I. &nbsp;Income</td></tr>`;
-  h += plRow('Revenue from Operations',20,d.revenue,false,true);
-  h += plRow('Other Income',21,d.other_income,false,true);
-  h += `<tr class="grand-row"><td class="bold">Total Income (I)</td><td></td><td class="num bold up">${fL(d.total_income)}</td><td class="num" style="color:var(--blue)">${fL(Math.round(d.total_income*.87))}</td></tr>`;
-  h += `<tr class="sec-row"><td colspan="4">II. &nbsp;Expenses</td></tr>`;
-  h += plRow('Cost of Services / Materials',22,d.cos,false,true,true);
-  h += plRow('Employee Benefits Expense',23,d.employee_benefits,false,true,true);
-  h += plRow('Finance Costs',24,d.finance_costs,false,true,true);
-  h += plRow('Depreciation & Amortisation',25,d.depreciation,false,true,true);
-  h += plRow('Other Expenses',26,d.other_expenses,false,true,true);
-  h += `<tr class="grand-row"><td class="bold">Total Expenses (II)</td><td></td><td class="num bold neg">${fL(d.total_expenses)}</td><td class="num" style="color:var(--blue)">${fL(Math.round(d.total_expenses*.87))}</td></tr>`;
-  h += `<tr class="sec-row"><td colspan="4">III. &nbsp;Profit</td></tr>`;
-  h += plRow('Profit Before Tax (I − II)','',d.pbt,true);
-  h += plRow('Current Tax (25%)','',d.current_tax,false,true,true);
-  h += plRow('Deferred Tax (Charge)/Credit','',d.deferred_tax,false,true,true);
-  h += `<tr class="grand-row"><td class="bold">Profit After Tax (PAT)</td><td></td><td class="num bold up">${fL(d.pat)}</td><td class="num" style="color:var(--blue)">${fL(Math.round(d.pat*.87))}</td></tr>`;
-  h += `<tr class="sec-row"><td colspan="4">IV. &nbsp;Other Comprehensive Income (IND AS 1)</td></tr>`;
-  h += plRow('Remeasurement — DBO (IND AS 19)','',d.oci_gross,false,true,true);
-  h += plRow('Income Tax on OCI','',d.oci_tax,false,true);
-  h += `<tr class="grand-row"><td class="bold">Total Comprehensive Income</td><td></td><td class="num bold up">${fL(d.total_comprehensive_income)}</td><td class="num" style="color:var(--blue)">${fL(Math.round(d.total_comprehensive_income*.87))}</td></tr>`;
-  h += `<tr class="sec-row"><td colspan="4">V. &nbsp;EPS (IND AS 33)</td></tr>`;
-  h += `<tr><td class="ind1">Basic EPS (₹)</td><td></td><td class="num bold">${d.eps_basic}</td><td class="num" style="color:var(--text2)">${(d.eps_basic*.87).toFixed(2)}</td></tr>`;
-  h += `<tr><td class="ind1">Diluted EPS (₹)</td><td></td><td class="num bold">${d.eps_diluted}</td><td class="num" style="color:var(--text2)">${(d.eps_diluted*.87).toFixed(2)}</td></tr>`;
-  h += '</tbody>';
-  document.getElementById('pl-table').innerHTML = h;
-}
-
-// ── Treasury from API ──
-function renderTSYFromAPI(d) {
-  const kEl = document.getElementById('tsy-kpis');
-  if (kEl) kEl.innerHTML = `
-    <div class="grid4" style="margin-bottom:14px">
-      <div class="kpi"><div class="lbl">Cash &amp; Bank</div><div class="val">${fCr(d.total_cash_and_bank)}</div><div class="chg up">Note 19</div></div>
-      <div class="kpi"><div class="lbl">Fixed Deposits</div><div class="val">${fCr(d.total_fd)}</div><div class="chg up">Note 20 · ${d.fds?.length||0} FDs</div></div>
-      <div class="kpi"><div class="lbl">Mutual Funds</div><div class="val">${fCr(d.total_mf)}</div><div class="chg up">Note 13 · FVTPL</div></div>
-      <div class="kpi"><div class="lbl">Total Liquidity</div><div class="val">${fCr(d.total)}</div><div class="chg up">As at ${d.period_end||''}</div></div>
-    </div>`;
-
-  const mkTbl = (title, note, rows) => {
-    if (!rows?.length) return '';
-    return `<div class="card"><div class="card-hdr"><span class="ct">${title} <span class="cbadge cb-cyan">Note ${note}</span></span></div>
-      <table><thead><tr><th>Ledger</th><th>Code</th><th class="num">Closing Balance (₹L)</th><th class="num">₹ Cr</th></tr></thead>
-      <tbody>${rows.map(r=>`<tr><td>${r.name}</td><td style="font-family:var(--mono);font-size:9px;color:var(--blue)">${r.code||'—'}</td><td class="num bold">${fL(r.closing)}</td><td class="num">${(r.closing/100).toFixed(2)}</td></tr>`).join('')}
-      <tr class="tot-row"><td class="bold" colspan="2">Total</td><td class="num bold">${fL(rows.reduce((s,r)=>s+r.closing,0))}</td><td class="num bold">${(rows.reduce((s,r)=>s+r.closing,0)/100).toFixed(2)}</td></tr>
-      </tbody></table></div>`;
-  };
-
-  const body = document.getElementById('tsy-body');
-  if (body) body.innerHTML =
-    mkTbl('Cash & Cash Equivalents', 19, [...(d.cash||[]),(d.bank_ca||[]),(d.bank_sb||[])].flat()) +
-    mkTbl('Fixed Deposits — Bank Balances other than CE', 20, d.fds||[]) +
-    mkTbl('Mutual Funds — Current Investments (FVTPL)', 13, d.mfs||[]);
-}
-
-// ── Ratios from API ──
-function renderRatiosFromAPI(d) {
-  const mkCard = (label, val, unit, bench, benchLabel, pct, color) => {
-    const gc = {green:'g-green',amber:'g-amber',red:'g-red',blue:'g-blue'}[color]||'g-blue';
-    const vc = {green:'up',amber:'',red:'dn',blue:''}[color]||'';
-    const pc = {green:'pg',amber:'pa',red:'pr',blue:'pb'}[color]||'pb';
-    return `<div class="ratio-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <span style="font-size:10px;color:var(--text2)">${label}</span>
-        <span class="pill ${pc}" style="font-size:8px">${benchLabel}</span>
-      </div>
-      <div style="font-size:18px;font-weight:600;margin-bottom:4px" class="${vc}">${val}${unit}</div>
-      <div class="gauge-wrap"><div class="gauge-fill ${gc}" style="width:${Math.min(pct,100)}%"></div></div>
-      <div style="font-size:9px;color:var(--text3);margin-top:3px">Bench: ${bench}</div>
-    </div>`;
-  };
-  const l = d.liquidity||{}, p = d.profitability||{}, lev = d.leverage||{}, ef = d.efficiency||{};
-  const upd = (id, html) => { const el=document.getElementById(id); if(el) el.innerHTML=html; };
-  upd('r-liquidity', [
-    mkCard('Current Ratio',l.current_ratio||'—','×','> 1.5×','Healthy',Math.min((l.current_ratio||0)/2.5*100,100),'green'),
-    mkCard('Quick Ratio',l.quick_ratio||'—','×','> 1.0×','Healthy',Math.min((l.quick_ratio||0)/2*100,100),'green'),
-    mkCard('Net Working Capital',fCr((d.assets?.total_ca||0)-(d.equity_liabilities?.total_cl||0)),'','Positive','Healthy',80,'green'),
-    mkCard('Cash Ratio',l.cash_ratio||'—','×','> 0.5×','Good',70,'green'),
-  ].join(''));
-  upd('r-profit', [
-    mkCard('Gross Margin',p.gross_margin||'—','%','> 45%','Above bench',Math.min((p.gross_margin||0)/60*100,100),'green'),
-    mkCard('EBITDA Margin',p.ebitda_margin||'—','%','> 10%','Good',Math.min((p.ebitda_margin||0)/20*100,100),'green'),
-    mkCard('Net Margin',p.net_margin||'—','%','> 8%','Good',Math.min((p.net_margin||0)/15*100,100),'green'),
-    mkCard('ROE',p.roe||'—','%','> 15%','Good',Math.min((p.roe||0)/30*100,100),'green'),
-  ].join(''));
-  upd('r-leverage', [
-    mkCard('Debt/Equity',lev.debt_equity||'—','×','< 1.0×','Low',Math.max(0,100-(lev.debt_equity||0)/2*100),'green'),
-    mkCard('Interest Cover',lev.interest_cover||'—','×','> 3.0×','Excellent',Math.min((lev.interest_cover||0)/20*100,100),'green'),
-    mkCard('DSCR',lev.dscr||'—','×','> 1.5×','Good',Math.min((lev.dscr||0)/5*100,100),'green'),
-    mkCard('ROCE',p.roce||'—','%','> 15%','Good',Math.min((p.roce||0)/30*100,100),'green'),
-  ].join(''));
-  upd('r-efficiency', [
-    mkCard('Asset Turnover',ef.asset_turnover||'—','×','> 1.0×','Good',Math.min((ef.asset_turnover||0)/2*100,100),'blue'),
-    mkCard('DSO',ef.dso||'—','d','< 60d','Good',Math.max(0,100-(ef.dso||0)/100*100),'green'),
-    mkCard('DPO',ef.dpo||'—','d','30-45d','Good',70,'green'),
-    mkCard('CCC',ef.ccc||'—','d','< 60d','Good',Math.max(0,100-(ef.ccc||0)/100*100),'blue'),
-  ].join(''));
-}
-
-// ── Chart helpers ──
-function mkChart(id, type, labels, datasets, yFmt, opts={}) {
-  if (CH[id]) { CH[id].destroy(); CH[id]=null; }
-  const el = document.getElementById(id); if(!el) return;
-  CH[id] = new Chart(el, { type, data:{labels,datasets}, options:{
-    responsive:true, maintainAspectRatio:false,
-    plugins:{legend:{display:false}},
-    scales:{
-      y:{ticks:{font:{size:10}, callback: yFmt||null}, grid:{color:'rgba(128,128,128,0.07)'}},
-      x:{ticks:{font:{size:10},maxRotation:40}, grid:{display:false}}
-    }, ...opts
-  }});
-}
-function mkLineChart2(id, labels, gm, em, pm) {
-  if (CH[id]) { CH[id].destroy(); CH[id]=null; }
-  const el = document.getElementById(id); if(!el) return;
-  CH[id] = new Chart(el, { type:'line', data:{labels, datasets:[
-    {label:'Gross%', data:gm, borderColor:'#378ADD', tension:.3, pointRadius:3, fill:false, borderWidth:2},
-    {label:'EBITDA%',data:em, borderColor:'#1D9E75', tension:.3, pointRadius:3, fill:false, borderWidth:2},
-    {label:'PAT%',  data:pm, borderColor:'#EF9F27', tension:.3, pointRadius:3, fill:false, borderWidth:2},
-  ]}, options:{responsive:true, maintainAspectRatio:false,
-    plugins:{legend:{display:false}},
-    scales:{
-      y:{ticks:{font:{size:10}, callback:v=>v+'%'}, grid:{color:'rgba(128,128,128,0.07)'}},
-      x:{ticks:{font:{size:10},maxRotation:40}, grid:{display:false}}
-    }}
-  });
-}
-
-// ═══════════════════════════════════════════════
-//  MAIN renderAll — API first, sample fallback
-// ═══════════════════════════════════════════════
-async function renderAll() {
-  if (DATA_MODE !== 'api' || !_currentFYId) {
-    renderFromSample();
-    return;
-  }
-  const activeTab = document.querySelector('.ntab.active')?.id?.replace('nt-','') || 'overview';
-  setLoading(true, 'Loading ' + activeTab + '…');
-  try {
-    const qs = getPeriodQS();
-    switch(activeTab) {
-      case 'overview': {
-        if (S.gr === '3year' && _fyList.length >= 2) {
-          const fyIds = _fyList.slice(0, 3).map(f => f.id).join(',');
-          const d = await apiFetch(`/reports/threeyear?fy_ids=${fyIds}&year_type=${S.yt}`);
-          render3YearFromAPI(d);
-        } else {
-          const d = await apiFetch('/reports/mis?' + qs);
-          renderMISFromAPI(d);
-        }
-        break;
-      }
-      case 'mis': {
-        const d = await apiFetch('/reports/mis?' + qs);
-        renderMISFromAPI(d);
-        break;
-      }
-      case 'bs': {
-        const d = await apiFetch('/reports/bs?' + qs);
-        renderBSFromAPI(d);
-        break;
-      }
-      case 'pl': {
-        const d = await apiFetch('/reports/pl?' + qs);
-        renderPLFromAPI(d);
-        break;
-      }
-      case 'notes': {
-        const d = await apiFetch('/reports/notes?' + qs);
-        renderNotesFromAPI(d);
-        break;
-      }
-      case 'funds': {
-        const d = await apiFetch('/reports/treasury?' + qs);
-        renderTSYFromAPI(d);
-        break;
-      }
-      case 'ratios': {
-        const d = await apiFetch('/reports/ratios?' + qs);
-        renderRatiosFromAPI(d);
-        break;
-      }
-      case 'cashflow': {
-        const d = await apiFetch('/reports/cashflow?' + new URLSearchParams({ fy_id:_currentFYId, period_type:'annual', year_type:S.yt }));
-        renderCashFlowFromAPI(d);
-        break;
-      }
-      default:
-        renderFromSample();
-    }
-  } catch (err) {
-    if (err.message !== 'Session expired') {
-      toast('⚠ API error: ' + err.message + ' — showing cached/sample data');
-      renderFromSample();
-    }
-  } finally {
-    setLoading(false);
-  }
-}
-
-// ── Notes from API ──
-function renderNotesFromAPI(d) {
-  const notes = d.notes || [];
-  if (!notes.length) return;
-
-  const secLabels = { anc:'Non-Current Asset', ac:'Current Asset', eq:'Equity',
-    lnc:'Non-Current Liability', lc:'Current Liability', inc:'Income', exp:'Expense' };
-  const secColors = { anc:'cb-blue', ac:'cb-green', eq:'cb-cyan', lnc:'cb-amber',
-    lc:'cb-red', inc:'cb-green', exp:'cb-red' };
-
-  const grouped = {};
-  notes.forEach(note => {
-    const sec = note.section || 'other';
-    if (!grouped[sec]) grouped[sec] = [];
-    grouped[sec].push(note);
-  });
-
-  const secOrder = ['eq','lnc','lc','anc','ac','inc','exp'];
-  let html = '';
-
-  secOrder.forEach(sec => {
-    const secNotes = grouped[sec] || [];
-    if (!secNotes.length) return;
-    html += `<div style="font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin:12px 0 6px;padding:0 2px">${secLabels[sec] || sec} Notes</div>`;
-    secNotes.sort((a,b) => a.note_no - b.note_no).forEach(note => {
-      html += `
-        <div class="note-block">
-          <div class="note-hdr">
-            <div style="display:flex;align-items:center;gap:8px">
-              <span class="nref" style="font-size:10px">Note ${note.note_no}</span>
-              <span style="font-size:11px;font-weight:600">${note.note_name}</span>
-              <span class="cbadge ${secColors[sec]||'cb-blue'}">${secLabels[sec]||sec}</span>
-            </div>
-            <span style="font-size:11px;font-weight:600;color:${['inc','anc','ac'].includes(sec)?'var(--green)':'var(--text)'}">${fL(Math.abs(note.total))} L</span>
-          </div>
-          <table style="margin:0">
-            <thead><tr>
-              <th>Ledger Name</th>
-              <th style="font-family:var(--mono);font-size:9px">Code</th>
-              <th class="num">Opening Dr</th>
-              <th class="num">Opening Cr</th>
-              <th class="num">Net (₹L)</th>
-            </tr></thead>
-            <tbody>
-              ${(note.ledgers||[]).map(l => `
-                <tr>
-                  <td>${l.ledger_name}</td>
-                  <td style="font-family:var(--mono);font-size:9px;color:var(--blue)">${l.ledger_code||'—'}</td>
-                  <td class="num">${l.op_dr ? fL(l.op_dr) : '—'}</td>
-                  <td class="num">${l.op_cr ? fL(l.op_cr) : '—'}</td>
-                  <td class="num bold">${fL(Math.abs(l.net))}</td>
-                </tr>`).join('')}
-              <tr class="tot-row">
-                <td class="bold" colspan="4">Note ${note.note_no} Total</td>
-                <td class="num bold">${fL(Math.abs(note.total))} L</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>`;
-    });
-  });
-
-  const apiBody = document.getElementById('notes-api-body');
-  const staticBody = document.getElementById('notes-static-body');
-  const badge = document.getElementById('notes-src-badge');
-  if (apiBody) { apiBody.innerHTML = html; apiBody.style.display = 'block'; }
-  if (staticBody) staticBody.style.display = 'none';
-  if (badge) { badge.textContent = 'Live — API'; badge.className = 'cbadge cb-green'; }
-  const titleEl = document.getElementById('notes-dl-title');
-  if (titleEl) titleEl.textContent = `Notes to Accounts · ${d.financial_year?.label || ''}`;
-}
-
-// ── Cash Flow from API ──
-function renderCashFlowFromAPI(d) {
-  const op = d.operating || {}, inv = d.investing || {}, fin = d.financing || {};
-  const opsTotal = op.total || 0, invTotal = inv.total || 0, finTotal = fin.total || 0;
-
-  // Update KPIs
-  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-  set('cf-kpi-ops', fCr(opsTotal));
-  set('cf-kpi-ops-sub', `OCF/PAT = ${d.ocf_to_pat || '—'}×`);
-  set('cf-kpi-inv', opsTotal >= 0 ? fCr(invTotal) : `(${fCr(Math.abs(invTotal))})`);
-  set('cf-kpi-inv-sub', 'Capex + FD investments');
-  set('cf-kpi-fin', fCr(finTotal));
-  set('cf-kpi-fin-sub', 'Debt repayment + dividend');
-
-  // Rebuild full Cash Flow table
-  const fmt = v => v < 0 ? `<span class="neg">(${fL(Math.abs(v))})</span>` : fL(v);
-  const row = (label, val, indent=false, isTot=false) =>
-    `<tr class="${isTot?'tot-row':''}">
-      <td class="${indent?'ind2':'ind1'} ${isTot?'bold':''}">${label}</td>
-      <td class="num ${val<0?'cf-neg':'cf-pos'} ${isTot?'bold':''}">${fmt(val)}</td>
-      <td class="num" style="color:var(--text3)">—</td>
-    </tr>`;
-
-  let h = `<thead><tr>
-    <th style="width:55%">Particulars</th>
-    <th class="num">${d.period_label || 'Current Period'} (₹L)</th>
-    <th class="num" style="color:var(--text3)">Prev. Period (₹L)</th>
-  </tr></thead><tbody>`;
-
-  h += `<tr class="sec-row"><td colspan="3">A. Cash Flow from Operating Activities</td></tr>`;
-  h += row('Profit Before Tax', op.pbt || 0);
-  h += `<tr><td class="ind1 bold">Adjustments:</td><td></td><td></td></tr>`;
-  const adj = op.adjustments || {};
-  if (adj.depreciation)    h += row('Depreciation & Amortisation', adj.depreciation, true);
-  if (adj.finance_costs)   h += row('Finance Costs', adj.finance_costs, true);
-  if (adj.esop_charge)     h += row('ESOP Charge (non-cash)', adj.esop_charge, true);
-  if (adj.ecl_provision)   h += row('ECL Provision movement', adj.ecl_provision, true);
-  if (adj.interest_income) h += row('Less: Interest income', adj.interest_income, true);
-  h += row('Operating Profit before WC changes', op.operating_profit || 0, false, true);
-
-  const wc = op.wc_changes || {};
-  h += `<tr><td class="ind1 bold">Working Capital Changes:</td><td></td><td></td></tr>`;
-  if (wc.trade_receivables !== undefined) h += row('Trade Receivables', wc.trade_receivables, true);
-  if (wc.trade_payables    !== undefined) h += row('Trade Payables', wc.trade_payables, true);
-  if (wc.other_liabilities !== undefined) h += row('Other Liabilities', wc.other_liabilities, true);
-
-  h += row('Cash generated from operations', (op.operating_profit||0) + (wc.total||0), false, true);
-  h += row('Income Tax paid (net)', op.tax_paid || 0, true);
-  h += `<tr class="grand-row"><td class="bold">Net Cash from Operating Activities (A)</td>
-    <td class="num bold ${opsTotal>=0?'cf-pos':'cf-neg'}">${fmt(opsTotal)}</td>
-    <td class="num" style="color:var(--blue)">—</td></tr>`;
-
-  h += `<tr class="blk-sep"><td colspan="3"></td></tr>`;
-  h += `<tr class="sec-row"><td colspan="3">B. Cash Flow from Investing Activities</td></tr>`;
-  if (inv.capex !== undefined)           h += row('Purchase of PPE / Intangibles', inv.capex, true);
-  if (inv.disposal_ppe)                  h += row('Proceeds from disposal of PPE', inv.disposal_ppe, true);
-  if (inv.fd_net !== undefined)          h += row('Fixed Deposits (net)', inv.fd_net, true);
-  if (inv.mf_net !== undefined)          h += row('Mutual Funds (net)', inv.mf_net, true);
-  if (inv.interest_recd)                 h += row('Interest received', inv.interest_recd, true);
-  if (inv.dividend_recd)                 h += row('Dividend received', inv.dividend_recd, true);
-  h += `<tr class="grand-row"><td class="bold">Net Cash from Investing Activities (B)</td>
-    <td class="num bold ${invTotal>=0?'cf-pos':'cf-neg'}">${fmt(invTotal)}</td>
-    <td class="num" style="color:var(--blue)">—</td></tr>`;
-
-  h += `<tr class="blk-sep"><td colspan="3"></td></tr>`;
-  h += `<tr class="sec-row"><td colspan="3">C. Cash Flow from Financing Activities</td></tr>`;
-  if (fin.lt_loan_repayment !== undefined) h += row('Repayment of Long-Term Borrowings', fin.lt_loan_repayment, true);
-  if (fin.lease_repayment   !== undefined) h += row('Repayment of Lease Liabilities (IND AS 116)', fin.lease_repayment, true);
-  if (fin.st_borrowings_net !== undefined) h += row('Net movement in Short-Term Borrowings', fin.st_borrowings_net, true);
-  if (fin.finance_costs_paid)              h += row('Finance costs paid', fin.finance_costs_paid, true);
-  if (fin.dividend_paid     !== undefined) h += row('Dividend paid', fin.dividend_paid, true);
-  if (fin.esop_proceeds)                   h += row('ESOP proceeds on exercise', fin.esop_proceeds, true);
-  h += `<tr class="grand-row"><td class="bold">Net Cash from Financing Activities (C)</td>
-    <td class="num bold ${finTotal>=0?'cf-pos':'cf-neg'}">${fmt(finTotal)}</td>
-    <td class="num" style="color:var(--blue)">—</td></tr>`;
-
-  h += `<tr class="blk-sep"><td colspan="3"></td></tr>`;
-  const netChange = d.net_change || 0;
-  h += row('Net Increase / (Decrease) in Cash (A+B+C)', netChange, false, true);
-  h += row('Opening Cash & Cash Equivalents', d.opening_cash || 0);
-  h += `<tr class="grand-row"><td class="bold">Closing Cash & Cash Equivalents</td>
-    <td class="num bold">${fL(d.closing_cash||0)}</td>
-    <td class="num" style="color:var(--blue)">—</td></tr>`;
-  h += `</tbody>`;
-
-  const cfTable = document.getElementById('cf-table');
-  if (cfTable) cfTable.innerHTML = h;
-
-  const notice = document.querySelector('#sec-cashflow .notice');
-  if (notice && d.free_cash_flow !== undefined) {
-    notice.textContent = `Free Cash Flow = Operating CF (${fL(opsTotal)}L) − Capex (${fL(Math.abs(inv.capex||0))}L) = ${fCr(d.free_cash_flow)} · Cash conversion ratio = OCF/PAT = ${d.ocf_to_pat||'—'}× (healthy > 1.0×)`;
-  }
-}
-
-// ── 3-Year Comparison from API ──
-function render3YearFromAPI(d) {
-  if (!d.years?.length) return;
-  const years = d.years;
-  const kpiEl = document.getElementById('kpi-area');
-  if (!kpiEl) return;
-
-  // KPI row per year
-  let kHtml = `<div style="display:grid;grid-template-columns:repeat(${years.length},1fr);gap:10px;margin-bottom:14px">`;
-  years.forEach((y, i) => {
-    const m = y.mis || {}; const prev = i > 0 ? years[i-1].mis : null;
-    const g = prev && prev.rev > 0 ? ((m.rev - prev.rev) / prev.rev * 100).toFixed(1) : null;
-    kHtml += `<div class="kpi">
-      <div class="lbl">${y.financial_year?.label || y.financial_year?.short_label || `Year ${i+1}`}</div>
-      <div class="val">${fCr(m.rev||0)}</div>
-      <div class="chg ${g ? (g>0?'up':'dn') : 'neu'}">${g ? (g>0?'+':'')+g+'% YoY' : 'Base year'} · PAT ${fCr(m.pat||0)}</div>
-    </div>`;
-  });
-  kHtml += '</div>';
-
-  // Comparison table
-  const metrics = [
-    ['Revenue', y => fCr(y.mis?.rev||0)],
-    ['Gross Profit', y => fCr((y.mis?.rev||0)-(y.mis?.cos||0))],
-    ['Gross Margin', y => fPc(((y.mis?.rev||0)-(y.mis?.cos||0))/(y.mis?.rev||1)*100)],
-    ['EBITDA', y => fCr((y.mis?.rev||0)+(y.mis?.oth||0)-(y.mis?.cos||0)-(y.mis?.emp||0)-(y.mis?.oex||0))],
-    ['EBITDA Margin', y => fPc(y.mis?.em||0)],
-    ['PAT', y => fCr(y.mis?.pat||0)],
-    ['PAT Margin', y => fPc(y.mis?.pm||0)],
-    ['Total Liquidity', y => fCr(y.treasury?.total||0)],
-    ['Return on Equity', y => fPc(y.ratios?.profitability?.roe||0)],
-  ];
-  let tHtml = `<div class="card"><div class="card-hdr"><span class="ct">3-Year Comparative Analysis</span>`;
-  if (d.cagr) tHtml += `<span class="cbadge cb-blue">Revenue 2-yr CAGR: ${d.cagr.revenue}%</span>`;
-  tHtml += `</div><div style="overflow-x:auto"><table><thead><tr><th>Metric</th>`;
-  years.forEach(y => tHtml += `<th class="num">${y.financial_year?.label||''}</th>`);
-  if (d.cagr) tHtml += `<th class="num">2-Yr CAGR</th>`;
-  tHtml += '</tr></thead><tbody>';
-  metrics.forEach(([lbl, fn]) => {
-    tHtml += `<tr><td>${lbl}</td>`;
-    years.forEach(y => tHtml += `<td class="num">${fn(y)}</td>`);
-    if (d.cagr) tHtml += `<td class="num" style="color:var(--text3)">—</td>`;
-    tHtml += '</tr>';
-  });
-  tHtml += '</tbody></table></div></div>';
-
-  kpiEl.innerHTML = kHtml + tHtml;
-}
-
-// ── Update renderAll to include notes, cashflow, 3-year ──
-  const pd = getPD();
-  renderKPIs(pd); renderCharts(pd); renderMISTable(pd); renderCompTable(pd);
-}
-
-// ── Upload wired to API ──
-async function applyTBData() {
-  if (DATA_MODE !== 'api') {
-    // sample mode fallback
-    document.getElementById('src-pill').textContent = 'Live — Excel';
-    document.getElementById('src-pill').style.background = '#E1F5EE';
-    document.getElementById('src-pill').style.color = '#0F6E56';
-    toast('Trial Balance loaded (sample mode)');
-    go('overview'); return;
-  }
-  if (!window._parsedTBFile || !_currentFYId) {
-    toast('No file or financial year selected'); return;
-  }
-  const btn = document.getElementById('load-btn');
-  btn.textContent = 'Uploading…'; btn.disabled = true;
-  setLoading(true, 'Uploading Trial Balance…');
-  try {
-    const formData = new FormData();
-    formData.append('trial_balance', window._parsedTBFile);
-    formData.append('financial_year_id', _currentFYId);
-    const res = await fetch(API_BASE + '/tb/upload', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${_token}` },
-      body: formData,
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-    setSrcPill('api');
-    toast(`✓ ${data.ledger_count} ledgers uploaded · ${data.coverage_pct}% mapped`);
-    document.getElementById('load-btn').textContent = '✓ Loaded';
-    await renderAll();
-    go('mis');
-  } catch (e) {
-    toast('Upload failed: ' + e.message);
-    btn.textContent = 'Load All Statements →'; btn.disabled = false;
-  } finally { setLoading(false); }
-}
-
-// Store file reference for API upload
-function processTB(f) {
-  window._parsedTBFile = f; // keep reference for API upload
-  if(!f.name.match(/\.(xlsx|xls)$/i)){showErr('Please upload a valid Excel file (.xlsx)');return;}
-  const t=document.getElementById('uzt');if(t)t.textContent=f.name;
-  const s=document.getElementById('uzs');if(s)s.textContent=(f.size/1024).toFixed(1)+' KB — ready to upload';
-  const z=document.getElementById('uzn');if(z)z.classList.add('done');
-  const ps=document.getElementById('parse-sec');if(ps)ps.style.display='block';
-  document.getElementById('plog').innerHTML='';
-  setProg(100);
-  logParse('✓ File ready: ' + f.name);
-  logParse(DATA_MODE==='api'
-    ? '✓ Will upload to backend API at: ' + API_BASE + '/tb/upload'
-    : '⚠ Not logged in — file will be processed client-side only'
-  );
-  if (DATA_MODE!=='api') {
-    // fall back to client-side parse
-    const reader=new FileReader();
-    reader.onload=e=>parseTBBuffer(e.target.result,f.name);
-    reader.readAsArrayBuffer(f);
-  } else {
-    const lb=document.getElementById('load-btn');if(lb)lb.style.display='inline-flex';
-    document.getElementById('load-st').textContent='Ready to upload';
-  }
-}
-
-/* ─────────────────────────────────────────────
-   INIT
-───────────────────────────────────────────── */
-// Try to restore session from localStorage
-async function boot() {
+/* ── INIT ── */
+async function boot(){
   renderPB();
-  if (_token && _currentUser) {
-    // Verify token still valid
-    try {
+  if(_token&&_currentUser){
+    try{
       await apiFetch('/auth/me');
-      DATA_MODE = 'api';
-      setSrcPill('api');
-      const chip = document.getElementById('user-chip');
-      chip.textContent = `${_currentUser.name} · ${_currentUser.role.toUpperCase()}`;
-      chip.style.display = 'inline-block';
-      document.getElementById('co-info').textContent =
-        `${_currentUser.company_name} · Live`;
+      DATA_MODE='api';setSrcPill('api');
+      const chip=document.getElementById('user-chip');
+      chip.textContent=`${_currentUser.name} · ${_currentUser.role.toUpperCase()}`;
+      chip.style.display='inline-block';
+      document.getElementById('logout-btn').style.display='inline-flex';
+      document.getElementById('co-info').textContent=`${_currentUser.company_name} · Live`;
       await loadFYList();
-      await renderAll();
-      return;
-    } catch {
-      // Token invalid — fall through to sample
-      _token = null;
-    }
+      renderAll();return;
+    }catch{_token=null;}
   }
-  // No valid session — render sample data, show login
   renderFromSample();
   showLoginModal();
 }
 
 boot();
 updateScenario();
-document.getElementById('sc-rev').dispatchEvent(new Event('input'));
 </script>
 </body>
 </html>
