@@ -21,21 +21,32 @@ fs.mkdirSync(process.env.LOG_DIR    || './logs',    { recursive: true });
 
 // ── Security & utility middleware ──
 app.use(helmet());
-// app.use(cors({
-//   origin:      [process.env.FRONTEND_URL || 'http://localhost:3000', 'http://localhost:5500', 'null'],
-//   credentials: true,
-//   methods:     ['GET','POST','PUT','DELETE','PATCH','OPTIONS'],
-//   allowedHeaders: ['Content-Type','Authorization','X-Company-ID'],
-// }));
+app.use(cors({
+  origin:      [process.env.FRONTEND_URL || 'http://localhost:3000', 'http://localhost:5500', 'null'],
+  credentials: true,
+  methods:     ['GET','POST','PUT','DELETE','PATCH','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization','X-Company-ID'],
+}));
 app.use(cors({
   origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, Postman)
+    // Allow null origin (local HTML files opened directly in browser)
+    // Allow chrome extensions
+    // Allow configured frontend URL and localhost
+    if (!origin) return callback(null, true);
+    if (origin === 'null') return callback(null, true);
+    if (origin.startsWith('chrome-extension://')) return callback(null, true);
+    if (origin.startsWith('moz-extension://')) return callback(null, true);
+
     const allowed = [
       process.env.FRONTEND_URL,
       'http://localhost:3000',
       'http://localhost:5500',
       'http://127.0.0.1:5500',
+      'https://fin-command.vercel.app',
     ].filter(Boolean);
-    if (!origin || allowed.includes(origin)) {
+
+    if (allowed.includes(origin)) {
       callback(null, true);
     } else {
       console.log('[CORS] Blocked origin:', origin);
