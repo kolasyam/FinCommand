@@ -21,8 +21,27 @@ fs.mkdirSync(process.env.LOG_DIR    || './logs',    { recursive: true });
 
 // ── Security & utility middleware ──
 app.use(helmet());
+// app.use(cors({
+//   origin:      [process.env.FRONTEND_URL || 'http://localhost:3000', 'http://localhost:5500', 'null'],
+//   credentials: true,
+//   methods:     ['GET','POST','PUT','DELETE','PATCH','OPTIONS'],
+//   allowedHeaders: ['Content-Type','Authorization','X-Company-ID'],
+// }));
 app.use(cors({
-  origin:      [process.env.FRONTEND_URL || 'http://localhost:3000', 'http://localhost:5500', 'null'],
+  origin: function(origin, callback) {
+    const allowed = [
+      process.env.FRONTEND_URL,
+      'http://localhost:3000',
+      'http://localhost:5500',
+      'http://127.0.0.1:5500',
+    ].filter(Boolean);
+    if (!origin || allowed.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log('[CORS] Blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods:     ['GET','POST','PUT','DELETE','PATCH','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization','X-Company-ID'],
