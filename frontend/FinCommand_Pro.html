@@ -1794,7 +1794,7 @@ function dlAllXLSX(){
 }
 
 /* ── API SERVICE ── */
-let API_BASE=localStorage.getItem('fc_api_url')||'http://localhost:4000/api/v1';
+let API_BASE=localStorage.getItem('fc_api_url')||'https://fincommand-backend.onrender.com/api/v1';
 let _token=localStorage.getItem('fc_token')||null;
 let _refreshToken=localStorage.getItem('fc_refresh_token')||null;
 let _currentUser=JSON.parse(localStorage.getItem('fc_user')||'null');
