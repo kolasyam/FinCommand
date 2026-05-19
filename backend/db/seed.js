@@ -3,12 +3,20 @@ require('dotenv').config();
 const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
 
+// const pool = new Pool({
+//   host: process.env.DB_HOST || 'localhost',
+//   port: parseInt(process.env.DB_PORT || '5432'),
+//   database: process.env.DB_NAME || 'fincommand',
+//   user: process.env.DB_USER || 'fincommand_user',
+//   password: process.env.DB_PASSWORD,
+// });
 const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432'),
-  database: process.env.DB_NAME || 'fincommand',
-  user: process.env.DB_USER || 'fincommand_user',
+  host:     process.env.DB_HOST     || 'localhost',
+  port:     parseInt(process.env.DB_PORT || '5432'),
+  database: process.env.DB_NAME     || 'fincommand',
+  user:     process.env.DB_USER     || 'fincommand_user',
   password: process.env.DB_PASSWORD,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
 
 async function seed() {
