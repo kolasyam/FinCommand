@@ -59,6 +59,7 @@ router.get('/callback', async (req, res, next) => {
     const base = ZOHO_ACCOUNTS[dc] || ZOHO_ACCOUNTS.IN;
 
     const tokenRes = await axios.post(`${base}/oauth/v2/token`, null, {
+      timeout: 15000,
       params: {
         code, client_id: process.env.ZOHO_CLIENT_ID,
         client_secret: process.env.ZOHO_CLIENT_SECRET,
@@ -66,7 +67,18 @@ router.get('/callback', async (req, res, next) => {
         grant_type:    'authorization_code',
       },
     });
+    // Zoho returns HTTP 200 even for some OAuth errors (e.g. redirect_uri
+    // mismatch, invalid/expired code) — check the body, not just the status.
+    if (tokenRes.data.error) {
+      const hint = tokenRes.data.error === 'invalid_redirect_uri' || tokenRes.data.error === 'redirect_uri_mismatch'
+        ? ' — check that ZOHO_REDIRECT_URI matches exactly what is registered in the Zoho API console (including https:// and no trailing slash).'
+        : '';
+      throw new Error(`Zoho OAuth error: ${tokenRes.data.error}${hint}`);
+    }
     const { access_token, refresh_token, expires_in } = tokenRes.data;
+    if (!access_token || !refresh_token) {
+      throw new Error('Zoho did not return an access/refresh token. The authorization code may have expired or already been used.');
+    }
     const expiry = new Date(Date.now() + (expires_in - 60) * 1000);
 
     await db.query(`
@@ -86,14 +98,31 @@ router.get('/callback', async (req, res, next) => {
 // ── Refresh Zoho access token ──
 async function refreshZohoToken(config) {
   const base = ZOHO_ACCOUNTS[config.data_center] || ZOHO_ACCOUNTS.IN;
-  const res = await axios.post(`${base}/oauth/v2/token`, null, {
-    params: {
-      refresh_token: config.refresh_token,
-      client_id:     process.env.ZOHO_CLIENT_ID,
-      client_secret: process.env.ZOHO_CLIENT_SECRET,
-      grant_type:    'refresh_token',
-    },
-  });
+  let res;
+  try {
+    res = await axios.post(`${base}/oauth/v2/token`, null, {
+      timeout: 15000,
+      params: {
+        refresh_token: config.refresh_token,
+        client_id:     process.env.ZOHO_CLIENT_ID,
+        client_secret: process.env.ZOHO_CLIENT_SECRET,
+        grant_type:    'refresh_token',
+      },
+    });
+  } catch (err) {
+    throw new Error(`Zoho token refresh failed: ${zohoErrorMessage(err)}`);
+  }
+  if (res.data.error || !res.data.access_token) {
+    // Most commonly the refresh token was revoked (user disconnected the app
+    // in Zoho, or it expired from inactivity) — the integration needs a full
+    // reconnect, not another refresh attempt.
+    await db.query(
+      `UPDATE zoho_config SET is_active=FALSE, last_sync_status='error',
+        last_sync_error=$1, updated_at=NOW() WHERE company_id=$2`,
+      [`Refresh token invalid (${res.data.error || 'no access_token returned'}). Please reconnect Zoho Books.`, config.company_id]
+    );
+    throw new Error(`Zoho refresh token is no longer valid (${res.data.error || 'unknown reason'}). Please reconnect Zoho Books.`);
+  }
   const { access_token, expires_in } = res.data;
   const expiry = new Date(Date.now() + (expires_in - 60) * 1000);
   await db.query(
@@ -103,17 +132,60 @@ async function refreshZohoToken(config) {
   return access_token;
 }
 
-// ── GET valid access token ──
-async function getToken(companyId) {
+// ── Extract a useful message from a Zoho API error ──
+function zohoErrorMessage(err) {
+  const data = err.response?.data;
+  if (data?.message) return `${data.message}${data.code ? ` (code ${data.code})` : ''}`;
+  if (typeof data === 'string' && data.trim()) return data.trim();
+  return err.message;
+}
+
+// ── Call Zoho, auto-refreshing the token once on 401/INVALID_OAUTHTOKEN ──
+// Wrap every outbound Zoho request in this instead of calling axios directly:
+// it retries once with a freshly refreshed token before giving up, and
+// always throws an error with Zoho's actual message attached (not just
+// axios's generic "Request failed with status code 401").
+async function callZoho(companyId, requestFn) {
   const { rows } = await db.query(
     `SELECT * FROM zoho_config WHERE company_id=$1 AND is_active=TRUE`, [companyId]
   );
   if (!rows.length) throw new Error('Zoho Books not connected. Please authenticate first.');
-  const cfg = rows[0];
-  if (new Date(cfg.token_expiry) <= new Date()) {
-    return await refreshZohoToken(cfg);
+  let cfg = rows[0];
+
+  let token = new Date(cfg.token_expiry) <= new Date()
+    ? await refreshZohoToken(cfg)
+    : cfg.access_token;
+
+  try {
+    return await requestFn(token);
+  } catch (err) {
+    const status = err.response?.status;
+    const zohoCode = err.response?.data?.code;
+    const isAuthError = status === 401 || zohoCode === 57 /* INVALID_OAUTHTOKEN */;
+    if (!isAuthError) {
+      const e = new Error(zohoErrorMessage(err));
+      e.status = status;
+      throw e;
+    }
+    // Token might have been revoked/expired between our check and the call — refresh once and retry.
+    try {
+      token = await refreshZohoToken(cfg);
+    } catch (refreshErr) {
+      const e = new Error(
+        `Zoho re-authentication failed: ${zohoErrorMessage(refreshErr)}. ` +
+        `You may need to reconnect Zoho Books from the integrations page.`
+      );
+      e.status = 401;
+      throw e;
+    }
+    try {
+      return await requestFn(token);
+    } catch (retryErr) {
+      const e = new Error(zohoErrorMessage(retryErr));
+      e.status = retryErr.response?.status;
+      throw e;
+    }
   }
-  return cfg.access_token;
 }
 
 // ── Core sync function ──
@@ -148,33 +220,29 @@ async function syncFromZoho(companyId, fyId, triggeredBy = null) {
     [logId, companyId, fy.label, triggeredBy]
   );
 
-  let token;
-  try {
-    token = await getToken(companyId);
-  } catch (e) {
-    await db.query(`UPDATE sync_logs SET status='error',error_message=$1,completed_at=NOW() WHERE id=$2`,
-      [e.message, logId]);
-    throw e;
-  }
-
   const apiBase = `${ZOHO_API[cfg.data_center] || ZOHO_API.IN}/api/v3`;
-  const headers = { Authorization: `Zoho-oauthtoken ${token}` };
+  const ZOHO_TIMEOUT_MS = 20000;
 
   // Fetch Chart of Accounts for Ledger Master mapping
   let coaMap = {};
+  let coaError = null;
   try {
-    const coaRes = await axios.get(`${apiBase}/chartofaccounts`, {
-      headers, params: { organization_id: orgId },
-    });
+    const coaRes = await callZoho(companyId, (token) => axios.get(`${apiBase}/chartofaccounts`, {
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+      params:  { organization_id: orgId },
+      timeout: ZOHO_TIMEOUT_MS,
+    }));
     (coaRes.data.chartofaccounts || []).forEach(acct => {
       coaMap[acct.account_id] = acct.account_name;
     });
   } catch (e) {
+    coaError = e.message;
     console.warn('COA fetch failed:', e.message);
   }
 
   // Fetch TB for each month
   const ledgerMap = {}; // key = account_name
+  const monthErrors = [];
 
   for (let mi = 0; mi < 12; mi++) {
     const m = FY_MONTHS_DR[mi];
@@ -183,10 +251,11 @@ async function syncFromZoho(companyId, fyId, triggeredBy = null) {
     const to_date   = `${yr}-${m.to_suffix}`;
 
     try {
-      const tbRes = await axios.get(`${apiBase}/trialbalance`, {
-        headers,
-        params: { organization_id: orgId, from_date, to_date },
-      });
+      const tbRes = await callZoho(companyId, (token) => axios.get(`${apiBase}/trialbalance`, {
+        headers: { Authorization: `Zoho-oauthtoken ${token}` },
+        params:  { organization_id: orgId, from_date, to_date },
+        timeout: ZOHO_TIMEOUT_MS,
+      }));
 
       const accounts = tbRes.data?.accounts || tbRes.data?.trial_balance || [];
       accounts.forEach(acct => {
@@ -207,8 +276,29 @@ async function syncFromZoho(companyId, fyId, triggeredBy = null) {
         };
       });
     } catch (e) {
+      monthErrors.push(`${m.name}: ${e.message}`);
       console.warn(`Month ${m.name} fetch failed:`, e.message);
+      // An auth failure (bad/revoked token) will fail identically for every
+      // remaining month — stop early instead of burning 11 more round trips
+      // on a sync that's already doomed.
+      if (e.status === 401) break;
     }
+  }
+
+  // If literally nothing came back, this wasn't a real sync — treat it as a
+  // failure with a real cause instead of silently recording "success, 0 ledgers".
+  if (Object.keys(ledgerMap).length === 0) {
+    const reason = monthErrors[0] || coaError || 'Zoho returned no trial balance data for this period';
+    const err = new Error(`Zoho sync failed: ${reason}`);
+    await db.query(
+      `UPDATE zoho_config SET last_sync_status='error',last_sync_error=$1,updated_at=NOW() WHERE company_id=$2`,
+      [err.message, companyId]
+    );
+    await db.query(
+      `UPDATE sync_logs SET status='error',error_message=$1,completed_at=NOW() WHERE id=$2`,
+      [err.message, logId]
+    );
+    throw err;
   }
 
   // Build TB rows with Ledger Master mapping
@@ -269,17 +359,25 @@ async function syncFromZoho(companyId, fyId, triggeredBy = null) {
   });
 
   const duration = Date.now() - start;
+  // Partial failures (e.g. 2 of 12 months errored) still complete, but we
+  // record a warning instead of a clean "success" so it doesn't look like a
+  // silently incomplete sync.
+  const partialWarning = monthErrors.length
+    ? `Synced with ${monthErrors.length}/12 month(s) failing: ${monthErrors.join('; ')}`
+    : null;
+  const status = partialWarning ? 'partial' : 'success';
+
   await db.query(
-    `UPDATE zoho_config SET last_synced_at=NOW(),last_sync_status='success',
-      synced_ledgers=$1, updated_at=NOW() WHERE company_id=$2`,
-    [tbRows.length, companyId]
+    `UPDATE zoho_config SET last_synced_at=NOW(),last_sync_status=$1,last_sync_error=$2,
+      synced_ledgers=$3, updated_at=NOW() WHERE company_id=$4`,
+    [status, partialWarning, tbRows.length, companyId]
   );
   await db.query(
-    `UPDATE sync_logs SET status='success',ledgers_synced=$1,duration_ms=$2,completed_at=NOW() WHERE id=$3`,
-    [tbRows.length, duration, logId]
+    `UPDATE sync_logs SET status=$1,ledgers_synced=$2,duration_ms=$3,error_message=$4,completed_at=NOW() WHERE id=$5`,
+    [status, tbRows.length, duration, partialWarning, logId]
   );
 
-  return { ledgers_synced: tbRows.length, mapped, upload_id: uploadId, duration_ms: duration };
+  return { ledgers_synced: tbRows.length, mapped, upload_id: uploadId, duration_ms: duration, warning: partialWarning };
 }
 
 // ── POST /zoho/sync — manual sync ──
