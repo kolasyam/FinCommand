@@ -1594,12 +1594,52 @@ function parseTBBuffer(buf,fname){
   const lb=document.getElementById('load-btn');if(lb)lb.style.display='inline-flex';
   const ls=document.getElementById('load-st');if(ls)ls.textContent='Processed at '+new Date().toLocaleTimeString();
 }
-function applyTBData(){
-  document.getElementById('src-pill').textContent='Live — Excel';
-  document.getElementById('src-pill').style.background='#E1F5EE';
-  document.getElementById('src-pill').style.color='#0F6E56';
-  toast('Trial Balance loaded successfully. All statements updated.');
-  go('overview');
+async function applyTBData(){
+  if(!_token){
+    showLoginModal();
+    toast('Please login to upload Trial Balance');
+    return;
+  }
+  if(!_currentFYId){
+    toast('Please select a financial year first');
+    return;
+  }
+  if(!window._parsedTBFile){
+    toast('No file selected');
+    return;
+  }
+
+  const btn=document.getElementById('load-btn');
+  if(btn){btn.textContent='Uploading…';btn.disabled=true;}
+
+  try{
+    const formData=new FormData();
+    formData.append('trial_balance',window._parsedTBFile);
+    formData.append('financial_year_id',_currentFYId);
+
+    const res=await fetch(API_BASE+'/tb/upload',{
+      method:'POST',
+      headers:{Authorization:`Bearer ${_token}`},
+      body:formData
+    });
+
+    if(!res.ok){
+      const err=await res.json().catch(()=>({}));
+      throw new Error(err.error||`Upload failed: ${res.status}`);
+    }
+
+    const data=await res.json();
+    document.getElementById('src-pill').textContent='Live — Excel';
+    document.getElementById('src-pill').style.background='#E1F5EE';
+    document.getElementById('src-pill').style.color='#0F6E56';
+    toast(`Trial Balance uploaded successfully. ${data.ledger_count} ledgers processed, ${data.mapped_count} mapped (${data.coverage_pct}% coverage).`);
+    go('overview');
+  }catch(e){
+    toast('Upload failed: '+e.message);
+    console.error(e);
+  }finally{
+    if(btn){btn.textContent='Load All Statements →';btn.disabled=false;}
+  }
 }
 function dlTemplate(){
   if(typeof XLSX==='undefined'){toast('SheetJS not loaded');return;}
@@ -1794,7 +1834,7 @@ function dlAllXLSX(){
 }
 
 /* ── API SERVICE ── */
-let API_BASE=localStorage.getItem('fc_api_url')||'https://fincommand-backend.onrender.com/api/v1';
+let API_BASE=localStorage.getItem('fc_api_url')||'https://fincommand.onrender.com/api/v1';
 let _token=localStorage.getItem('fc_token')||null;
 let _refreshToken=localStorage.getItem('fc_refresh_token')||null;
 let _currentUser=JSON.parse(localStorage.getItem('fc_user')||'null');
