@@ -1,0 +1,99 @@
+{
+  "_debug_info": {
+    "snapshot": "Apr",
+    "endpoint": "salesbycustomer",
+    "params": {
+      "organization_id": "60029248187",
+      "from_date": "2025-04-01",
+      "to_date": "2025-04-30"
+    },
+    "http_status": 200,
+    "zoho_code": 0,
+    "zoho_message": "success",
+    "top_level_keys": [
+      "code",
+      "message",
+      "sales",
+      "page_context"
+    ],
+    "written_at": "2026-09-02T06:11:31.678Z"
+  },
+  "raw_response": {
+    "code": 0,
+    "message": "success",
+    "sales": [
+      {
+        "customer_name": "Real Variable Digital Asset Services Inc",
+        "customer_id": "1816131000000029357",
+        "count": 1,
+        "sales": 8420000,
+        "sales_with_tax": 8420000,
+        "previous_values": [],
+        "values": [
+          {
+            "count": "1",
+            "sales_with_tax": "8420000.00",
+            "sales": "8420000.00"
+          }
+        ],
+        "custom_fields_list": "",
+        "currency_code": "USD",
+        "branch": {
+          "location_name": "Head Office"
+        },
+        "contact": {}
+      }
+    ],
+    "page_context": {
+      "page": 1,
+      "per_page": 200,
+      "has_more_page": false,
+      "report_name": "Sales by Customer",
+      "can_show_reports_banner": false,
+      "can_schedule": true,
+      "is_already_scheduled": false,
+      "report_type": "sales_by_customer",
+      "applied_filter": "TransactionDate.ThisMonth",
+      "from_date": "2025-04-01",
+      "to_date": "2025-04-30",
+      "previous_date_range": [],
+      "is_for_date_range": "true",
+      "last_accessed_time_formatted": "02/09/2026 11:41 AM",
+      "select_columns": [
+        {
+          "field": "customer_name",
+          "group": "report"
+        },
+        {
+          "field": "count",
+          "group": "report"
+        },
+        {
+          "field": "sales",
+          "group": "report"
+        },
+        {
+          "field": "sales_with_tax",
+          "group": "report"
+        }
+      ],
+      "group_by": [
+        {
+          "field": "none",
+          "group": "report"
+        }
+      ],
+      "date_range_label": "",
+      "is_period_basis": "false",
+      "date_range_list": [
+        {
+          "date_range_label": "01 Apr 2025 - 30 Apr 2025",
+          "from_date": "2025-04-01",
+          "to_date": "2025-04-30"
+        }
+      ],
+      "sort_column": "customer_name",
+      "sort_order": "A"
+    }
+  }
+}

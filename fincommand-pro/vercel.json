@@ -1,0 +1,5 @@
+{
+  "crons": [
+    { "path": "/api/v1/internal/zoho-cron", "schedule": "0 */6 * * *" }
+  ]
+}

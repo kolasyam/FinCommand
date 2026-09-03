@@ -1,0 +1,16 @@
+import { jsPDF } from 'jspdf';
+import fs from 'fs';
+const doc = new jsPDF();
+doc.setFont('helvetica', 'normal');
+doc.setFontSize(12);
+doc.text('Plain ASCII test', 14, 20);
+doc.text('Rupee glyph: ₹500', 14, 30);
+doc.text('Rs. prefix: Rs. 500', 14, 40);
+doc.text('Euro (should work): €500', 14, 50);
+const bytes = doc.output('arraybuffer');
+fs.writeFileSync('_diag31_rupee_test.pdf', Buffer.from(bytes));
+const text = Buffer.from(bytes).toString('latin1');
+console.log('Contains "Plain ASCII test":', text.includes('Plain ASCII test'));
+console.log('Contains "Rupee glyph":', text.includes('Rupee glyph'));
+console.log('Contains "Rs. prefix":', text.includes('Rs. prefix'));
+console.log('Contains "Euro (should work)":', text.includes('Euro (should work)'));
