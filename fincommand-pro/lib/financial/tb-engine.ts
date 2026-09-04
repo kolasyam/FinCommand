@@ -26,9 +26,15 @@
  *    keys 20-26 as `null` placeholders (the real aggregation keys are
  *    prefixed `bs_`/`pl_` internally) — so `pl.notes[N]` is always null.
  *    Nothing currently reads it besides a unit test asserting this quirk.
- *  - computeRatios() uses several hardcoded constants (inventories,
- *    receivables, payables, DSCR denominator) instead of deriving them from
- *    ledger notes.
+ *
+ * computeRatios() previously used several hardcoded constants (inventories,
+ * receivables, payables, DSCR denominator) instead of deriving them from
+ * ledger notes — this WAS a preserved quirk, but was an explicit, deliberate
+ * fix (not a preservation): those constants came from a demo dataset and
+ * were confirmed, against a real synced company's real ledgers, to be off
+ * from reality by up to four orders of magnitude. All four now derive from
+ * real Balance Sheet Notes (15/16/7) and real Cash Flow financing movements
+ * — see computeRatios()'s own doc comment.
  */
 
 export type Section = 'anc' | 'ac' | 'eq' | 'lnc' | 'lc' | 'inc' | 'exp';
@@ -806,16 +812,34 @@ export function computeCashFlow(ledgers: TbLedgerRow[], periodParams: PeriodPara
 export interface RatiosResult {
   liquidity: { current_ratio: number; quick_ratio: number; cash_ratio: number };
   profitability: { gross_margin: number; ebitda_margin: number; net_margin: number; roe: number; roce: number };
-  leverage: { debt_equity: number; interest_cover: number; dscr: number };
+  /** null when there's no real debt service (no borrowings/leases and no finance cost) — a "coverage" figure has no meaning with nothing to cover, so this is left honestly undetermined rather than shown as 0.00x or Infinity. */
+  leverage: { debt_equity: number; interest_cover: number; dscr: number | null };
   efficiency: { asset_turnover: number; dso: number; dpo: number; ccc: number };
   cashflow: { free_cash_flow: number; ocf_to_pat: number | null };
   dupont: { net_margin: number; asset_turnover: number; equity_multiplier: number; roe: number };
 }
 
+/** Real closing balance for one Balance Sheet note, from the already-computed BS section it lives in. 0 (not a guess) when the company has no ledgers under that note at all. */
+function noteTotal(notes: AggregatedNote[], noteNo: number): number {
+  return notes.find(nt => nt.note_no === noteNo)?.total || 0;
+}
+
 // ── Key Ratios ──
-// PRESERVED QUIRK: inventories/receivables/payables (inv/ar/ap) below are
-// hardcoded, not derived from ledger notes — ported verbatim from the
-// original engine.
+// Inventories (Note 15), Trade Receivables (Note 16) and Trade Payables
+// (Note 7) are now real ledger-derived Balance Sheet Note totals, and DSCR's
+// debt-service denominator is now real Finance Costs + real net borrowing
+// repayment for the period — replacing this function's previous hardcoded
+// constants (inv=424, ar=3480, ap=2140, DSCR denominator=(720+372)=1092),
+// which were leftover demo-dataset figures with no relationship to any real
+// company's books. Confirmed on a real synced company: real Trade
+// Receivables were ~₹6.21 Cr against the old hardcoded ar=3480 — off by four
+// orders of magnitude, which silently made DSO/DPO/CCC (and, by extension,
+// the Working Capital tab, which reads these same fields) nonsense numbers
+// that never reflected the connected business. cash_ratio and both
+// asset_turnover figures also carried stray ÷100/×100 scaling with no
+// documented reason and no compensating factor anywhere they're displayed
+// (RatiosTab/exports print them as a raw "x" multiple) — removed, since they
+// silently shrank both ratios ~100x from their real value.
 export function computeRatios(ledgers: TbLedgerRow[], periodParams: PeriodParams): RatiosResult {
   const bs = computeBS(ledgers, periodParams);
   const pl = computePL(ledgers, periodParams);
@@ -824,15 +848,35 @@ export function computeRatios(ledgers: TbLedgerRow[], periodParams: PeriodParams
 
   const ca = bs.assets.total_ca;
   const cl = bs.equity_liabilities.total_cl;
-  const inv = 424; // inventories
-  const ar = 3480;
-  const ap = 2140;
+  const inv = noteTotal(bs.assets.current, 15);
+  const ar = noteTotal(bs.assets.current, 16);
+  const ap = noteTotal(bs.equity_liabilities.current_liab, 7);
+
+  // Standard day-count formulas, real-rupee throughout (ar/ap/inv and
+  // pl.revenue/pl.cos are the same unit — no scaling factor needed).
+  const dio = pl.cos > 0 ? (inv / pl.cos * 365) : 0;
+  const dso = pl.revenue > 0 ? (ar / pl.revenue * 365) : 0;
+  const dpo = pl.cos > 0 ? (ap / pl.cos * 365) : 0;
+
+  // DSCR debt service = real interest (Finance Costs, Note 24) + real
+  // principal repaid this period. Principal repaid is only knowable from the
+  // ledgers as a *net* repayment (ST/LT borrowings & leases decreasing) — a
+  // period where borrowings grew net (a fresh drawdown) has no
+  // ledger-derivable way to see any principal still repaid within that same
+  // period, so that case honestly counts 0 principal rather than guessing.
+  const cfFinancing = cf.financing as Record<string, number>;
+  const principalRepaid = Math.max(0, -(
+    (cfFinancing.short_term_borrowings_movement || 0) +
+    (cfFinancing.long_term_borrowings_and_leases_movement || 0)
+  ));
+  const debtService = pl.finance_costs + principalRepaid;
+  const dscr = debtService > 0 ? parseFloat(((cf.operating.total as number) / debtService).toFixed(2)) : null;
 
   return {
     liquidity: {
       current_ratio: parseFloat((ca / cl).toFixed(2)),
       quick_ratio: parseFloat(((ca - inv) / cl).toFixed(2)),
-      cash_ratio: parseFloat((tsy.total_cash_and_bank / cl / 100).toFixed(2)),
+      cash_ratio: parseFloat((tsy.total_cash_and_bank / cl).toFixed(2)),
     },
     profitability: {
       gross_margin: parseFloat(((pl.revenue - pl.cos) / pl.revenue * 100).toFixed(1)),
@@ -849,13 +893,17 @@ export function computeRatios(ledgers: TbLedgerRow[], periodParams: PeriodParams
     leverage: {
       debt_equity: parseFloat(((bs.equity_liabilities.total_ncl + bs.equity_liabilities.total_cl) / bs.equity_liabilities.total_equity).toFixed(2)),
       interest_cover: parseFloat(((pl.pbt + pl.finance_costs) / (pl.finance_costs || 1)).toFixed(1)),
-      dscr: parseFloat(((cf.operating.total as number) / (720 + 372)).toFixed(2)),
+      dscr,
     },
     efficiency: {
-      asset_turnover: parseFloat((pl.revenue / (bs.assets.total * 100)).toFixed(2)),
-      dso: Math.round(ar / (pl.revenue / 100) * 365 / 1000),
-      dpo: Math.round(ap / (pl.cos / 100) * 365 / 1000),
-      ccc: Math.round(ar / (pl.revenue / 100) * 365 / 1000 - ap / (pl.cos / 100) * 365 / 1000 + 12),
+      asset_turnover: parseFloat((pl.revenue / bs.assets.total).toFixed(2)),
+      dso: Math.round(dso),
+      dpo: Math.round(dpo),
+      // Cash Conversion Cycle = DIO + DSO − DPO (textbook definition) — dio
+      // is 0, not a guess, for a company with no real Inventory ledgers
+      // (e.g. a pure-services business), same honest-zero convention as
+      // every other note total here.
+      ccc: Math.round(dio + dso - dpo),
     },
     cashflow: {
       free_cash_flow: cf.free_cash_flow,
@@ -863,7 +911,7 @@ export function computeRatios(ledgers: TbLedgerRow[], periodParams: PeriodParams
     },
     dupont: {
       net_margin: parseFloat((pl.pat / pl.revenue * 100).toFixed(1)),
-      asset_turnover: parseFloat((pl.revenue / (bs.assets.total * 100)).toFixed(2)),
+      asset_turnover: parseFloat((pl.revenue / bs.assets.total).toFixed(2)),
       equity_multiplier: parseFloat((bs.assets.total / bs.equity_liabilities.total_equity).toFixed(2)),
       roe: parseFloat((pl.pat / bs.equity_liabilities.total_equity * 100).toFixed(1)),
     },

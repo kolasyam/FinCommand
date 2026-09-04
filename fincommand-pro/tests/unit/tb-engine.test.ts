@@ -1,5 +1,5 @@
 import {
-  resolvePeriod, monthNet, periodNet, closingBalance, computeMIS, computeBS, computePL, computeTreasury, computeCashFlow,
+  resolvePeriod, monthNet, periodNet, closingBalance, computeMIS, computeBS, computePL, computeTreasury, computeCashFlow, computeRatios,
   type TbLedgerRow,
 } from '@/lib/financial/tb-engine';
 
@@ -363,5 +363,81 @@ describe('computeTreasury', () => {
     expect(tsy.total_cash_and_bank).toBe(100);
     expect(tsy.total_fd).toBe(2000);
     expect(tsy.total).toBe(2100);
+  });
+});
+
+describe('computeRatios', () => {
+  // Regression tests for a real bug: Inventories/Receivables/Payables used
+  // to be hardcoded (inv=424, ar=3480, ap=2140) instead of read from the
+  // ledgers' own Note 15/16/7 balances, and cash_ratio/asset_turnover carried
+  // stray ÷100/×100 scaling — confirmed on a real synced company to be off
+  // from reality by up to four orders of magnitude (real Trade Receivables
+  // ~₹6.21 Cr vs the old hardcoded ar=3480).
+  function makeRatioLedgers(): TbLedgerRow[] {
+    return [
+      makeLedger({ ledger_name: 'Revenue', note_no: 20, note_name: 'Revenue from Operations', section: 'inc', normal_bal: 'Cr', m1_cr: 100000 }),
+      makeLedger({ ledger_name: 'Cost of Services', note_no: 22, note_name: 'Cost of Services', section: 'exp', normal_bal: 'Dr', m1_dr: 50000 }),
+      makeLedger({ ledger_name: 'Inventories', note_no: 15, note_name: 'Inventories', section: 'ac', normal_bal: 'Dr', op_dr: 5000 }),
+      makeLedger({ ledger_name: 'Trade Receivables', note_no: 16, note_name: 'Trade Receivables', section: 'ac', normal_bal: 'Dr', op_dr: 20000 }),
+      makeLedger({ ledger_name: 'Cash', note_no: 19, note_name: 'Cash and Cash Equivalents', section: 'ac', treasury_type: 'cash', normal_bal: 'Dr', op_dr: 3000 }),
+      makeLedger({ ledger_name: 'Trade Payables', note_no: 7, note_name: 'Trade Payables', section: 'lc', normal_bal: 'Cr', op_cr: 4000 }),
+      makeLedger({ ledger_name: 'PPE', note_no: 10, note_name: 'Property, Plant and Equipment', section: 'anc', normal_bal: 'Dr', op_dr: 50000 }),
+      makeLedger({ ledger_name: 'Share Capital', note_no: 1, note_name: 'Share Capital', section: 'eq', normal_bal: 'Cr', op_cr: 74000 }),
+    ];
+  }
+
+  test('Inventories/Receivables/Payables are read from real Note 15/16/7 ledgers, not hardcoded', () => {
+    const ratios = computeRatios(makeRatioLedgers(), { periodType: 'annual', yearType: 'FY' });
+    // ca = inv(5000) + ar(20000) + cash(3000) = 28000; cl = ap(4000)
+    expect(ratios.liquidity.current_ratio).toBe(7); // 28000 / 4000
+    expect(ratios.liquidity.quick_ratio).toBe(5.75); // (28000 - 5000) / 4000 — real inv, not the old hardcoded 424
+    // dso = ar/revenue*365 = 20000/100000*365 = 73; dpo = ap/cos*365 = 4000/50000*365 = 29.2 -> 29
+    expect(ratios.efficiency.dso).toBe(73);
+    expect(ratios.efficiency.dpo).toBe(29);
+    // ccc = dio + dso - dpo = 36.5 + 73 - 29.2 = 80.3 -> 80 (dio = inv/cos*365 = 36.5, not exposed separately)
+    expect(ratios.efficiency.ccc).toBe(80);
+  });
+
+  test('a company with no Inventory ledgers gets inv=0 (honest zero), not the old hardcoded 424', () => {
+    const ledgers = makeRatioLedgers().filter(l => l.note_no !== 15);
+    const ratios = computeRatios(ledgers, { periodType: 'annual', yearType: 'FY' });
+    // ca = ar(20000) + cash(3000) = 23000; with inv=0, quick_ratio must equal current_ratio exactly
+    expect(ratios.liquidity.current_ratio).toBe(ratios.liquidity.quick_ratio);
+    expect(ratios.liquidity.current_ratio).toBe(5.75); // 23000 / 4000
+  });
+
+  test('cash_ratio has no stray ÷100 — Cash / Current Liabilities directly', () => {
+    const ratios = computeRatios(makeRatioLedgers(), { periodType: 'annual', yearType: 'FY' });
+    expect(ratios.liquidity.cash_ratio).toBe(0.75); // 3000 / 4000, not 0.0075
+  });
+
+  test('asset_turnover (efficiency and dupont) has no stray ×100 — Revenue / Total Assets directly', () => {
+    const ratios = computeRatios(makeRatioLedgers(), { periodType: 'annual', yearType: 'FY' });
+    // total assets = 50000(PPE) + 5000(inv) + 20000(ar) + 3000(cash) = 78000
+    const expected = parseFloat((100000 / 78000).toFixed(2));
+    expect(ratios.efficiency.asset_turnover).toBe(expected);
+    expect(ratios.dupont.asset_turnover).toBe(expected);
+    expect(ratios.efficiency.asset_turnover).toBeGreaterThan(1); // sanity: would be ~0.01 under the old ×100 bug
+  });
+
+  test('DSCR is null (not 0.00x or Infinity) when there is no real debt service', () => {
+    const ratios = computeRatios(makeRatioLedgers(), { periodType: 'annual', yearType: 'FY' });
+    expect(ratios.leverage.dscr).toBeNull();
+  });
+
+  test('DSCR reflects real interest paid + real net principal repaid, not a hardcoded denominator', () => {
+    const ledgers: TbLedgerRow[] = [
+      makeLedger({ ledger_name: 'Revenue', note_no: 20, section: 'inc', normal_bal: 'Cr', m1_cr: 100000 }),
+      makeLedger({ ledger_name: 'Cost of Services', note_no: 22, section: 'exp', normal_bal: 'Dr', m1_dr: 50000 }),
+      makeLedger({ ledger_name: 'Finance Costs', note_no: 24, note_name: 'Finance Costs', section: 'exp', normal_bal: 'Dr', m1_dr: 2000 }),
+      // Opening 10000, one month's Dr movement of 3000 against this Cr-normal
+      // liability = a real repayment of 3000 during the period.
+      makeLedger({ ledger_name: 'Short-Term Borrowings', note_no: 9, note_name: 'Short-Term Borrowings', section: 'lc', normal_bal: 'Cr', op_cr: 10000, m1_dr: 3000 }),
+      makeLedger({ ledger_name: 'Share Capital', note_no: 1, section: 'eq', normal_bal: 'Cr', op_cr: 40000 }),
+    ];
+    const ratios = computeRatios(ledgers, { periodType: 'annual', yearType: 'FY' });
+    // operating_profit = pbt(48000) + fin(2000) = 50000 (no WC movement, no depreciation/other income)
+    // debt service = finance costs(2000) + principal repaid(3000) = 5000
+    expect(ratios.leverage.dscr).toBe(10); // 50000 / 5000
   });
 });

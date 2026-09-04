@@ -27,6 +27,22 @@ export function ScenarioTab() {
     ? (latestYear.financial_year.short_label || latestYear.financial_year.label)
     : bundle?.period_label;
 
+  // The company's own real trailing effective tax rate (this period's actual
+  // tax / actual PBT), used to project tax on the *hypothetical* scenario
+  // PBT below — more accurate than an assumed flat 25% for a company whose
+  // real effective rate differs (carried losses, incentives, etc.). Falls
+  // back to the engine's own flat-25% modeling convention (tb-engine.ts
+  // computePL/computeMIS) only when the base period itself has no positive
+  // PBT to derive a real rate from — same "disclosed flat-rate estimate,
+  // never fabricated to look more precise than it is" philosophy used
+  // throughout the engine, just applied to a forward projection instead of
+  // an actual-period figure. Clamped to a sane 0–40% band so a real period
+  // with an unusually small PBT (where tax/PBT can swing wildly) can't send
+  // a projection's tax figure to an implausible extreme.
+  const effectiveTaxRate = base && base.pbt > 0
+    ? Math.min(0.4, Math.max(0, base.tax / base.pbt))
+    : 0.25;
+
   const projected = useMemo(() => {
     if (!base) return null;
     const rev = base.rev * (1 + revGrowth / 100);
@@ -40,10 +56,12 @@ export function ScenarioTab() {
     // comparable to the real EBITDA shown on Overview/MIS/Board Pack.
     const ebitda = gp - emp - oex;
     const pbt = ebitda - base.fin - base.dep;
-    const tax = Math.round(pbt * 0.25);
+    // Same loss-gating convention as computeMIS/computePL: a projected loss
+    // owes no tax, never a fabricated tax credit that would shrink it.
+    const tax = pbt > 0 ? Math.round(pbt * effectiveTaxRate) : 0;
     const pat = pbt - tax;
     return { rev, cos, gp, emp, oex, ebitda, pbt, pat, gm: rev > 0 ? gp / rev * 100 : 0, em: rev > 0 ? ebitda / rev * 100 : 0, pm: rev > 0 ? pat / rev * 100 : 0 };
-  }, [base, revGrowth, costChange, empChange, opexChange]);
+  }, [base, revGrowth, costChange, empChange, opexChange, effectiveTaxRate]);
 
   function Slider({ label, value, onChange, min = -30, max = 50 }: { label: string; value: number; onChange: (v: number) => void; min?: number; max?: number }) {
     return (

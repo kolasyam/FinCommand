@@ -126,6 +126,20 @@ function DashboardShell() {
   const [addFyOpen, setAddFyOpen] = useState(false);
   const toast = useToast();
 
+  // On initial mount, respect query parameters (e.g. ?tab=upload or ?zoho=connected)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      const hasZohoParam = params.has('zoho') || params.has('zoho_error');
+      if (tabParam) {
+        setActiveTab(tabParam);
+      } else if (hasZohoParam) {
+        setActiveTab('upload');
+      }
+    }
+  }, []);
+
   // A Note reference clicked on Balance Sheet / P&L (or anywhere else in the
   // future) requests a tab switch via DashboardContext — this is the one
   // place that owns `activeTab`, so it's the one place that acts on the

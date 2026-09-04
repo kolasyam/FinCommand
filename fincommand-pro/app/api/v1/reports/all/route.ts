@@ -114,7 +114,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   // mis is computed first (synchronously) so computeTopCustomers can size
   // each customer's revenue against the real company-wide total.
   const mis = computeMIS(computeLedgers, params);
-  const [bs, pl, notes, treasury, cashflow, ratios, companyRows] = await Promise.all([
+  const [bs, pl, notes, treasury, cashflow, ratios, companyRows, auditRows] = await Promise.all([
     computeBS(computeLedgers, params),
     computePL(computeLedgers, params),
     computeNotes(computeLedgers, params),
@@ -123,6 +123,16 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     computeRatios(computeLedgers, params),
     query<{ currency: string | null; presentation_currency: string | null }>(
       `SELECT currency, presentation_currency FROM companies WHERE id=$1`, [user.company_id]
+    ),
+    // Real signal for the Compliance tab's "Audit trail enabled" check —
+    // previously an unconditional hardcoded 'ok' regardless of whether this
+    // company actually had any audit_trail rows. Company-wide (not
+    // FY-scoped, same as the table itself), so this is safe to compute once
+    // here without a role check: it's just a count/timestamp, not the log
+    // contents (app/api/v1/audit/route.ts, which returns the actual rows,
+    // stays admin/cfo/auditor-only).
+    query<{ count: string; last_at: string | null }>(
+      `SELECT COUNT(*) AS count, MAX(created_at) AS last_at FROM audit_trail WHERE company_id=$1`, [user.company_id]
     ),
   ]);
   const top_customers = computeTopCustomers(computeCustomerRev, computeLedgers, params, mis.totals.rev);
@@ -134,6 +144,10 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   // session, same as the Unit Selector.
   const source_currency = (companyRows.rows[0]?.currency || 'INR').toUpperCase();
   const default_presentation_currency = companyRows.rows[0]?.presentation_currency?.toUpperCase() || null;
+  const audit_summary = {
+    total_events: parseInt(auditRows.rows[0]?.count || '0', 10),
+    last_event_at: auditRows.rows[0]?.last_at || null,
+  };
 
   const responseData = {
     financial_year: cyLabelFy,
@@ -151,6 +165,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     prev_cashflow,
     ratios,
     top_customers,
+    audit_summary,
     generated_at: new Date().toISOString(),
   };
 

@@ -44,12 +44,12 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
       const hint = tokenRes.data.error === 'invalid_redirect_uri' || tokenRes.data.error === 'redirect_uri_mismatch'
         ? ' — check that ZOHO_REDIRECT_URI matches exactly what is registered in the Zoho API console.'
         : '';
-      return NextResponse.redirect(`${baseUrl}/dashboard?zoho_error=${encodeURIComponent(`Zoho OAuth error: ${tokenRes.data.error}${hint}`)}`);
+      return NextResponse.redirect(`${baseUrl}/dashboard?tab=upload&zoho_error=${encodeURIComponent(`Zoho OAuth error: ${tokenRes.data.error}${hint}`)}`);
     }
 
     const { access_token, refresh_token, expires_in } = tokenRes.data;
     if (!access_token || !refresh_token) {
-      return NextResponse.redirect(`${baseUrl}/dashboard?zoho_error=${encodeURIComponent('Zoho did not return access/refresh tokens. Authorization code expired or used.')}`);
+      return NextResponse.redirect(`${baseUrl}/dashboard?tab=upload&zoho_error=${encodeURIComponent('Zoho did not return access/refresh tokens. Authorization code expired or used.')}`);
     }
     const expiry = new Date(Date.now() + ((expires_in || 3600) - 60) * 1000);
 
@@ -63,8 +63,8 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
       [companyId, access_token, refresh_token, expiry, dc]
     );
 
-    return NextResponse.redirect(`${baseUrl}/dashboard?zoho=connected`);
+    return NextResponse.redirect(`${baseUrl}/dashboard?tab=upload&zoho=connected`);
   } catch (err) {
-    return NextResponse.redirect(`${baseUrl}/dashboard?zoho_error=${encodeURIComponent((err as Error).message)}`);
+    return NextResponse.redirect(`${baseUrl}/dashboard?tab=upload&zoho_error=${encodeURIComponent((err as Error).message)}`);
   }
 });

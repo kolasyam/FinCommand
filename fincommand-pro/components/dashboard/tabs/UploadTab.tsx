@@ -25,13 +25,10 @@ export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogi
 
   // Connection provider selection state
   const [connectionProvider, setConnectionProvider] = useState('zoho');
-
-  // REST API Connection state
-  const [apiBaseUrl, setApiBaseUrl] = useState('https://api.yourcompany.com/v1');
-  const [authType, setAuthType] = useState('API Key (Header)');
-  const [apiKey, setApiKey] = useState('');
-  const [apiTesting, setApiTesting] = useState(false);
-  const [apiSaved, setApiSaved] = useState(false);
+  const PROVIDER_LABELS: Record<string, string> = {
+    custom: 'Custom REST API', sap: 'SAP ERP', oracle: 'Oracle NetSuite',
+    tally: 'Tally Prime', quickbooks: 'QuickBooks Online',
+  };
 
   // Zoho Books Connection state
   const [zohoOrgId, setZohoOrgId] = useState('');
@@ -342,42 +339,6 @@ export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogi
     toast('Template downloaded');
   }
 
-  async function testConnection() {
-    if (!apiBaseUrl.trim()) { toast('Please enter a Base URL'); return; }
-    setApiTesting(true);
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (apiKey.trim()) {
-        if (authType === 'API Key (Header)') headers['X-API-Key'] = apiKey;
-        else headers['Authorization'] = `Bearer ${apiKey}`;
-      }
-      const res = await fetch(apiBaseUrl.replace(/\/$/, '') + '/health', {
-        method: 'GET',
-        headers,
-        signal: AbortSignal.timeout(10000),
-      });
-      if (res.ok) {
-        toast('✓ Connection successful');
-      } else {
-        toast(`Connection failed: HTTP ${res.status}`);
-      }
-    } catch {
-      toast('Connection failed: could not reach the server');
-    } finally {
-      setApiTesting(false);
-    }
-  }
-
-  function saveConfig() {
-    if (!apiBaseUrl.trim()) { toast('Please enter a Base URL'); return; }
-    localStorage.setItem('fc_api_base_url', apiBaseUrl);
-    localStorage.setItem('fc_api_auth_type', authType);
-    if (apiKey) localStorage.setItem('fc_api_key', apiKey);
-    setApiSaved(true);
-    toast('API configuration saved');
-    setTimeout(() => setApiSaved(false), 2000);
-  }
-
   if (initialLoading) {
     return (
       <div className="card p-8 text-center" style={{ minHeight: 340, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', margin: '20px 0' }}>
@@ -398,7 +359,7 @@ export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogi
     <div>
       {/* Info bar */}
       <div className="info-bar" style={{ marginBottom: 14 }}>
-        <strong>Two data modes:</strong> Upload a Trial Balance Excel (auto-populates all statements) or connect via <strong>REST API (Zoho Books / ERP)</strong>.
+        <strong>Two data modes:</strong> Upload a Trial Balance Excel (auto-populates all statements) or connect <strong>Zoho Books</strong> via OAuth for live monthly sync. More ERP connectors (SAP, Oracle, Tally, QuickBooks) are coming soon.
       </div>
 
       {/* 4-Layer Architecture Cards */}
@@ -588,12 +549,12 @@ export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogi
                   outline: 'none', cursor: 'pointer', appearance: 'auto', fontWeight: 600,
                 }}
               >
-                <option value="zoho">Zoho Books (REST API / OAuth 2.0)</option>
-                <option value="custom">Custom REST API (API Key / Bearer)</option>
-                <option value="sap">SAP ERP (REST API)</option>
-                <option value="oracle">Oracle NetSuite (REST API)</option>
-                <option value="tally">Tally Prime (REST / XML)</option>
-                <option value="quickbooks">QuickBooks Online (OAuth 2.0)</option>
+                <option value="zoho">Zoho Books (REST API / OAuth 2.0) — Live</option>
+                <option value="custom">Custom REST API — Coming Soon</option>
+                <option value="sap">SAP ERP — Coming Soon</option>
+                <option value="oracle">Oracle NetSuite — Coming Soon</option>
+                <option value="tally">Tally Prime — Coming Soon</option>
+                <option value="quickbooks">QuickBooks Online — Coming Soon</option>
               </select>
             </div>
 
@@ -732,83 +693,32 @@ export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogi
                 </div>
               </>
             ) : (
-              /* GENERIC REST API FORM (ORIGINAL UI) */
-              <>
-                <div style={{ marginBottom: 12 }}>
-                  <label style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: 500, display: 'block', marginBottom: 4 }}>
-                    Base URL
-                  </label>
-                  <input
-                    type="text"
-                    value={apiBaseUrl}
-                    onChange={e => setApiBaseUrl(e.target.value)}
-                    placeholder="https://api.yourcompany.com/v1"
-                    style={{
-                      width: '100%', padding: '7px 10px', fontSize: 11, border: '1px solid var(--border2)',
-                      borderRadius: 'var(--radius-sm)', fontFamily: 'var(--mono)', color: 'var(--text)',
-                      background: 'var(--bg)', outline: 'none',
-                    }}
-                  />
+              /* Coming Soon — no backend integration exists yet for this
+                 provider (no OAuth app, no service module, no route). Only
+                 Zoho Books (the branch above) and the Trial Balance Excel
+                 upload (Option 1) actually write real ledgers into the
+                 database today. This used to render a fully-functional-
+                 looking generic REST API form (Base URL / Auth / Test
+                 Connection / Save Config) that quietly did nothing real:
+                 "Test Connection" only pinged whatever URL the user typed,
+                 and "Save Config" only wrote to localStorage — nothing ever
+                 read those keys back, so no data ever reached tb_ledgers.
+                 Presenting that as a working integration was misleading;
+                 this honestly says so instead. */
+              <div style={{ textAlign: 'center', padding: '30px 12px' }}>
+                <div style={{ fontSize: 32, marginBottom: 10, opacity: 0.6 }}>🚧</div>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+                  {PROVIDER_LABELS[connectionProvider] || 'This integration'} — coming soon
                 </div>
-
-                <div style={{ marginBottom: 12 }}>
-                  <label style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: 500, display: 'block', marginBottom: 4 }}>
-                    Authentication
-                  </label>
-                  <select
-                    value={authType}
-                    onChange={e => setAuthType(e.target.value)}
-                    style={{
-                      width: '100%', padding: '7px 10px', fontSize: 11, border: '1px solid var(--border2)',
-                      borderRadius: 'var(--radius-sm)', color: 'var(--text)', background: 'var(--bg)',
-                      outline: 'none', cursor: 'pointer', appearance: 'auto',
-                    }}
-                  >
-                    <option>API Key (Header)</option>
-                    <option>Bearer Token</option>
-                    <option>OAuth 2.0</option>
-                    <option>Basic Auth</option>
-                  </select>
+                <div style={{ fontSize: 11, color: 'var(--text2)', lineHeight: 1.7, maxWidth: 380, margin: '0 auto' }}>
+                  This connector isn&apos;t built yet, so nothing here would sync real data into your reports.
+                  Two data sources are live today: <strong>Zoho Books</strong> (OAuth sync) and the{' '}
+                  <strong>Trial Balance Excel upload</strong> (Option 1, left).
                 </div>
-
-                <div style={{ marginBottom: 14 }}>
-                  <label style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: 500, display: 'block', marginBottom: 4 }}>
-                    API Key / Token
-                  </label>
-                  <input
-                    type="password"
-                    value={apiKey}
-                    onChange={e => setApiKey(e.target.value)}
-                    placeholder="Enter API key or Bearer token"
-                    style={{
-                      width: '100%', padding: '7px 10px', fontSize: 11, border: '1px solid var(--border2)',
-                      borderRadius: 'var(--radius-sm)', fontFamily: 'var(--mono)', color: 'var(--text)',
-                      background: 'var(--bg)', outline: 'none',
-                    }}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                  <button
-                    className="btn btn-pr"
-                    onClick={testConnection}
-                    disabled={apiTesting}
-                  >
-                    {apiTesting ? 'Testing…' : 'Test Connection'}
-                  </button>
-                  <button
-                    className="btn btn-se"
-                    onClick={saveConfig}
-                    style={apiSaved ? { borderColor: 'var(--green)', color: 'var(--green)' } : {}}
-                  >
-                    {apiSaved ? '✓ Saved' : 'Save Config'}
-                  </button>
-                </div>
-
-                <div style={{ fontSize: 10, color: 'var(--text3)', lineHeight: 1.7 }}>
-                  Supports: <strong>SAP</strong> · <strong>Oracle</strong> · <strong>Tally</strong> · <strong>Zoho Books</strong> · <strong>QuickBooks</strong> · <strong>Custom ERP</strong>
-                </div>
-              </>
+                <button className="btn btn-se btn-sm" style={{ marginTop: 16 }} onClick={() => setConnectionProvider('zoho')}>
+                  🔗 Switch to Zoho Books
+                </button>
+              </div>
             )}
           </div>
         </div>

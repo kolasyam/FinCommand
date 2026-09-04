@@ -38,6 +38,8 @@ export interface ReportBundle {
   prev_cashflow?: CashFlowResult | null;
   ratios: RatiosResult;
   top_customers?: TopCustomer[];
+  /** Real, company-wide audit_trail activity — drives the Compliance tab's "Audit trail enabled" check. Undefined in sample mode (there's no real company to have an audit trail for); ComplianceTab treats that the same as dataMode !== 'api'. */
+  audit_summary?: { total_events: number; last_event_at: string | null };
   generated_at: string;
 }
 
@@ -67,4 +69,6 @@ export interface ThreeYearBundle {
   generated_at: string;
   /** Same meaning as ReportBundle.source_currency — carried here too because DashboardContext has no ReportBundle to read it from while granularity === '3year' (rawBundle is null in that mode); without this, the FX conversion driving the 3-Year Frame silently fell back to assuming 'INR' regardless of the company's real Source Currency. */
   source_currency?: string;
+  /** Same meaning as ReportBundle.audit_summary — carried here too for the same reason as source_currency above. */
+  audit_summary?: { total_events: number; last_event_at: string | null };
 }

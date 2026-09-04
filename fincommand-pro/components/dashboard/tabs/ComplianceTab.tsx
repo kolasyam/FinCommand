@@ -2,11 +2,34 @@
 
 import { useDashboard } from '@/lib/dashboard/DashboardContext';
 import { DownloadBar } from '../DownloadBar';
-import { getFyLabel } from '@/lib/utils/format';
+import { getFyLabel, formatDate } from '@/lib/utils/format';
 import { ThreeYearBanner } from '../ThreeYearFrame';
 
 type ComplianceStatus = 'ok' | 'warn' | 'na';
 interface ComplianceItem { label: string; status: ComplianceStatus; note: string }
+
+/**
+ * Real audit-trail check against `audit_summary` (see ReportBundle/
+ * ThreeYearBundle's own doc comment) — replaces a previous unconditional
+ * hardcoded `status: 'ok'` that claimed "every write action is logged"
+ * regardless of whether this company had any audit_trail rows at all.
+ * `undefined` covers both sample mode (no real company to audit) and the
+ * bundle not having loaded yet — both render 'na', never a false 'ok'.
+ */
+function auditTrailItem(dataMode: string, auditSummary: { total_events: number; last_event_at: string | null } | undefined): ComplianceItem {
+  if (dataMode !== 'api') {
+    return { label: 'Audit trail enabled', status: 'na', note: 'n/a — sample data has no real audit trail' };
+  }
+  if (!auditSummary) {
+    return { label: 'Audit trail enabled', status: 'na', note: 'n/a' };
+  }
+  const { total_events, last_event_at } = auditSummary;
+  if (total_events > 0) {
+    const when = last_event_at ? ` · last ${formatDate(last_event_at)}` : '';
+    return { label: 'Audit trail enabled', status: 'ok', note: `${total_events} event${total_events === 1 ? '' : 's'} logged${when}` };
+  }
+  return { label: 'Audit trail enabled', status: 'warn', note: 'No audit events recorded yet for this company' };
+}
 
 const complianceIconStyle = (s: ComplianceStatus) => ({
   ok:   { background: 'var(--green-l)', color: 'var(--green)' },
@@ -86,7 +109,7 @@ export function ComplianceTab() {
           <div>
             {([
               { label: 'Data source', status: dataMode === 'api' ? 'ok' : 'warn', note: dataMode === 'api' ? 'Live API / uploaded TB' : 'Sample data — connect a real company' },
-              { label: 'Audit trail enabled', status: 'ok', note: 'Every write action is logged to audit_trail' },
+              auditTrailItem(dataMode, threeYear.audit_summary),
               { label: 'IND AS 7 Cash Flow (Indirect Method)', status: 'ok', note: 'Generated per year' },
               // Genuinely 'na', not 'ok': computePL() always leaves OCI null —
               // an actuarial valuation of a defined benefit obligation isn't
@@ -132,7 +155,7 @@ export function ComplianceTab() {
     // false-compliance-status problem this checklist exists to prevent.
     { label: 'IND AS 19 — Employee Benefits (OCI)', status: 'na', note: 'n/a — requires an actuarial valuation not derivable from a Trial Balance' },
     { label: 'IND AS 116 — Lease Liabilities classified', status: bundle ? 'ok' : 'na', note: bundle ? 'NC/Current split available in Notes' : 'n/a' },
-    { label: 'Audit trail enabled', status: 'ok', note: 'Every write action is logged to audit_trail' },
+    auditTrailItem(dataMode, bundle?.audit_summary),
   ];
 
   return (

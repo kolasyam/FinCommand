@@ -47,6 +47,17 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   );
   const source_currency = (companyRows[0]?.currency || 'INR').toUpperCase();
 
+  // Same real, company-wide signal as /reports/all's audit_summary — needed
+  // here too since the Compliance tab's 3-Year view has no ReportBundle to
+  // read it from (see ReportBundle.audit_summary's comment).
+  const { rows: auditRows } = await query<{ count: string; last_at: string | null }>(
+    `SELECT COUNT(*) AS count, MAX(created_at) AS last_at FROM audit_trail WHERE company_id=$1`, [user.company_id]
+  );
+  const audit_summary = {
+    total_events: parseInt(auditRows[0]?.count || '0', 10),
+    last_event_at: auditRows[0]?.last_at || null,
+  };
+
   const yearType = (yearTypeParam as YearType) || 'FY';
 
   interface CfSummary {
@@ -151,5 +162,5 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     };
   }
 
-  return json({ years: withGrowth, cagr, generated_at: new Date().toISOString(), source_currency });
+  return json({ years: withGrowth, cagr, generated_at: new Date().toISOString(), source_currency, audit_summary });
 });

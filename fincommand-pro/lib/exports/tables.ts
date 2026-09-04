@@ -454,7 +454,7 @@ export function getExportTables(section: string, bundle: ReportBundle, unit: Dis
           ['Profitability', 'Return on Capital Employed (ROCE) %', `${r.profitability.roce}%`],
           ['Leverage', 'Debt to Equity', `${r.leverage.debt_equity}x`],
           ['Leverage', 'Interest Coverage Ratio', `${r.leverage.interest_cover}x`],
-          ['Leverage', 'Debt Service Coverage Ratio (DSCR)', `${r.leverage.dscr}x`],
+          ['Leverage', 'Debt Service Coverage Ratio (DSCR)', r.leverage.dscr !== null ? `${r.leverage.dscr}x` : 'N/A (no debt service)'],
           ['Efficiency', 'Asset Turnover Ratio', `${r.efficiency.asset_turnover}x`],
           ['Efficiency', 'Days Sales Outstanding (DSO)', `${r.efficiency.dso} days`],
           ['Efficiency', 'Days Payable Outstanding (DPO)', `${r.efficiency.dpo} days`],
