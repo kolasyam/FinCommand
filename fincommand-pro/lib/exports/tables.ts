@@ -484,6 +484,40 @@ export function getExportTables(section: string, bundle: ReportBundle, unit: Dis
       }];
     }
 
+    // ── Vendor Expense Report (real Zoho Bills data — see VendorExpenseTab) ──
+    case 'vendor-expense': {
+      const vendors = bundle.vendor_expense || [];
+      const totalSpend = vendors.reduce((s, v) => s + v.amount, 0);
+      return [{
+        title: `Vendor Expense Report — ${fyFullLabel}`,
+        sheetName: 'Vendor Expense',
+        columns: ['Vendor', `Spend (${symbol}${sfx})`, '% of Total', 'Status'],
+        rows: [
+          ...vendors.map(v => [v.vendor, fl(v.amount), `${v.pct_of_total.toFixed(1)}%`, v.status]),
+          ['Total', fl(totalSpend), '100.0%', ''],
+        ],
+      }];
+    }
+
+    // ── Customer Margin Report (real revenue + real direct cost — see
+    //    CustomerMarginTab for exactly what "direct" means and why this is
+    //    not a fully-loaded margin figure) ─────────────────────────────────
+    case 'customer-margin': {
+      const entries = bundle.customer_margin?.entries || [];
+      const tracksCost = bundle.customer_margin?.org_tracks_direct_cost ?? false;
+      const totalRevenue = entries.reduce((s, e) => s + e.revenue, 0);
+      const totalCost = entries.reduce((s, e) => s + e.direct_cost, 0);
+      return [{
+        title: `Customer Margin Report — ${fyFullLabel}${tracksCost ? '' : ' (direct cost not tracked in Zoho for this org — see notes)'}`,
+        sheetName: 'Customer Margin',
+        columns: ['Customer', `Revenue (${symbol}${sfx})`, `Direct Cost (${symbol}${sfx})`, `Direct Margin (${symbol}${sfx})`, 'Margin %'],
+        rows: [
+          ...entries.map(e => [e.customer, fl(e.revenue), e.direct_cost > 0 ? fl(e.direct_cost) : '-', fl(e.direct_margin), e.direct_margin_pct !== null ? `${e.direct_margin_pct}%` : '-']),
+          ['Total', fl(totalRevenue), totalCost > 0 ? fl(totalCost) : '-', fl(totalRevenue - totalCost), totalRevenue > 0 ? `${((1 - totalCost / totalRevenue) * 100).toFixed(1)}%` : '-'],
+        ],
+      }];
+    }
+
     // ── Smart Alerts ────────────────────────────────────────────────────────
     case 'alerts': {
       return [{

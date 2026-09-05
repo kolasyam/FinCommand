@@ -181,3 +181,46 @@ export function mergeCyCustomerRevenue<
 
   return merged;
 }
+
+/**
+ * CY-merge equivalent of mergeCyCustomerRevenue() for real per-vendor spend
+ * rows (see lib/db/queries/reports.ts::loadVendorExpense). Identical
+ * Jan–Mar/Apr–Dec splice logic, just keyed on vendor identity instead of
+ * customer — kept as its own function rather than a shared generic since
+ * the field names genuinely differ (vendor_name/zoho_vendor_id vs
+ * customer_name/zoho_customer_id) and a one-time reuse doesn't justify the
+ * extra abstraction.
+ */
+export function mergeCyVendorExpense<
+  T extends { vendor_name: string; zoho_vendor_id?: string | null; m1: unknown; m2: unknown; m3: unknown; m4: unknown; m5: unknown; m6: unknown; m7: unknown; m8: unknown; m9: unknown; m10: unknown; m11: unknown; m12: unknown }
+>(prevFyRows: T[], nextFyRows: T[]): { vendor_name: string; zoho_vendor_id: string | null; m: number[] }[] {
+  const num = (v: unknown): number => parseFloat(String(v ?? '')) || 0;
+  const keyOf = (r: T) => r.zoho_vendor_id || r.vendor_name;
+
+  const prevMap = new Map<string, T>();
+  const nextMap = new Map<string, T>();
+  for (const row of prevFyRows) prevMap.set(keyOf(row), row);
+  for (const row of nextFyRows) nextMap.set(keyOf(row), row);
+
+  const allKeys = new Set([...prevMap.keys(), ...nextMap.keys()]);
+  const merged: { vendor_name: string; zoho_vendor_id: string | null; m: number[] }[] = [];
+
+  for (const key of allKeys) {
+    const prev = prevMap.get(key) ?? null;
+    const next = nextMap.get(key) ?? null;
+    const template = (prev ?? next)!;
+
+    merged.push({
+      vendor_name: template.vendor_name,
+      zoho_vendor_id: template.zoho_vendor_id ?? null,
+      m: [
+        prev ? num(prev.m10) : 0, prev ? num(prev.m11) : 0, prev ? num(prev.m12) : 0,
+        next ? num(next.m1) : 0, next ? num(next.m2) : 0, next ? num(next.m3) : 0,
+        next ? num(next.m4) : 0, next ? num(next.m5) : 0, next ? num(next.m6) : 0,
+        next ? num(next.m7) : 0, next ? num(next.m8) : 0, next ? num(next.m9) : 0,
+      ],
+    });
+  }
+
+  return merged;
+}

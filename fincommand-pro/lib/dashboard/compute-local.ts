@@ -1,10 +1,10 @@
 import {
   computeMIS, computeBS, computePL, computeNotes, computeTreasury, computeCashFlow, computeRatios, resolvePeriod,
-  customerStatusFromPct,
-  type PeriodParams, type TbLedgerRow, type TopCustomer,
+  customerStatusFromPct, vendorStatusFromPct,
+  type PeriodParams, type TbLedgerRow, type TopCustomer, type VendorExpense, type CustomerMarginResult,
 } from '@/lib/financial/tb-engine';
 import { mergeCyLedgers } from '@/lib/financial/cy-merge';
-import { buildSampleLedgers, SAMPLE_FY_META, SAMPLE_FY_ORDER, SAMPLE_TOP_CUSTOMERS, type SampleFyKey } from '@/lib/financial/sample-data';
+import { buildSampleLedgers, SAMPLE_FY_META, SAMPLE_FY_ORDER, SAMPLE_TOP_CUSTOMERS, SAMPLE_VENDOR_EXPENSE, SAMPLE_CUSTOMER_DIRECT_COST, type SampleFyKey } from '@/lib/financial/sample-data';
 import type { ReportBundle, ThreeYearBundle, ThreeYearEntry } from './types';
 
 /**
@@ -80,6 +80,36 @@ export function computeLocalReportBundle(fyKey: SampleFyKey, params: PeriodParam
       }))
     : [];
 
+  // Same "illustrative demo, scaled to whatever the period actually
+  // computes to" approach as top_customers above — see SAMPLE_VENDOR_EXPENSE
+  // and SAMPLE_CUSTOMER_DIRECT_COST's own doc comments in sample-data.ts.
+  const vendor_expense: VendorExpense[] = mis.totals.totExp > 0
+    ? SAMPLE_VENDOR_EXPENSE.map(v => ({
+        vendor: v.vendor,
+        amount: parseFloat((mis.totals.totExp * v.pct_of_total / 100).toFixed(2)),
+        pct_of_total: v.pct_of_total,
+        status: vendorStatusFromPct(v.pct_of_total),
+      }))
+    : [];
+
+  const customer_margin: CustomerMarginResult = mis.totals.rev > 0
+    ? (() => {
+        const costPctByCustomer = new Map(SAMPLE_CUSTOMER_DIRECT_COST.map(c => [c.customer, c.pct_of_revenue]));
+        const entries = SAMPLE_TOP_CUSTOMERS
+          .map((c) => {
+            const revenue = parseFloat((mis.totals.rev * c.pct_of_total / 100).toFixed(2));
+            const direct_cost = parseFloat((revenue * (costPctByCustomer.get(c.customer) ?? 0) / 100).toFixed(2));
+            const direct_margin = revenue - direct_cost;
+            return {
+              customer: c.customer, revenue, direct_cost, direct_margin,
+              direct_margin_pct: revenue > 0 ? parseFloat(((direct_margin / revenue) * 100).toFixed(1)) : null,
+            };
+          })
+          .sort((a, b) => b.revenue - a.revenue);
+        return { entries, org_tracks_direct_cost: SAMPLE_CUSTOMER_DIRECT_COST.length > 0 };
+      })()
+    : { entries: [], org_tracks_direct_cost: false };
+
   return {
     financial_year: fy,
     cy_next_financial_year: cyNextFy,
@@ -105,6 +135,8 @@ export function computeLocalReportBundle(fyKey: SampleFyKey, params: PeriodParam
     prev_cashflow,
     ratios: computeRatios(computeLedgers, params),
     top_customers,
+    vendor_expense,
+    customer_margin,
     generated_at: new Date().toISOString(),
   };
 }

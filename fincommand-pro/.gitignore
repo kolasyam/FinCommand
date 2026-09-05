@@ -30,6 +30,15 @@ logs/
 # Local uploads (dev-only, never persisted in prod)
 uploads/
 
+# Zoho debug dumps (lib/services/zoho.ts writes these on every sync to
+# verify field-name extraction against a real org's response — they contain
+# REAL customer financial data: bank balances, revenue, vendor/customer
+# names and amounts. Never commit these. zoho_debug_raw.json and
+# zoho_debug_salesbycustomer.json were already tracked in git before this
+# line was added — see this session's summary for the untrack/history
+# remediation this needs.
+zoho_debug_*.json
+
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts

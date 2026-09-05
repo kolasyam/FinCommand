@@ -1,6 +1,7 @@
 import {
   resolvePeriod, monthNet, periodNet, closingBalance, computeMIS, computeBS, computePL, computeTreasury, computeCashFlow, computeRatios,
-  type TbLedgerRow,
+  computeVendorExpense, computeCustomerMargin,
+  type TbLedgerRow, type VendorExpenseInput, type CustomerRevenueInput,
 } from '@/lib/financial/tb-engine';
 
 function makeLedger(overrides: Partial<TbLedgerRow>): TbLedgerRow {
@@ -439,5 +440,79 @@ describe('computeRatios', () => {
     // operating_profit = pbt(48000) + fin(2000) = 50000 (no WC movement, no depreciation/other income)
     // debt service = finance costs(2000) + principal repaid(3000) = 5000
     expect(ratios.leverage.dscr).toBe(10); // 50000 / 5000
+  });
+});
+
+describe('computeVendorExpense', () => {
+  const annual = { periodType: 'annual' as const, yearType: 'FY' as const };
+
+  test('ranks vendors by real spend and flags concentration risk by the same thresholds as customers', () => {
+    const rows: VendorExpenseInput[] = [
+      { vendor_name: 'Vendor A', m1: 10000 },
+      { vendor_name: 'Vendor B', m1: 30000 },
+      { vendor_name: 'Vendor C', m1: 60000 },
+    ];
+    const result = computeVendorExpense(rows, annual);
+    expect(result.map(r => r.vendor)).toEqual(['Vendor C', 'Vendor B', 'Vendor A']); // sorted by spend desc
+    expect(result[0]).toMatchObject({ vendor: 'Vendor C', amount: 60000, pct_of_total: 60, status: 'Concentration Risk' }); // > 30%
+    expect(result[1]).toMatchObject({ vendor: 'Vendor B', amount: 30000, pct_of_total: 30, status: 'Key Vendor' }); // exactly 30% is not > 30
+    expect(result[2]).toMatchObject({ vendor: 'Vendor A', amount: 10000, pct_of_total: 10, status: 'Healthy' });
+  });
+
+  test('returns [] (not a fabricated placeholder) when there is no real vendor-bill data', () => {
+    expect(computeVendorExpense([], annual)).toEqual([]);
+  });
+
+  test('respects the selected period — only sums months within it, real per-month figures', () => {
+    const rows: VendorExpenseInput[] = [
+      { vendor_name: 'Vendor A', m1: 1000, m2: 2000, m4: 5000 }, // m4 = July, outside Q1
+    ];
+    const q1 = computeVendorExpense(rows, { periodType: 'quarterly' as const, period: 'Q1' as const, yearType: 'FY' as const });
+    expect(q1[0].amount).toBe(3000); // m1 + m2 only, m4 excluded
+  });
+});
+
+describe('computeCustomerMargin', () => {
+  const annual = { periodType: 'annual' as const, yearType: 'FY' as const };
+
+  test('merges real revenue and real direct cost per customer, honestly, even when one side is missing', () => {
+    const revenueRows: CustomerRevenueInput[] = [
+      { customer_name: 'Customer X', m1: 50000 }, // revenue only — no billable expense ever tagged to them
+      { customer_name: 'Customer Y', m1: 20000 },
+    ];
+    const costRows: CustomerRevenueInput[] = [
+      { customer_name: 'Customer Y', m1: 5000 }, // real direct cost tagged in Zoho
+      { customer_name: 'Customer Z', m1: 1000 }, // billable expense with no matching revenue this period
+    ];
+    const result = computeCustomerMargin(revenueRows, costRows, annual);
+    expect(result.org_tracks_direct_cost).toBe(true); // at least one real nonzero direct cost exists
+
+    const byName = Object.fromEntries(result.entries.map(e => [e.customer, e]));
+    expect(byName['Customer X']).toMatchObject({ revenue: 50000, direct_cost: 0, direct_margin: 50000, direct_margin_pct: 100 });
+    expect(byName['Customer Y']).toMatchObject({ revenue: 20000, direct_cost: 5000, direct_margin: 15000, direct_margin_pct: 75 });
+    // Customer Z has cost but no revenue this period — real numbers, not hidden
+    expect(byName['Customer Z']).toMatchObject({ revenue: 0, direct_cost: 1000, direct_margin: -1000 });
+    expect(byName['Customer Z'].direct_margin_pct).toBeNull(); // nothing to divide by — not a fabricated 0%/Infinity
+    // Sorted by revenue descending
+    expect(result.entries.map(e => e.customer)).toEqual(['Customer X', 'Customer Y', 'Customer Z']);
+  });
+
+  test('org_tracks_direct_cost is false — not a fabricated 100% margin claim — when Zoho has no billable-to-customer tagging at all', () => {
+    // Regression test for the real finding this feature was built around:
+    // confirmed empirically that a real synced company had 0 of 780 Zoho
+    // expenses tagged billable-to-customer. computeCustomerMargin() must
+    // surface that as a flag the UI can disclose, not silently show every
+    // customer at 100% margin as if cost were genuinely zero.
+    const revenueRows: CustomerRevenueInput[] = [{ customer_name: 'Customer X', m1: 50000 }];
+    const costRows: CustomerRevenueInput[] = []; // this org's real state today
+    const result = computeCustomerMargin(revenueRows, costRows, annual);
+    expect(result.org_tracks_direct_cost).toBe(false);
+    expect(result.entries[0]).toMatchObject({ revenue: 50000, direct_cost: 0, direct_margin: 50000, direct_margin_pct: 100 });
+  });
+
+  test('returns empty entries and org_tracks_direct_cost=false when there is no real data at all', () => {
+    const result = computeCustomerMargin([], [], annual);
+    expect(result.entries).toEqual([]);
+    expect(result.org_tracks_direct_cost).toBe(false);
   });
 });

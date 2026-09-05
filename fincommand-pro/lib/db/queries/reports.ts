@@ -54,6 +54,73 @@ export async function loadCustomerRevenue(companyId: string, fyId: string): Prom
   }
 }
 
+export interface VendorExpenseRow {
+  id: string;
+  vendor_name: string;
+  zoho_vendor_id: string | null;
+  m1: Num; m2: Num; m3: Num; m4: Num; m5: Num; m6: Num;
+  m7: Num; m8: Num; m9: Num; m10: Num; m11: Num; m12: Num;
+}
+
+/**
+ * Loads real per-vendor spend for the current upload — populated only by
+ * Zoho sync (via /bills). Empty for Excel-uploaded Trial Balances, which
+ * carry no vendor dimension — callers must treat an empty array as "not
+ * available", never fall back to fabricated data. Gracefully returns [] if
+ * the table doesn't exist yet (pre-migration DB) instead of throwing.
+ */
+export async function loadVendorExpense(companyId: string, fyId: string): Promise<VendorExpenseRow[]> {
+  try {
+    const { rows } = await query<VendorExpenseRow>(
+      `SELECT v.id, v.vendor_name, v.zoho_vendor_id,
+              v.m1,v.m2,v.m3,v.m4,v.m5,v.m6,v.m7,v.m8,v.m9,v.m10,v.m11,v.m12
+       FROM tb_vendor_expense v
+       JOIN tb_uploads u ON u.id = v.upload_id
+       WHERE v.company_id = $1 AND v.financial_year_id = $2 AND u.is_current = TRUE
+       ORDER BY v.vendor_name`,
+      [companyId, fyId]
+    );
+    return rows;
+  } catch (err) {
+    if ((err as Error).message?.includes('does not exist')) return [];
+    throw err;
+  }
+}
+
+export interface CustomerCostRow {
+  id: string;
+  customer_name: string;
+  zoho_customer_id: string | null;
+  m1: Num; m2: Num; m3: Num; m4: Num; m5: Num; m6: Num;
+  m7: Num; m8: Num; m9: Num; m10: Num; m11: Num; m12: Num;
+}
+
+/**
+ * Loads real per-customer DIRECT cost for the current upload — populated
+ * only from Zoho expenses explicitly marked billable and assigned to a
+ * customer (see tb_customer_cost's schema comment: most orgs never use this
+ * tagging at all). Empty is a real fact about the org's Zoho usage, not a
+ * failure — callers must disclose that honestly, never treat it as zero
+ * cost. Gracefully returns [] if the table doesn't exist yet.
+ */
+export async function loadCustomerCost(companyId: string, fyId: string): Promise<CustomerCostRow[]> {
+  try {
+    const { rows } = await query<CustomerCostRow>(
+      `SELECT c.id, c.customer_name, c.zoho_customer_id,
+              c.m1,c.m2,c.m3,c.m4,c.m5,c.m6,c.m7,c.m8,c.m9,c.m10,c.m11,c.m12
+       FROM tb_customer_cost c
+       JOIN tb_uploads u ON u.id = c.upload_id
+       WHERE c.company_id = $1 AND c.financial_year_id = $2 AND u.is_current = TRUE
+       ORDER BY c.customer_name`,
+      [companyId, fyId]
+    );
+    return rows;
+  } catch (err) {
+    if ((err as Error).message?.includes('does not exist')) return [];
+    throw err;
+  }
+}
+
 /** Verifies FY access — mirrors reports.js getFY(). */
 export async function getFY(companyId: string, fyId: string): Promise<FinancialYearRow | null> {
   const { rows } = await query<FinancialYearRow>(

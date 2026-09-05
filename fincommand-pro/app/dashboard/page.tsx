@@ -19,6 +19,8 @@ import { TreasuryTab } from '@/components/dashboard/tabs/TreasuryTab';
 import { RatiosTab } from '@/components/dashboard/tabs/RatiosTab';
 import { ScenarioTab } from '@/components/dashboard/tabs/ScenarioTab';
 import { WorkingCapitalTab } from '@/components/dashboard/tabs/WorkingCapitalTab';
+import { CustomerMarginTab } from '@/components/dashboard/tabs/CustomerMarginTab';
+import { VendorExpenseTab } from '@/components/dashboard/tabs/VendorExpenseTab';
 import { AlertsTab } from '@/components/dashboard/tabs/AlertsTab';
 import { ComplianceTab } from '@/components/dashboard/tabs/ComplianceTab';
 import { BoardPackTab } from '@/components/dashboard/tabs/BoardPackTab';
@@ -208,6 +210,8 @@ function DashboardShell() {
       case 'ratios': return <RatiosTab />;
       case 'scenario': return <ScenarioTab />;
       case 'wc': return <WorkingCapitalTab />;
+      case 'customer-margin': return <CustomerMarginTab />;
+      case 'vendor-expense': return <VendorExpenseTab />;
       case 'alerts': return <AlertsTab />;
       case 'compliance': return <ComplianceTab />;
       case 'boardpack': return <BoardPackTab />;

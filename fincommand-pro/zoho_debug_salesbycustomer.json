@@ -16,7 +16,7 @@
       "sales",
       "page_context"
     ],
-    "written_at": "2026-09-03T13:13:32.216Z"
+    "written_at": "2026-09-05T07:45:07.983Z"
   },
   "raw_response": {
     "code": 0,
@@ -58,7 +58,7 @@
       "to_date": "2025-04-30",
       "previous_date_range": [],
       "is_for_date_range": "true",
-      "last_accessed_time_formatted": "03/09/2026 06:43 PM",
+      "last_accessed_time_formatted": "05/09/2026 01:15 PM",
       "select_columns": [
         {
           "field": "customer_name",

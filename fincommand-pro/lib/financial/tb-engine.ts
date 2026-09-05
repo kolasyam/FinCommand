@@ -1032,3 +1032,149 @@ export function computeTopCustomers(
   return computeTopCustomersFromLedgers(ledgers, periodParams, totalRevenue);
 }
 
+// ── Vendor Expense Report ───────────────────────────────────────────────
+// Real per-vendor spend, sourced entirely from Zoho Bills (lib/services/
+// zoho.ts::syncFromZoho() → tb_vendor_expense). No ledger-estimate fallback
+// tier exists here the way computeTopCustomers() has one for revenue —
+// there's no equivalent "one ledger per vendor" convention to fall back to,
+// so an org with no Zoho vendor-bill data simply gets [], honestly, rather
+// than an invented split.
+
+export interface VendorExpense {
+  vendor: string;
+  /** Real rupees for the selected period — same convention as TopCustomer.revenue_cr, but NOT pre-divided into Crores (vendor spend is typically much smaller than total company revenue, so a fixed Crore scale would round most vendors to 0.00). */
+  amount: number;
+  /** % of total vendor spend for the selected period (not % of company revenue/expenses). */
+  pct_of_total: number;
+  status: 'Healthy' | 'Key Vendor' | 'Concentration Risk';
+}
+
+/** Same concentration-risk thresholds as customerStatusFromPct(), with vendor-appropriate labels — "Key Account" reads oddly applied to a vendor. */
+export function vendorStatusFromPct(pct: number): VendorExpense['status'] {
+  return pct > 30 ? 'Concentration Risk' : pct > 15 ? 'Key Vendor' : 'Healthy';
+}
+
+export interface VendorExpenseInput {
+  vendor_name: string;
+  m1?: Num; m2?: Num; m3?: Num; m4?: Num; m5?: Num; m6?: Num;
+  m7?: Num; m8?: Num; m9?: Num; m10?: Num; m11?: Num; m12?: Num;
+  m?: number[];
+}
+
+/**
+ * Ranks vendors by real spend for the selected period. Matches
+ * lib/db/queries/reports.ts::VendorExpenseRow (FY mode) or the { m:
+ * number[12] } shape from cy-merge.ts::mergeCyVendorExpense (CY mode).
+ * Returns [] when there's no real vendor-bill data for this company/period
+ * — never fabricated.
+ */
+export function computeVendorExpense(
+  vendorRows: VendorExpenseInput[],
+  periodParams: PeriodParams
+): VendorExpense[] {
+  if (!vendorRows.length) return [];
+  const { plIndices } = resolvePeriod(periodParams);
+  const items = vendorRows
+    .map((row) => {
+      const months = row.m ?? Array.from({ length: 12 }, (_, i) => n(row[`m${i + 1}` as keyof VendorExpenseInput] as Num));
+      const amount = plIndices.reduce((sum, mi) => sum + (months[mi] || 0), 0);
+      return { vendor: row.vendor_name, amount };
+    })
+    .filter((i) => i.amount > 0);
+
+  const totalSpend = items.reduce((s, i) => s + i.amount, 0);
+  if (totalSpend <= 0) return [];
+
+  return items
+    .sort((a, b) => b.amount - a.amount)
+    .map((i) => {
+      const pct = parseFloat(((i.amount / totalSpend) * 100).toFixed(1));
+      return { vendor: i.vendor, amount: i.amount, pct_of_total: pct, status: vendorStatusFromPct(pct) };
+    });
+}
+
+// ── Customer Margin Report ──────────────────────────────────────────────
+// Combines real per-customer revenue (tb_customer_revenue, already used by
+// computeTopCustomers above) with real per-customer DIRECT cost
+// (tb_customer_cost — populated only from Zoho expenses explicitly marked
+// billable to a customer; see that table's schema comment). This is
+// deliberately NOT a fully-loaded margin: indirect/shared costs (most of a
+// typical company's COGS and opex) are never allocated to a customer here,
+// because Zoho doesn't tell us how to attribute them without guessing.
+// `org_tracks_direct_cost` tells the caller whether ANY customer in this
+// company has ever had direct cost data at all — false means "margin" below
+// is really just "revenue, 0 cost recorded" for every row, which the UI
+// must disclose prominently rather than let read as a real 100% margin.
+
+export interface CustomerMarginEntry {
+  customer: string;
+  /** Real rupees, selected period. */
+  revenue: number;
+  /** Real rupees, selected period — DIRECT cost only (Zoho billable-expense tagging). 0 when this customer had no tagged expense in the period, which may just mean the org doesn't track this, not that the customer was costless. */
+  direct_cost: number;
+  /** revenue - direct_cost. Only as complete as direct_cost is — see org_tracks_direct_cost. */
+  direct_margin: number;
+  /** null when revenue <= 0 (nothing to divide by, not a real 0%/undefined margin). */
+  direct_margin_pct: number | null;
+}
+
+export interface CustomerMarginResult {
+  entries: CustomerMarginEntry[];
+  /** True only if at least one customer, anywhere in this company's synced history for this period, had nonzero direct_cost. False is the expected, common case — most Zoho orgs never tag expenses to a customer — and must be surfaced to the user, never silently treated as "every customer is 100% margin". */
+  org_tracks_direct_cost: boolean;
+}
+
+/**
+ * Real per-customer revenue and direct cost for the selected period, merged
+ * by customer name (the same join key tb_customer_revenue/tb_customer_cost
+ * both use). customerCostRows uses the exact same input shape as
+ * CustomerRevenueInput (see lib/db/queries/reports.ts::CustomerCostRow /
+ * cy-merge.ts's merged { m: number[12] } shape) — reused rather than
+ * duplicated since the two tables are structurally identical.
+ */
+export function computeCustomerMargin(
+  customerRevenueRows: CustomerRevenueInput[],
+  customerCostRows: CustomerRevenueInput[],
+  periodParams: PeriodParams
+): CustomerMarginResult {
+  const { plIndices } = resolvePeriod(periodParams);
+  const periodTotal = (row: CustomerRevenueInput): number => {
+    const months = row.m ?? Array.from({ length: 12 }, (_, i) => n(row[`m${i + 1}` as keyof CustomerRevenueInput] as Num));
+    return plIndices.reduce((sum, mi) => sum + (months[mi] || 0), 0);
+  };
+
+  const byCustomer = new Map<string, { revenue: number; cost: number }>();
+  customerRevenueRows.forEach((row) => {
+    const key = row.customer_name;
+    if (!byCustomer.has(key)) byCustomer.set(key, { revenue: 0, cost: 0 });
+    byCustomer.get(key)!.revenue += periodTotal(row);
+  });
+  customerCostRows.forEach((row) => {
+    const key = row.customer_name;
+    if (!byCustomer.has(key)) byCustomer.set(key, { revenue: 0, cost: 0 });
+    byCustomer.get(key)!.cost += periodTotal(row);
+  });
+
+  // Whether this org tracks direct cost AT ALL is judged over every synced
+  // customer-cost row handed in, not just ones with matching revenue — a
+  // single genuinely-tagged expense anywhere is enough to say "this org uses
+  // the feature", even before this period's revenue rows are considered.
+  const orgTracksDirectCost = customerCostRows.some((row) => periodTotal(row) > 0);
+
+  const entries: CustomerMarginEntry[] = Array.from(byCustomer.entries())
+    .filter(([, v]) => v.revenue > 0 || v.cost > 0)
+    .map(([customer, v]) => {
+      const margin = v.revenue - v.cost;
+      return {
+        customer,
+        revenue: v.revenue,
+        direct_cost: v.cost,
+        direct_margin: margin,
+        direct_margin_pct: v.revenue > 0 ? parseFloat(((margin / v.revenue) * 100).toFixed(1)) : null,
+      };
+    })
+    .sort((a, b) => b.revenue - a.revenue);
+
+  return { entries, org_tracks_direct_cost: orgTracksDirectCost };
+}
+

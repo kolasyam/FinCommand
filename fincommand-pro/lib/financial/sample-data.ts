@@ -57,6 +57,38 @@ export const SAMPLE_TOP_CUSTOMERS: { customer: string; pct_of_total: number }[] 
   { customer: 'GovProject A', pct_of_total: 6.0 },
 ];
 
+/**
+ * Illustrative vendor mix for the Vendor Expense Report tab in sample mode
+ * only. Live mode's equivalent (computeVendorExpense() in tb-engine.ts)
+ * uses real Zoho Bills data and honestly returns [] when none exists —
+ * percentages here are applied to the period's total expenses (see
+ * compute-local.ts), same scaling convention as SAMPLE_TOP_CUSTOMERS above.
+ */
+export const SAMPLE_VENDOR_EXPENSE: { vendor: string; pct_of_total: number }[] = [
+  { vendor: 'CloudHost Infrastructure Pvt Ltd', pct_of_total: 28.0 },
+  { vendor: 'Prime Staffing Solutions', pct_of_total: 22.0 },
+  { vendor: 'Metro Office Realty', pct_of_total: 18.0 },
+  { vendor: 'Apex Legal & Compliance', pct_of_total: 14.0 },
+  { vendor: 'BlueWave Marketing Agency', pct_of_total: 10.0 },
+  { vendor: 'Sundry Vendors (multiple, below reporting threshold)', pct_of_total: 8.0 },
+];
+
+/**
+ * Illustrative direct-cost tagging for the Customer Margin Report tab, in
+ * sample mode only — deliberately covers only 2 of the 5 SAMPLE_TOP_CUSTOMERS
+ * (as a fraction of that customer's own revenue), demonstrating what an org
+ * that DOES use Zoho's billable-expense-to-customer tagging looks like. Most
+ * real orgs never use this tagging at all (see tb_customer_cost's schema
+ * comment) — live mode's equivalent is computeCustomerMargin() in
+ * tb-engine.ts, which honestly reports org_tracks_direct_cost=false when
+ * that's the real, common case, unlike this demo's deliberately-illustrated
+ * happy path.
+ */
+export const SAMPLE_CUSTOMER_DIRECT_COST: { customer: string; pct_of_revenue: number }[] = [
+  { customer: 'TechCorp Global', pct_of_revenue: 22.0 },
+  { customer: 'FinServ India', pct_of_revenue: 18.0 },
+];
+
 const SCALE: Record<SampleFyKey, number> = { FY25: 1, FY24: 0.78, FY23: 0.635 };
 
 function dr(monthly: number[]): number[] { return monthly; }

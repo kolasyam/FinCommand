@@ -1,5 +1,6 @@
 import type {
   MISResult, BSResult, PLResult, AggregatedNote, TreasuryResult, CashFlowResult, RatiosResult, PeriodParams, TopCustomer,
+  VendorExpense, CustomerMarginResult,
 } from '@/lib/financial/tb-engine';
 
 export interface FyLike {
@@ -38,6 +39,10 @@ export interface ReportBundle {
   prev_cashflow?: CashFlowResult | null;
   ratios: RatiosResult;
   top_customers?: TopCustomer[];
+  /** Real per-vendor spend for the selected period (Zoho Bills only — see VendorExpense's own doc comment). Undefined/[] when unavailable (Excel-uploaded TB, or no Zoho bill data synced yet) — VendorExpenseTab must show that honestly, not a mock table. */
+  vendor_expense?: VendorExpense[];
+  /** Real per-customer revenue + DIRECT cost for the selected period (see CustomerMarginResult's own doc comment for exactly what "direct" means and why this is not a fully-loaded margin). */
+  customer_margin?: CustomerMarginResult;
   /** Real, company-wide audit_trail activity — drives the Compliance tab's "Audit trail enabled" check. Undefined in sample mode (there's no real company to have an audit trail for); ComplianceTab treats that the same as dataMode !== 'api'. */
   audit_summary?: { total_events: number; last_event_at: string | null };
   generated_at: string;

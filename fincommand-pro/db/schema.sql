@@ -207,6 +207,69 @@ CREATE INDEX IF NOT EXISTS idx_tb_customer_revenue_upload  ON tb_customer_revenu
 CREATE INDEX IF NOT EXISTS idx_tb_customer_revenue_company ON tb_customer_revenue(company_id, financial_year_id);
 
 -- ─────────────────────────────────────────────
+--  TB VENDOR EXPENSE (real per-vendor spend, source-agnostic — currently
+--  populated only by Zoho sync via /bills; empty for Excel-uploaded Trial
+--  Balances, which carry no vendor dimension). One row per vendor per
+--  upload. Feeds the Vendor Expense Report tab — same shape/conventions as
+--  tb_customer_revenue above.
+-- ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS tb_vendor_expense (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  upload_id         UUID REFERENCES tb_uploads(id) ON DELETE CASCADE,
+  company_id        UUID REFERENCES companies(id) ON DELETE CASCADE,
+  financial_year_id UUID REFERENCES financial_years(id),
+  zoho_vendor_id    VARCHAR(100),
+  vendor_name       VARCHAR(300) NOT NULL,
+  -- Monthly spend (single signed amount per month, from real Zoho Bill
+  -- totals in the org's base currency — a bill in a foreign currency is
+  -- excluded rather than mis-summed; see extractVendorBills() in zoho.ts).
+  -- m1=Apr(FY)/Jan(CY) ... m12=Mar(FY)/Dec(CY), same convention as tb_ledgers.
+  m1  NUMERIC(18,2) DEFAULT 0,  m2  NUMERIC(18,2) DEFAULT 0,
+  m3  NUMERIC(18,2) DEFAULT 0,  m4  NUMERIC(18,2) DEFAULT 0,
+  m5  NUMERIC(18,2) DEFAULT 0,  m6  NUMERIC(18,2) DEFAULT 0,
+  m7  NUMERIC(18,2) DEFAULT 0,  m8  NUMERIC(18,2) DEFAULT 0,
+  m9  NUMERIC(18,2) DEFAULT 0,  m10 NUMERIC(18,2) DEFAULT 0,
+  m11 NUMERIC(18,2) DEFAULT 0,  m12 NUMERIC(18,2) DEFAULT 0,
+  created_at        TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_tb_vendor_expense_upload  ON tb_vendor_expense(upload_id);
+CREATE INDEX IF NOT EXISTS idx_tb_vendor_expense_company ON tb_vendor_expense(company_id, financial_year_id);
+
+-- ─────────────────────────────────────────────
+--  TB CUSTOMER COST (real per-customer DIRECT cost — populated only from
+--  Zoho expenses explicitly marked "Billable" and assigned to a customer
+--  (Zoho's own billable-expense-to-customer field). Most Zoho orgs never
+--  use this tagging at all — confirmed empirically on the first company
+--  synced with this feature: 0 of 780 real expenses for the year were
+--  tagged. An empty/all-zero table for a company therefore means "this org
+--  doesn't track direct per-customer cost in Zoho", not "customers cost
+--  nothing" — consumers (computeCustomerMargin in tb-engine.ts,
+--  CustomerMarginTab.tsx) must disclose that plainly and must NEVER treat
+--  zero direct cost as a real 100% margin.
+-- ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS tb_customer_cost (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  upload_id         UUID REFERENCES tb_uploads(id) ON DELETE CASCADE,
+  company_id        UUID REFERENCES companies(id) ON DELETE CASCADE,
+  financial_year_id UUID REFERENCES financial_years(id),
+  zoho_customer_id  VARCHAR(100),
+  customer_name     VARCHAR(300) NOT NULL,
+  -- Monthly direct cost, same m1..m12 convention as tb_customer_revenue —
+  -- deliberately the same shape so the two can be matched up per customer.
+  m1  NUMERIC(18,2) DEFAULT 0,  m2  NUMERIC(18,2) DEFAULT 0,
+  m3  NUMERIC(18,2) DEFAULT 0,  m4  NUMERIC(18,2) DEFAULT 0,
+  m5  NUMERIC(18,2) DEFAULT 0,  m6  NUMERIC(18,2) DEFAULT 0,
+  m7  NUMERIC(18,2) DEFAULT 0,  m8  NUMERIC(18,2) DEFAULT 0,
+  m9  NUMERIC(18,2) DEFAULT 0,  m10 NUMERIC(18,2) DEFAULT 0,
+  m11 NUMERIC(18,2) DEFAULT 0,  m12 NUMERIC(18,2) DEFAULT 0,
+  created_at        TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_tb_customer_cost_upload  ON tb_customer_cost(upload_id);
+CREATE INDEX IF NOT EXISTS idx_tb_customer_cost_company ON tb_customer_cost(company_id, financial_year_id);
+
+-- ─────────────────────────────────────────────
 --  LEDGER MASTER (company-specific + global pre-seeded)
 -- ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS ledger_master (

@@ -11,6 +11,8 @@ export const TABS: { id: string; label: string; badge?: string }[] = [
   { id: 'ratios', label: 'Ratio Analysis' },
   { id: 'scenario', label: 'Scenario Planner' },
   { id: 'wc', label: 'Working Capital' },
+  { id: 'customer-margin', label: 'Customer Margin', badge: 'Zoho' },
+  { id: 'vendor-expense', label: 'Vendor Expense', badge: 'Zoho' },
   { id: 'alerts', label: 'Smart Alerts' },
   { id: 'compliance', label: 'Compliance' },
   { id: 'boardpack', label: 'Board Pack' },

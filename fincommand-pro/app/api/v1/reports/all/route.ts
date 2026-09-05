@@ -1,15 +1,15 @@
 import type { NextRequest } from 'next/server';
 import { authenticate } from '@/lib/auth/permissions';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
-import { getFY, getPreviousFY, getNextFY, loadLedgers, loadCustomerRevenue, parsePeriodParams } from '@/lib/db/queries/reports';
+import { getFY, getPreviousFY, getNextFY, loadLedgers, loadCustomerRevenue, loadVendorExpense, loadCustomerCost, parsePeriodParams } from '@/lib/db/queries/reports';
 import { query } from '@/lib/db/neon';
 import {
   computeMIS, computeBS, computePL, computeNotes,
   computeTreasury, computeCashFlow, computeRatios, resolvePeriod,
-  computeTopCustomers,
-  type AggregatedNote, type MISResult, type TbLedgerRow, type CustomerRevenueInput, type TreasuryResult,
+  computeTopCustomers, computeVendorExpense, computeCustomerMargin,
+  type AggregatedNote, type MISResult, type TbLedgerRow, type CustomerRevenueInput, type VendorExpenseInput, type TreasuryResult,
 } from '@/lib/financial/tb-engine';
-import { mergeCyLedgers, mergeCyCustomerRevenue } from '@/lib/financial/cy-merge';
+import { mergeCyLedgers, mergeCyCustomerRevenue, mergeCyVendorExpense } from '@/lib/financial/cy-merge';
 import { getCachedReport, setCachedReport } from '@/lib/cache/report-cache';
 
 export const runtime = 'nodejs';
@@ -32,11 +32,14 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   }
 
   // Parallel fetch: get active FY metadata, Trial Balance ledgers, and real
-  // per-customer revenue (Zoho-sourced; [] for Excel uploads) concurrently
-  const [fy, ledgers, customerRevRows] = await Promise.all([
+  // per-customer revenue/cost and per-vendor spend (all Zoho-sourced; [] for
+  // Excel uploads) concurrently
+  const [fy, ledgers, customerRevRows, vendorExpenseRows, customerCostRows] = await Promise.all([
     getFY(user.company_id, fyId),
     loadLedgers(user.company_id, fyId),
     loadCustomerRevenue(user.company_id, fyId),
+    loadVendorExpense(user.company_id, fyId),
+    loadCustomerCost(user.company_id, fyId),
   ]);
 
   if (!fy) return json({ error: 'Financial year not found' }, { status: 404 });
@@ -45,6 +48,8 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   const isCY = params.yearType === 'CY';
   let computeLedgers: TbLedgerRow[] = ledgers;
   let computeCustomerRev: CustomerRevenueInput[] = customerRevRows;
+  let computeVendorExp: VendorExpenseInput[] = vendorExpenseRows;
+  let computeCustomerCost: CustomerRevenueInput[] = customerCostRows;
   let cyNextFy = null;
   // Which FY's end_date determines the displayed "CYyyyy" label (cyYearFromFy
   // reads end_date's year) — normally the selected `fy` (it plays the
@@ -75,24 +80,34 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
 
     if (nextFy) {
       cyNextFy = nextFy;
-      const [nextFyLedgers, nextFyCustomerRev] = await Promise.all([
+      const [nextFyLedgers, nextFyCustomerRev, nextFyVendorExp, nextFyCustomerCost] = await Promise.all([
         loadLedgers(user.company_id, nextFy.id),
         loadCustomerRevenue(user.company_id, nextFy.id),
+        loadVendorExpense(user.company_id, nextFy.id),
+        loadCustomerCost(user.company_id, nextFy.id),
       ]);
       computeLedgers = mergeCyLedgers(ledgers, nextFyLedgers);
       computeCustomerRev = mergeCyCustomerRevenue(customerRevRows, nextFyCustomerRev);
+      computeVendorExp = mergeCyVendorExpense(vendorExpenseRows, nextFyVendorExp);
+      computeCustomerCost = mergeCyCustomerRevenue(customerCostRows, nextFyCustomerCost);
     } else if (prevFy) {
-      const [prevLedgers, prevCustomerRev] = await Promise.all([
+      const [prevLedgers, prevCustomerRev, prevVendorExp, prevCustomerCost] = await Promise.all([
         loadLedgers(user.company_id, prevFy.id),
         loadCustomerRevenue(user.company_id, prevFy.id),
+        loadVendorExpense(user.company_id, prevFy.id),
+        loadCustomerCost(user.company_id, prevFy.id),
       ]);
       computeLedgers = mergeCyLedgers(prevLedgers, ledgers);
       computeCustomerRev = mergeCyCustomerRevenue(prevCustomerRev, customerRevRows);
+      computeVendorExp = mergeCyVendorExpense(prevVendorExp, vendorExpenseRows);
+      computeCustomerCost = mergeCyCustomerRevenue(prevCustomerCost, customerCostRows);
       cyLabelFy = prevFy;
       cyNextFy = fy; // `fy` is now supplying Apr–Dec, i.e. playing the "next FY" role relative to cyLabelFy
     } else {
       computeLedgers = mergeCyLedgers(ledgers, []);
       computeCustomerRev = mergeCyCustomerRevenue(customerRevRows, []);
+      computeVendorExp = mergeCyVendorExpense(vendorExpenseRows, []);
+      computeCustomerCost = mergeCyCustomerRevenue(customerCostRows, []);
     }
   } else {
     const prevFy = await getPreviousFY(user.company_id, fy);
@@ -136,6 +151,8 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     ),
   ]);
   const top_customers = computeTopCustomers(computeCustomerRev, computeLedgers, params, mis.totals.rev);
+  const vendor_expense = computeVendorExpense(computeVendorExp, params);
+  const customer_margin = computeCustomerMargin(computeCustomerRev, computeCustomerCost, params);
   // Source Currency (the currency the Trial Balance ledgers were actually
   // recorded in) — real, per-company (auto-detected from the connected
   // Zoho org where available; see fetchAndStoreZohoOrgCurrency()), never
@@ -165,6 +182,8 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     prev_cashflow,
     ratios,
     top_customers,
+    vendor_expense,
+    customer_margin,
     audit_summary,
     generated_at: new Date().toISOString(),
   };
