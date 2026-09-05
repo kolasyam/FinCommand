@@ -44,6 +44,12 @@ export function VendorExpenseTab() {
   const totalSpend = vendors.reduce((s, v) => s + v.amount, 0);
   const topVendor = vendors[0];
   const concentrationCount = vendors.filter(v => v.status === 'Concentration Risk').length;
+  // Real Zoho contact master data (email/phone/GSTIN/live outstanding
+  // payable) — only some, none, or all vendors may have a matching synced
+  // contact record; the column only renders at all once at least one does,
+  // rather than showing an always-empty column for a company that's never
+  // synced contacts.
+  const hasContactData = vendors.some(v => v.contact);
 
   return (
     <div>
@@ -72,25 +78,42 @@ export function VendorExpenseTab() {
                 <thead>
                   <tr>
                     <th>Vendor</th>
+                    {hasContactData && <th>Contact</th>}
                     <th className="num">Spend ({unitSfx})</th>
                     <th className="num">% of Total</th>
                     <th>Status</th>
+                    {hasContactData && <th className="num">Outstanding Payable</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {vendors.map(v => (
                     <tr key={v.vendor}>
-                      <td>{v.vendor}</td>
+                      <td>
+                        {v.vendor}
+                        {v.contact?.gstNo && <span style={{ display: 'block', fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{v.contact.gstNo}</span>}
+                      </td>
+                      {hasContactData && (
+                        <td style={{ fontSize: 11, color: 'var(--text2)' }}>
+                          {v.contact?.email && <div>{v.contact.email}</div>}
+                          {v.contact?.phone && <div style={{ color: 'var(--text3)' }}>{v.contact.phone}</div>}
+                          {!v.contact && <span style={{ color: 'var(--text3)' }}>—</span>}
+                        </td>
+                      )}
                       <td className={`num ${numTone(v.amount)}`}>{fl(v.amount)}</td>
                       <td className="num">{v.pct_of_total.toFixed(1)}%</td>
                       <td><span className={`pill ${STATUS_PILL_CLASS[v.status] || 'pgy'}`}>{v.status}</span></td>
+                      {hasContactData && (
+                        <td className="num">{v.contact?.outstandingBalance != null ? fl(v.contact.outstandingBalance) : '—'}</td>
+                      )}
                     </tr>
                   ))}
                   <tr className="tot-row">
                     <td>Total</td>
+                    {hasContactData && <td></td>}
                     <td className="num">{fl(totalSpend)}</td>
                     <td className="num">100.0%</td>
                     <td></td>
+                    {hasContactData && <td className="num">{fl(vendors.reduce((s, v) => s + (v.contact?.outstandingBalance || 0), 0))}</td>}
                   </tr>
                 </tbody>
               </table>
@@ -98,6 +121,7 @@ export function VendorExpenseTab() {
           </div>
           <div className="info-bar">
             Real data from Zoho Bills — status thresholds: <strong>Concentration Risk</strong> &gt; 30% of total spend, <strong>Key Vendor</strong> &gt; 15%. Bills in a currency other than this company&apos;s base currency are excluded rather than mis-summed (see zoho.ts::extractVendorBills).
+            {hasContactData && ' Contact details and Outstanding Payable are Zoho’s own live contact record (real-time balance, independent of the period selected above), synced separately from period spend.'}
           </div>
         </>
       )}

@@ -1040,6 +1040,23 @@ export function computeTopCustomers(
 // so an org with no Zoho vendor-bill data simply gets [], honestly, rather
 // than an invented split.
 
+/**
+ * Real Zoho contact master-data enrichment (email/phone/GSTIN/live
+ * outstanding balance) — attached by the API route via a DB join against
+ * zoho_contacts (lib/services/zoho.ts::syncZohoContacts), never computed
+ * by the pure functions in this file. Absent (undefined, not zeroed-out
+ * fields) when no synced contact record matches this vendor/customer's
+ * name — e.g. an Excel-uploaded TB with no Zoho connection at all, or a
+ * ledger-derived name that doesn't exactly match Zoho's contact directory.
+ */
+export interface ContactInfo {
+  email: string | null;
+  phone: string | null;
+  gstNo: string | null;
+  /** Zoho's own live running balance for this contact, base-currency — real, independent of whatever this report's selected period/FY is. */
+  outstandingBalance: number | null;
+}
+
 export interface VendorExpense {
   vendor: string;
   /** Real rupees for the selected period — same convention as TopCustomer.revenue_cr, but NOT pre-divided into Crores (vendor spend is typically much smaller than total company revenue, so a fixed Crore scale would round most vendors to 0.00). */
@@ -1047,6 +1064,7 @@ export interface VendorExpense {
   /** % of total vendor spend for the selected period (not % of company revenue/expenses). */
   pct_of_total: number;
   status: 'Healthy' | 'Key Vendor' | 'Concentration Risk';
+  contact?: ContactInfo;
 }
 
 /** Same concentration-risk thresholds as customerStatusFromPct(), with vendor-appropriate labels — "Key Account" reads oddly applied to a vendor. */
@@ -1116,6 +1134,7 @@ export interface CustomerMarginEntry {
   direct_margin: number;
   /** null when revenue <= 0 (nothing to divide by, not a real 0%/undefined margin). */
   direct_margin_pct: number | null;
+  contact?: ContactInfo;
 }
 
 export interface CustomerMarginResult {

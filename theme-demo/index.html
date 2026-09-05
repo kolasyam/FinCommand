@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="corporate">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinCommand Pro Theme Gallery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   TOKENS — one shape, six named instances. Only these change per theme;
+   every component below is written against the variable names, never a
+   literal hex, so switching [data-theme] on <html> reskins the whole app.
+   ══════════════════════════════════════════════════════════════════════ */
+:root{
+  --bg:#ffffff; --bg2:#f7f8fa; --bg3:#eef0f4;
+  --text:#111827; --text2:#6b7280; --text3:#9ca3af;
+  --border:#e5e7eb; --border2:#d1d5db;
+  --accent:#185fa5; --accent-l:#e6f1fb; --accent-d:#0c447c;
+  --warn:#8a5a12; --warn-l:#faeeda;
+  --info:#3c3489; --info-l:#eeedfe;
+  --good:#157a3d; --good-l:#e1f5ee;
+  --bad:#b7291f; --bad-l:#faece7;
+  --rail:#0f1826; --rail2:#0c1420; --rail-text:#c7d0de; --rail-text-dim:#64748b; --rail-border:rgba(255,255,255,.08);
+  --chart-1:#2a78d6; --chart-2:#eb6834; --chart-3:#1baf7a; --chart-4:#eda100; --chart-5:#e87ba4;
+  --radius:10px; --radius-sm:6px; --radius-lg:14px;
+  --shadow:0 1px 2px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.06);
+  --font:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --mono:'JetBrains Mono','Fira Mono','Courier New',monospace;
+  color-scheme: light;
+}
+html[data-theme="midnight"]{
+  --bg:#101a2c; --bg2:#0c1524; --bg3:#0a111d;
+  --text:#e8ecf3; --text2:#9aa6ba; --text3:#69748c;
+  --border:rgba(255,255,255,.09); --border2:rgba(255,255,255,.17);
+  --accent:#5b9fe0; --accent-l:rgba(91,159,224,.16); --accent-d:#9bccf5;
+  --warn:#f0b23a; --warn-l:rgba(240,178,58,.15);
+  --info:#b6a6f7; --info-l:rgba(182,166,247,.15);
+  --good:#4fd28a; --good-l:rgba(79,210,138,.14);
+  --bad:#f38080; --bad-l:rgba(243,128,128,.14);
+  --rail:#0a0f1a; --rail2:#080c15; --rail-text:#b3bccc; --rail-text-dim:#576076; --rail-border:rgba(255,255,255,.06);
+  --chart-1:#3987e5; --chart-2:#d95926; --chart-3:#199e70; --chart-4:#c98500; --chart-5:#d55181;
+  --shadow:0 1px 3px rgba(0,0,0,.5);
+  color-scheme: dark;
+}
+html[data-theme="emerald"]{
+  --bg:#ffffff; --bg2:#f2f9f6; --bg3:#e6f3ec;
+  --text:#0f2a20; --text2:#4d6b5d; --text3:#83a294;
+  --border:#dcece3; --border2:#bcdcc9;
+  --accent:#0f6e56; --accent-l:#deF4ec; --accent-d:#0a4f3e;
+  --warn:#8a5a12; --warn-l:#f7ecd8;
+  --info:#3c6f89; --info-l:#e2eff4;
+  --good:#12844a; --good-l:#e2f6ea;
+  --bad:#af3327; --bad-l:#fbe9e6;
+  --rail:#0b2018; --rail2:#081912; --rail-text:#bcdbcb; --rail-text-dim:#5c7d6d; --rail-border:rgba(255,255,255,.07);
+}
+html[data-theme="amber"]{
+  --bg:#fffdf9; --bg2:#fbf4e8; --bg3:#f6ecd4;
+  --text:#2c2113; --text2:#6b5c3f; --text3:#9c8b66;
+  --border:#eee0c1; --border2:#ddc998;
+  --accent:#8a5a00; --accent-l:#f5e6c2; --accent-d:#5c3c00;
+  --warn:#8a3d1f; --warn-l:#f5e0d2;
+  --info:#3d5a8a; --info-l:#e1e9f5;
+  --good:#3f7d2c; --good-l:#e9f2df;
+  --bad:#a13a26; --bad-l:#f7e2db;
+  --rail:#241a08; --rail2:#1b1305; --rail-text:#d9c9a3; --rail-text-dim:#7c6c48; --rail-border:rgba(255,255,255,.07);
+}
+html[data-theme="slate"]{
+  --bg:#ffffff; --bg2:#f4f5f8; --bg3:#e9ebf1;
+  --text:#1b2030; --text2:#5b6178; --text3:#8b90a3;
+  --border:#e2e4ec; --border2:#c9cddb;
+  --accent:#3e4c6d; --accent-l:#e6e9f2; --accent-d:#262f45;
+  --warn:#7a5a10; --warn-l:#f2ead2;
+  --info:#4a5f8a; --info-l:#e5eaf5;
+  --good:#146c43; --good-l:#e2f2ea;
+  --bad:#a3282f; --bad-l:#f5e2e3;
+  --rail:#12151f; --rail2:#0d0f17; --rail-text:#bcc1d1; --rail-text-dim:#5f6478; --rail-border:rgba(255,255,255,.06);
+}
+html[data-theme="amethyst"]{
+  --bg:#fffdff; --bg2:#f7f2fb; --bg3:#efe5f6;
+  --text:#241a30; --text2:#5d4d6e; --text3:#8f7ea3;
+  --border:#e9dcf2; --border2:#d3bce4;
+  --accent:#5b3fa0; --accent-l:#ede3f9; --accent-d:#3c2870;
+  --warn:#8a5a12; --warn-l:#f5e6d0;
+  --info:#3c6f89; --info-l:#e0eef3;
+  --good:#227a45; --good-l:#e4f4ea;
+  --bad:#a3272f; --bad-l:#f6e2e3;
+  --rail:#1c1128; --rail2:#150c1e; --rail-text:#cdbfdf; --rail-text-dim:#6d6081; --rail-border:rgba(255,255,255,.07);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   BASE
+   ══════════════════════════════════════════════════════════════════════ */
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:var(--font); font-size:13px; color:var(--text); background:var(--bg);
+  -webkit-font-smoothing:antialiased; transition:background .25s ease,color .25s ease;
+}
+table{border-collapse:collapse;}
+button,select,input{font-family:inherit;}
+::selection{background:var(--accent-l); color:var(--accent-d);}
+:focus-visible{outline:2px solid var(--accent); outline-offset:1px; border-radius:3px;}
+.mono{font-family:var(--mono);}
+.num{text-align:right; font-variant-numeric:tabular-nums;}
+.bold{font-weight:600;}
+a{color:var(--accent);}
+
+/* ── Demo banner ── */
+.demo-banner{
+  display:flex; align-items:center; gap:10px; justify-content:center; flex-wrap:wrap;
+  background:var(--accent); color:#fff; font-size:11.5px; font-weight:500; padding:7px 16px; text-align:center;
+  position:relative; z-index:120;
+}
+.demo-banner b{font-weight:700;}
+.demo-banner button{
+  background:rgba(255,255,255,.18); border:none; color:#fff; width:20px; height:20px; border-radius:50%;
+  cursor:pointer; font-size:12px; line-height:1; flex-shrink:0; position:absolute; right:14px; top:50%; transform:translateY(-50%);
+}
+.demo-banner button:hover{background:rgba(255,255,255,.32);}
+.demo-banner[hidden]{display:none;}
+
+/* ── Top bar ── */
+.topbar{
+  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  padding:10px 22px; border-bottom:1px solid var(--border); background:var(--bg);
+  position:sticky; top:0; z-index:100; box-shadow:var(--shadow);
+}
+.brand-block{display:flex; align-items:center; gap:10px;}
+.logo{font-size:15px; font-weight:700; color:var(--text); letter-spacing:-.01em;}
+.logo span.tag{font-size:9px; padding:2px 7px; border-radius:20px; background:var(--good-l); color:var(--good); margin-left:7px; font-weight:600; vertical-align:middle;}
+.co-info{font-size:11px; color:var(--text2); margin-top:1px;}
+.tbar-right{display:flex; align-items:center; flex-wrap:wrap; gap:7px;}
+.tbar-select{
+  padding:5px 9px; border:1px solid var(--border2); border-radius:var(--radius-sm); font-size:11px;
+  background:var(--bg); color:var(--text); cursor:pointer;
+}
+.pill{display:inline-flex; align-items:center; gap:4px; font-size:9.5px; padding:3px 9px; border-radius:20px; font-weight:600; white-space:nowrap;}
+.pill.pg{background:var(--good-l); color:var(--good);}
+.pill.pr{background:var(--bad-l); color:var(--bad);}
+.pill.pa{background:var(--warn-l); color:var(--warn);}
+.pill.pb{background:var(--accent-l); color:var(--accent);}
+.pill.ppu{background:var(--info-l); color:var(--info);}
+.pill.pgy{background:var(--bg3); color:var(--text2);}
+.user-chip{font-size:10px; color:var(--text2); padding:4px 9px; background:var(--bg2); border-radius:var(--radius-sm); border:1px solid var(--border); white-space:nowrap;}
+.btn{
+  display:inline-flex; align-items:center; gap:5px; padding:7px 13px; border:none; border-radius:var(--radius-sm);
+  font-size:11px; font-weight:600; cursor:pointer; transition:filter .12s,transform .08s; white-space:nowrap; font-family:inherit;
+}
+.btn:active{transform:scale(.97);}
+.btn-pr{background:var(--accent); color:#fff;}
+.btn-pr:hover{filter:brightness(1.08);}
+.btn-se{background:transparent; color:var(--text); border:1px solid var(--border2);}
+.btn-se:hover{background:var(--bg2);}
+.btn-sm{padding:5px 10px; font-size:10px;}
+.btn:disabled{opacity:.5; cursor:not-allowed;}
+.theme-btn{
+  background:linear-gradient(135deg,var(--accent),var(--info)); color:#fff; position:relative;
+  box-shadow:0 0 0 3px var(--accent-l);
+}
+.theme-btn:hover{filter:brightness(1.06);}
+
+/* ── Theme picker panel ── */
+.theme-pop-wrap{position:relative;}
+.theme-pop{
+  position:absolute; top:calc(100% + 10px); right:0; width:328px; background:var(--bg);
+  border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:0 18px 48px rgba(0,0,0,.22);
+  padding:14px; z-index:200; display:none;
+}
+.theme-pop.open{display:block; animation:pop-in .16s ease;}
+@keyframes pop-in{from{opacity:0; transform:translateY(-6px) scale(.98);} to{opacity:1; transform:translateY(0) scale(1);}}
+.theme-pop-hdr{display:flex; align-items:center; justify-content:space-between; margin-bottom:3px;}
+.theme-pop-title{font-size:12.5px; font-weight:700;}
+.theme-pop-sub{font-size:10.5px; color:var(--text2); margin-bottom:12px; line-height:1.5;}
+.theme-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+.theme-opt{
+  border:1.5px solid var(--border); border-radius:var(--radius); padding:9px; cursor:pointer; text-align:left;
+  background:var(--bg2); transition:border-color .12s,transform .1s;
+}
+.theme-opt:hover{transform:translateY(-1px);}
+.theme-opt.active{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-l);}
+.swatch-row{display:flex; gap:3px; margin-bottom:7px;}
+.swatch{width:16px; height:16px; border-radius:4px; border:1px solid rgba(0,0,0,.08);}
+.theme-opt-name{font-size:11px; font-weight:700; color:var(--text); display:flex; align-items:center; gap:4px;}
+.theme-opt-desc{font-size:9.5px; color:var(--text3); margin-top:2px; line-height:1.4;}
+.theme-check{margin-left:auto; color:var(--accent); font-size:11px;}
+
+/* ── Shell / sidebar ── */
+.dash-shell{display:flex; min-height:calc(100vh - 96px);}
+.sidebar{width:238px; flex-shrink:0; background:var(--rail); border-right:1px solid var(--rail-border); padding:14px 10px;}
+.sidebar-group + .sidebar-group{margin-top:16px;}
+.sidebar-group-label{font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--rail-text-dim); padding:0 10px 6px; display:flex; align-items:center; gap:6px;}
+.sidebar-item{
+  width:100%; display:flex; align-items:center; gap:9px; padding:8px 10px; border:none; border-radius:7px;
+  background:transparent; color:var(--rail-text); font-size:12px; font-weight:500; text-align:left; cursor:pointer;
+  transition:background .12s,color .12s; margin-bottom:1px;
+}
+.sidebar-item:hover{background:rgba(255,255,255,.07); color:#fff;}
+.sidebar-item.active{background:var(--accent); color:#fff; font-weight:600;}
+.sidebar-item-icon{font-size:13px; width:16px; text-align:center; flex-shrink:0;}
+.sidebar-item-badge{font-size:8px; font-weight:700; padding:2px 5px; border-radius:5px; background:rgba(255,255,255,.14); color:var(--rail-text); margin-left:auto; flex-shrink:0;}
+.sidebar-item.active .sidebar-item-badge{background:rgba(255,255,255,.26); color:#fff;}
+.sidebar-footer{display:flex; align-items:center; gap:9px; padding:12px 10px 2px; border-top:1px solid var(--rail-border); margin-top:14px;}
+.sidebar-footer-avatar{width:28px; height:28px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0;}
+.sidebar-footer-name{font-size:11px; font-weight:600; color:#fff;}
+.sidebar-footer-role{font-size:9px; color:var(--rail-text-dim);}
+
+.dash-main{flex:1; min-width:0; display:flex; flex-direction:column;}
+
+/* ── Period bar ── */
+.pbar{display:flex; align-items:center; flex-wrap:wrap; gap:6px 0; padding:8px 22px; border-bottom:1px solid var(--border); background:var(--bg2);}
+.pb-grp{display:flex; align-items:center; gap:4px;}
+.pb-lbl{font-size:9px; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; margin-right:4px; white-space:nowrap;}
+.pb-sep{width:1px; height:16px; background:var(--border2); margin:0 12px; flex-shrink:0;}
+.pbp{font-size:11px; padding:4px 10px; border:1px solid var(--border2); border-radius:20px; background:transparent; cursor:pointer; color:var(--text2); white-space:nowrap; transition:all .12s; font-family:inherit;}
+.pbp:hover:not(.on){background:var(--bg3);}
+.pbp.on{background:var(--text); color:var(--bg); border-color:transparent;}
+.pbp.yt.on{background:var(--accent); color:#fff;}
+.pb-summary{margin-left:auto; font-size:10px; color:var(--text3); white-space:nowrap; padding:4px 10px; background:var(--bg); border-radius:20px; border:1px solid var(--border);}
+
+/* ── Content ── */
+.content{padding:20px 24px 60px; max-width:1360px; margin:0 auto; width:100%;}
+.tab-panel{display:none;}
+.tab-panel.active{display:block; animation:fade-in .18s ease;}
+@keyframes fade-in{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);}}
+
+.grid4{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:14px;}
+.grid3{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-bottom:14px;}
+.grid2{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-bottom:14px;}
+@media (max-width:1180px){.dash-shell{flex-direction:column;} .sidebar{width:100%; display:flex; flex-wrap:wrap; gap:4px 14px;} .sidebar-group{display:flex; align-items:center; flex-wrap:wrap; gap:2px;} .sidebar-group + .sidebar-group{margin-top:0;} .sidebar-group-label{padding:0 8px 0 0;} .sidebar-footer{display:none;}}
+@media (max-width:860px){.grid4{grid-template-columns:1fr 1fr;} .grid2{grid-template-columns:1fr;}}
+@media (max-width:560px){.grid4,.grid3{grid-template-columns:1fr 1fr;}}
+
+.card{background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); margin-bottom:14px; overflow:hidden; box-shadow:var(--shadow);}
+.card-hdr{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; padding:11px 16px; border-bottom:1px solid var(--border); background:var(--bg2);}
+.card-body{padding:15px 16px;}
+.ct{font-size:12.5px; font-weight:700; color:var(--text);}
+.cbadge{font-size:9px; padding:2px 8px; border-radius:8px; font-weight:600;}
+.cb-blue{background:var(--accent-l); color:var(--accent);}
+.cb-green{background:var(--good-l); color:var(--good);}
+.cb-amber{background:var(--warn-l); color:var(--warn);}
+
+.kpi{background:var(--bg2); border-radius:var(--radius); padding:13px 14px; border:1px solid var(--border);}
+.kpi .lbl{font-size:9px; color:var(--text2); text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; font-weight:600;}
+.kpi .val{font-size:21px; font-weight:700; color:var(--text); line-height:1.2; font-variant-numeric:tabular-nums;}
+.kpi .chg{font-size:10px; margin-top:4px; color:var(--text2);}
+.up{color:var(--good) !important;}
+.dn{color:var(--bad) !important;}
+.neu{color:var(--text3);}
+
+.fc-table{width:100%; border-collapse:collapse; font-size:11.5px;}
+.fc-table th{font-size:10px; font-weight:700; color:var(--text2); text-align:left; padding:8px 12px; border-bottom:1px solid var(--border); background:var(--bg2); white-space:nowrap;}
+.fc-table th.num{text-align:right;}
+.fc-table td{padding:6.5px 12px; border-bottom:1px solid var(--border); color:var(--text); vertical-align:middle;}
+.fc-table tr:last-child td{border-bottom:none;}
+.fc-table tr:hover td{background:var(--bg2);}
+.ind1{padding-left:26px !important;} .ind2{padding-left:40px !important;}
+.sec-row td{background:var(--bg2) !important; font-size:9px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.6px; padding:7px 12px 4px; border-top:1px solid var(--border);}
+.tot-row td{font-weight:700; background:var(--bg2) !important; border-top:1px solid var(--border2);}
+.grand-row td{font-weight:700; background:var(--accent-l) !important; color:var(--accent-d); border-top:2px solid var(--accent); border-bottom:2px solid var(--accent);}
+.nref{font-size:9.5px; color:var(--accent); font-family:var(--mono); font-weight:600;}
+.table-wrap{overflow-x:auto;}
+.prev-col{}
+.no-compare .prev-col{display:none;}
+
+.info-bar{background:var(--accent-l); color:var(--accent-d); border-radius:var(--radius-sm); padding:9px 13px; font-size:11.5px; margin-bottom:12px; line-height:1.6; border-left:3px solid var(--accent);}
+.warn-bar{background:var(--warn-l); color:var(--warn); border-radius:var(--radius-sm); padding:9px 13px; font-size:11.5px; margin-bottom:12px; border-left:3px solid var(--warn); line-height:1.6;}
+.success-bar{background:var(--good-l); color:var(--good); border-radius:var(--radius-sm); padding:9px 13px; font-size:11.5px; margin-bottom:12px; border-left:3px solid var(--good); line-height:1.6;}
+.notice{font-size:10.5px; color:var(--text3); padding:2px 2px 4px; line-height:1.7; font-style:italic;}
+
+.dl-bar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; padding:11px 16px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-lg); margin-bottom:14px;}
+.dl-bar-title{font-size:13px; font-weight:700;}
+.dl-bar-sub{font-size:10.5px; color:var(--text2); margin-top:2px;}
+.compare-toggle{display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--text2); cursor:pointer; user-select:none;}
+.compare-toggle input{cursor:pointer;}
+
+.chart-box{position:relative; height:220px;}
+.legend-row{display:flex; gap:14px; font-size:10px; color:var(--text2); margin-bottom:8px; flex-wrap:wrap;}
+.legend-dot{display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:middle;}
+.legend-line{display:inline-block; width:10px; height:2px; margin-right:4px; vertical-align:middle;}
+
+.ratio-card{background:var(--bg2); border-radius:var(--radius); padding:13px; border:1px solid var(--border);}
+.ratio-row{margin-bottom:11px;}
+.ratio-row:last-child{margin-bottom:0;}
+.ratio-top{display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;}
+.ratio-top .k{color:var(--text2);}
+.ratio-top .v{font-weight:700;}
+.gauge-wrap{background:var(--bg); border-radius:4px; height:5px; overflow:hidden; margin-bottom:3px;}
+.gauge-fill{height:5px; border-radius:4px;}
+.gauge-note{font-size:9px; color:var(--text3); text-align:right;}
+
+.alert-item{display:flex; align-items:flex-start; gap:10px; padding:11px 13px; border-radius:var(--radius); margin-bottom:8px; border:1px solid transparent; font-size:11.5px; line-height:1.55;}
+.alert-item.critical{background:var(--bad-l); border-color:color-mix(in srgb, var(--bad) 35%, transparent);}
+.alert-item.warning{background:var(--warn-l); border-color:color-mix(in srgb, var(--warn) 35%, transparent);}
+.alert-item.info-a{background:var(--accent-l); border-color:color-mix(in srgb, var(--accent) 30%, transparent);}
+.alert-item.success-a{background:var(--good-l); border-color:color-mix(in srgb, var(--good) 30%, transparent);}
+.alert-dot{width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-top:4px;}
+.dot-cr{background:var(--bad);} .dot-wa{background:var(--warn);} .dot-in{background:var(--accent);} .dot-ok{background:var(--good);}
+
+.comp-row{display:flex; align-items:center; justify-content:space-between; padding:10px 15px; border-bottom:1px solid var(--border); gap:10px; flex-wrap:wrap;}
+.comp-row:last-child{border-bottom:none;}
+.comp-icon{width:28px; height:28px; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0;}
+
+.so-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:9px; margin-bottom:4px;}
+.so-item{background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm); padding:11px;}
+.so-lbl{font-size:10px; color:var(--text2); margin-bottom:3px;}
+.so-val{font-size:16px; font-weight:700;}
+@media (max-width:700px){.so-grid{grid-template-columns:1fr 1fr;}}
+
+.wc-row{display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--border);}
+.wc-row:last-child{border-bottom:none;}
+.wc-name{font-size:11.5px; min-width:170px; color:var(--text);}
+.wc-bar-outer{flex:1; background:var(--bg3); border-radius:4px; height:8px; overflow:hidden;}
+.wc-bar-inner{height:8px; border-radius:4px;}
+.wc-val{font-size:11.5px; font-weight:700; min-width:70px; text-align:right;}
+.wc-bench{font-size:10px; color:var(--text3); min-width:90px; text-align:right;}
+
+.bp-section{border:1px solid var(--border); border-radius:var(--radius-lg); margin-bottom:12px; overflow:hidden;}
+.bp-hdr{display:flex; align-items:center; justify-content:space-between; background:var(--bg2); padding:10px 15px; font-size:11.5px; font-weight:700; border-bottom:1px solid var(--border);}
+.bp-body{padding:14px 15px;}
+.hl-row{padding:8px 11px 8px 14px; border-radius:0 var(--radius-sm) var(--radius-sm) 0; margin-bottom:8px; font-size:11.5px; line-height:1.6;}
+.hl-green{background:var(--good-l); border-left:3px solid var(--good); color:var(--text);}
+.hl-amber{background:var(--warn-l); border-left:3px solid var(--warn); color:var(--text);}
+.hl-red{background:var(--bad-l); border-left:3px solid var(--bad); color:var(--text);}
+.hl-blue{background:var(--accent-l); border-left:3px solid var(--accent); color:var(--text);}
+
+.step-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:0; margin-bottom:16px; border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden;}
+.step-box{padding:14px; border-right:1px solid var(--border); background:var(--bg);}
+.step-box:last-child{border-right:none;}
+.step-num{font-size:9px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px;}
+@media (max-width:860px){.step-grid{grid-template-columns:1fr 1fr;}}
+
+.upload-zone{border:2px dashed var(--border2); border-radius:var(--radius-lg); padding:30px; text-align:center; margin-bottom:12px; opacity:.75;}
+
+.sc-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;}
+.sc-lbl{font-size:11.5px; min-width:170px; color:var(--text2);}
+.sc-val{font-size:11.5px; font-weight:700; min-width:52px; text-align:right;}
+input[type=range]{flex:1; accent-color:var(--accent); min-width:120px;}
+
+.format-card{background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:14px;}
+.format-card .fname{font-weight:700; font-size:12.5px; margin-bottom:5px;}
+.format-card .fmeta{font-size:10.5px; color:var(--text3); margin-bottom:10px;}
+
+.toast{position:fixed; bottom:22px; right:22px; background:var(--rail); color:#fff; padding:10px 18px; border-radius:var(--radius); font-size:12px; font-weight:500; opacity:0; transition:opacity .25s,transform .25s; pointer-events:none; z-index:999; box-shadow:0 8px 24px rgba(0,0,0,.28); transform:translateY(6px);}
+.toast.show{opacity:1; transform:translateY(0);}
+</style>
+</head>
+<body>
+
+<div class="demo-banner" id="demoBanner">
+  🧪 <b>Concept demo — dashboard theme selection.</b> All figures below are illustrative sample data for a fictional company, for presentation purposes only.
+  <button onclick="document.getElementById('demoBanner').hidden=true" aria-label="Dismiss">✕</button>
+</div>
+
+<!-- ══════════════════════ TOP BAR ══════════════════════ -->
+<div class="topbar">
+  <div class="brand-block">
+    <div>
+      <div class="logo">FinCommand Pro <span class="tag">IND AS · Schedule III</span></div>
+      <div class="co-info">Solstice Cloud Technologies Pvt Ltd · FY 2025-26 · Live — API</div>
+    </div>
+  </div>
+  <div class="tbar-right">
+    <select class="tbar-select" title="Financial year (demo — non-functional)">
+      <option>FY 2025-26</option>
+      <option>FY 2024-25</option>
+      <option>FY 2023-24</option>
+    </select>
+    <select class="tbar-select" title="Display unit">
+      <option>₹ in Lakhs</option>
+      <option>₹ in Thousands</option>
+      <option>₹ in Crores</option>
+    </select>
+    <select class="tbar-select" title="Presentation currency">
+      <option>₹ INR</option>
+      <option>$ USD</option>
+      <option>€ EUR</option>
+    </select>
+    <span class="pill pg">● Live — API</span>
+    <span class="user-chip">A. Sharma · CFO</span>
+    <div class="theme-pop-wrap">
+      <button class="btn theme-btn" id="themeBtn" onclick="toggleThemePop()">🎨 Themes</button>
+      <div class="theme-pop" id="themePop">
+        <div class="theme-pop-hdr"><span class="theme-pop-title">Dashboard theme</span></div>
+        <div class="theme-pop-sub">Pick a visual identity for the dashboard. Your choice is remembered on this device.</div>
+        <div class="theme-grid" id="themeGrid"></div>
+      </div>
+    </div>
+    <button class="btn btn-se btn-sm" onclick="showToast('Demo build — upload is disabled here')">⬆ Upload TB</button>
+    <button class="btn btn-se btn-sm" onclick="showToast('Demo build — export is disabled here')">⬇ All Excel</button>
+    <button class="btn btn-pr btn-sm" onclick="showToast('Demo build — export is disabled here')">⬇ Annual Report PDF</button>
+  </div>
+</div>
+
+<div class="dash-shell">
+  <!-- ══════════════════════ SIDEBAR ══════════════════════ -->
+  <aside class="sidebar" id="sidebar">
+    <nav>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">📊 Financial Statements</div>
+        <button class="sidebar-item active" data-tab="overview"><span class="sidebar-item-icon">🏠</span>Executive Overview</button>
+        <button class="sidebar-item" data-tab="bs"><span class="sidebar-item-icon">⚖️</span>Balance Sheet</button>
+        <button class="sidebar-item" data-tab="pl"><span class="sidebar-item-icon">💰</span>P&amp;L Account</button>
+        <button class="sidebar-item" data-tab="cashflow"><span class="sidebar-item-icon">💧</span>Cash Flow<span class="sidebar-item-badge">IND AS 7</span></button>
+        <button class="sidebar-item" data-tab="notes"><span class="sidebar-item-icon">📝</span>Notes to Accounts</button>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">📈 Analytics &amp; Performance</div>
+        <button class="sidebar-item" data-tab="mis"><span class="sidebar-item-icon">📋</span>MIS Report</button>
+        <button class="sidebar-item" data-tab="ratios"><span class="sidebar-item-icon">🎯</span>Ratio Analysis</button>
+        <button class="sidebar-item" data-tab="wc"><span class="sidebar-item-icon">🔄</span>Working Capital</button>
+        <button class="sidebar-item" data-tab="treasury"><span class="sidebar-item-icon">🏦</span>Treasury</button>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">🤝 Counterparty Intelligence</div>
+        <button class="sidebar-item" data-tab="custmargin"><span class="sidebar-item-icon">👥</span>Customer Margin<span class="sidebar-item-badge">Zoho</span></button>
+        <button class="sidebar-item" data-tab="vendor"><span class="sidebar-item-icon">🏭</span>Vendor Expense<span class="sidebar-item-badge">Zoho</span></button>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">🛡️ Governance &amp; Planning</div>
+        <button class="sidebar-item" data-tab="scenario"><span class="sidebar-item-icon">🔮</span>Scenario Planner</button>
+        <button class="sidebar-item" data-tab="alerts"><span class="sidebar-item-icon">🔔</span>Smart Alerts</button>
+        <button class="sidebar-item" data-tab="compliance"><span class="sidebar-item-icon">✅</span>Compliance</button>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">🛠️ Data &amp; Tools</div>
+        <button class="sidebar-item" data-tab="boardpack"><span class="sidebar-item-icon">📑</span>Board Pack</button>
+        <button class="sidebar-item" data-tab="reportbuilder"><span class="sidebar-item-icon">🧩</span>Report Builder<span class="sidebar-item-badge">New</span></button>
+        <button class="sidebar-item" data-tab="upload"><span class="sidebar-item-icon">⬆️</span>Upload / Architecture</button>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sidebar-footer-avatar">A</div>
+      <div>
+        <div class="sidebar-footer-name">A. Sharma</div>
+        <div class="sidebar-footer-role">CFO · Solstice Cloud Tech</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ══════════════════════ MAIN ══════════════════════ -->
+  <div class="dash-main">
+    <div class="pbar">
+      <div class="pb-grp">
+        <span class="pb-lbl">Year</span>
+        <button class="pbp yt on">FY</button>
+        <button class="pbp yt">CY</button>
+      </div>
+      <div class="pb-sep"></div>
+      <div class="pb-grp">
+        <span class="pb-lbl">View</span>
+        <button class="pbp on">Annual</button>
+        <button class="pbp">3 Years</button>
+        <button class="pbp">H1 / H2</button>
+        <button class="pbp">Quarterly</button>
+      </div>
+      <div class="pb-sep"></div>
+      <div class="pb-grp">
+        <span class="pb-lbl">Period</span>
+        <button class="pbp on">FY26</button>
+        <button class="pbp">FY25</button>
+        <button class="pbp">FY24</button>
+      </div>
+      <span class="pb-summary">FY 2025-26 · Annual</span>
+    </div>
+
+    <div class="content">
+
+      <!-- ═══════════ OVERVIEW ═══════════ -->
+      <section class="tab-panel active" id="tab-overview">
+        <div class="dl-bar">
+          <div><div class="dl-bar-title">Executive Overview · FY 2025-26</div><div class="dl-bar-sub">KPIs, Revenue, EBITDA &amp; Margin trends · ₹ in Lakhs</div></div>
+          <div style="display:flex;gap:6px;"><button class="btn btn-se btn-sm" onclick="showToast('Demo build — export disabled')">⬇ PDF</button><button class="btn btn-se btn-sm" onclick="showToast('Demo build — export disabled')">⬇ Excel</button></div>
+        </div>
+        <div class="grid4">
+          <div class="kpi"><div class="lbl">Revenue</div><div class="val">₹31.80 Cr</div><div class="chg neu">3,180.00 Lakhs</div></div>
+          <div class="kpi"><div class="lbl">Gross Profit</div><div class="val up">₹16.95 Cr</div><div class="chg up">GM 53.3%</div></div>
+          <div class="kpi"><div class="lbl">EBITDA</div><div class="val up">₹5.15 Cr</div><div class="chg up">Margin 16.2%</div></div>
+          <div class="kpi"><div class="lbl">PAT</div><div class="val up">₹3.22 Cr</div><div class="chg up">Net 10.1%</div></div>
+        </div>
+        <div class="grid2">
+          <div class="card">
+            <div class="card-hdr"><span class="ct">Revenue &amp; EBITDA — Quarterly</span><span class="cbadge cb-blue">FY26</span></div>
+            <div class="card-body">
+              <div class="legend-row"><span><span class="legend-dot" style="background:var(--chart-1)"></span>Revenue</span><span><span class="legend-dot" style="background:var(--chart-3)"></span>EBITDA</span><span style="margin-left:auto;font-style:italic;">₹ in Lakhs</span></div>
+              <div class="chart-box"><canvas id="chartRevEbitda"></canvas></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-hdr"><span class="ct">Margin Trends</span><span class="cbadge cb-green">%</span></div>
+            <div class="card-body">
+              <div class="legend-row"><span><span class="legend-line" style="background:var(--chart-1)"></span>Gross %</span><span><span class="legend-line" style="background:var(--chart-3)"></span>EBITDA %</span><span><span class="legend-line" style="background:var(--chart-4)"></span>PAT %</span></div>
+              <div class="chart-box"><canvas id="chartMargin"></canvas></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="ct">Period Summary · FY26 · Annual</span><span class="cbadge cb-blue">₹ in Lakhs</span></div>
+          <div class="card-body table-wrap">
+            <table class="fc-table">
+              <thead><tr><th>Metric</th><th class="num">Value</th><th class="num">% of Revenue</th></tr></thead>
+              <tbody>
+                <tr><td>Revenue</td><td class="num">3,180.00</td><td class="num">100.0%</td></tr>
+                <tr><td>Gross Profit</td><td class="num up">1,695.00</td><td class="num up">53.3%</td></tr>
+                <tr><td>EBITDA</td><td class="num up">515.00</td><td class="num up">16.2%</td></tr>
+                <tr><td>PBT</td><td class="num up">435.00</td><td class="num up">13.7%</td></tr>
+                <tr class="tot-row"><td class="bold">PAT</td><td class="num bold up">322.00</td><td class="num bold up">10.1%</td></tr>
+                <tr><td>Employee Cost</td><td class="num">912.00</td><td class="num">28.7%</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="card">
+            <div class="card-hdr"><span class="ct">Top 5 Customers by Revenue</span><span class="cbadge cb-blue">Zoho — Sales by Customer</span></div>
+            <div class="card-body table-wrap">
+              <table class="fc-table">
+                <thead><tr><th>Customer</th><th class="num">Revenue (₹Cr)</th><th class="num">% of Revenue</th><th>Status</th></tr></thead>
+                <tbody>
+                  <tr><td>Vantage Retail Group</td><td class="num">9.03</td><td class="num">28.4%</td><td><span class="pill pr">Concentration Risk</span></td></tr>
+                  <tr><td>Blackwell Financial Services</td><td class="num">6.68</td><td class="num">21.0%</td><td><span class="pill pa">Key Account</span></td></tr>
+                  <tr><td>Northbridge Manufacturing Co.</td><td class="num">4.61</td><td class="num">14.5%</td><td><span class="pill pa">Key Account</span></td></tr>
+                  <tr><td>Lumen Healthcare Partners</td><td class="num">3.12</td><td class="num">9.8%</td><td><span class="pill pg">Healthy</span></td></tr>
+                  <tr><td>Argus Logistics Ltd</td><td class="num">1.97</td><td class="num">6.2%</td><td><span class="pill pg">Healthy</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-hdr"><span class="ct">Year-on-Year — FY26 vs FY25</span><span class="cbadge cb-blue">₹ in Lakhs</span></div>
+            <div class="card-body table-wrap">
+              <table class="fc-table">
+                <thead><tr><th>Metric</th><th class="num">FY26</th><th class="num" style="color:var(--text2);">FY25</th><th class="num">YoY</th></tr></thead>
+                <tbody>
+                  <tr><td>Revenue</td><td class="num">3,180.00</td><td class="num" style="color:var(--text2);">2,608.00</td><td class="num up">+21.9%</td></tr>
+                  <tr><td>EBITDA</td><td class="num up">515.00</td><td class="num up" style="color:var(--text2);">422.00</td><td class="num up">+22.0%</td></tr>
+                  <tr class="tot-row"><td class="bold">PAT</td><td class="num bold up">322.00</td><td class="num bold up" style="color:var(--text2);">264.00</td><td class="num bold up">+22.0%</td></tr>
+                  <tr><td>Employee Cost</td><td class="num">912.00</td><td class="num" style="color:var(--text2);">748.00</td><td class="num dn">+21.9%</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════ BALANCE SHEET ═══════════ -->
+      <section class="tab-panel" id="tab-bs">
+        <div class="dl-bar">
+          <div><div class="dl-bar-title">Balance Sheet · FY 2025-26</div><div class="dl-bar-sub">Schedule III · IND AS · As at 31 Mar 2026 · ₹ in Lakhs</div></div>
+          <label class="compare-toggle"><input type="checkbox" checked onchange="toggleCompare('bsWrap',this.checked)"> Compare with FY25</label>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="ct">Balance Sheet <span class="cbadge cb-blue">Schedule III — IND AS</span></span><span class="pill pg">✓ Balanced</span></div>
+          <div class="table-wrap" id="bsWrap">
+            <table class="fc-table">
+              <thead><tr><th style="width:38%;">Particulars</th><th>Note</th><th class="num">FY26 (₹L)</th><th class="num prev-col" style="color:var(--text2);">FY25 (₹L)</th><th class="num prev-col">YoY Change</th></tr></thead>
+              <tbody>
+                <tr class="sec-row"><td colspan="6">Equity &amp; Liabilities</td></tr>
+                <tr class="tot-row"><td class="ind1 bold">Shareholders' Equity</td><td></td><td class="num bold">2,650.00</td><td class="num bold prev-col" style="color:var(--text2);">2,488.00</td><td class="num bold prev-col up">+162.00</td></tr>
+                <tr><td class="ind2">Share Capital</td><td><span class="nref">1</span></td><td class="num">1,200.00</td><td class="num prev-col" style="color:var(--text2);">1,200.00</td><td class="num prev-col">—</td></tr>
+                <tr><td class="ind2">Other Equity</td><td><span class="nref">2</span></td><td class="num">1,450.00</td><td class="num prev-col" style="color:var(--text2);">1,288.00</td><td class="num prev-col up">+162.00</td></tr>
+                <tr class="tot-row"><td class="ind1 bold">Non-Current Liabilities</td><td></td><td class="num bold">550.00</td><td class="num bold prev-col" style="color:var(--text2);">495.00</td><td class="num bold prev-col dn">+55.00</td></tr>
+                <tr><td class="ind2">Long-Term Borrowings</td><td><span class="nref">3</span></td><td class="num">380.00</td><td class="num prev-col" style="color:var(--text2);">340.00</td><td class="num prev-col dn">+40.00</td></tr>
+                <tr><td class="ind2">Lease Liabilities</td><td><span class="nref">4</span></td><td class="num">90.00</td><td class="num prev-col" style="color:var(--text2);">75.00</td><td class="num prev-col dn">+15.00</td></tr>
+                <tr><td class="ind2">Deferred Tax</td><td><span class="nref">5</span></td><td class="num">25.00</td><td class="num prev-col" style="color:var(--text2);">25.00</td><td class="num prev-col">—</td></tr>
+                <tr><td class="ind2">Long-Term Provisions</td><td><span class="nref">6</span></td><td class="num">55.00</td><td class="num prev-col" style="color:var(--text2);">55.00</td><td class="num prev-col">—</td></tr>
+                <tr class="tot-row"><td class="ind1 bold">Current Liabilities</td><td></td><td class="num bold">800.00</td><td class="num bold prev-col" style="color:var(--text2);">760.00</td><td class="num bold prev-col dn">+40.00</td></tr>
+                <tr><td class="ind2">Trade Payables</td><td><span class="nref">7</span></td><td class="num">420.00</td><td class="num prev-col" style="color:var(--text2);">385.00</td><td class="num prev-col dn">+35.00</td></tr>
+                <tr><td class="ind2">Other Financial Liabilities</td><td><span class="nref">8</span></td><td class="num">180.00</td><td class="num prev-col" style="color:var(--text2);">180.00</td><td class="num prev-col">—</td></tr>
+                <tr><td class="ind2">Short-Term Borrowings</td><td><span class="nref">9</span></td><td class="num">90.00</td><td class="num prev-col" style="color:var(--text2);">100.00</td><td class="num prev-col up">(10.00)</td></tr>
+                <tr><td class="ind2">Other Current Liabilities</td><td><span class="nref">17</span></td><td class="num">110.00</td><td class="num prev-col" style="color:var(--text2);">95.00</td><td class="num prev-col dn">+15.00</td></tr>
+                <tr class="grand-row"><td class="bold">Total Equity &amp; Liabilities</td><td></td><td class="num bold">4,000.00</td><td class="num bold prev-col">3,743.00</td><td class="num bold prev-col">+257.00</td></tr>
+                <tr><td colspan="6" style="height:8px;background:var(--bg2);border:none;"></td></tr>
+                <tr class="sec-row"><td colspan="6">Assets</td></tr>
+                <tr class="tot-row"><td class="ind1 bold">Non-Current Assets</td><td></td><td class="num bold">1,865.00</td><td class="num bold prev-col" style="color:var(--text2);">1,745.00</td><td class="num bold prev-col dn">+120.00</td></tr>
+                <tr><td class="ind2">Property, Plant and Equipment</td><td><span class="nref">10</span></td><td class="num">1,450.00</td><td class="num prev-col" style="color:var(--text2);">1,330.00</td><td class="num prev-col dn">+120.00</td></tr>
+                <tr><td class="ind2">Right-of-Use Assets</td><td><span class="nref">11</span></td><td class="num">180.00</td><td class="num prev-col" style="color:var(--text2);">180.00</td><td class="num prev-col">—</td></tr>
+                <tr><td class="ind2">Intangible Assets</td><td><span class="nref">12</span></td><td class="num">140.00</td><td class="num prev-col" style="color:var(--text2);">140.00</td><td class="num prev-col">—</td></tr>
+                <tr><td class="ind2">Other Non-Current Assets</td><td><span class="nref">14</span></td><td class="num">95.00</td><td class="num prev-col" style="color:var(--text2);">95.00</td><td class="num prev-col">—</td></tr>
+                <tr class="tot-row"><td class="ind1 bold">Current Assets</td><td></td><td class="num bold">2,135.00</td><td class="num bold prev-col" style="color:var(--text2);">1,998.00</td><td class="num bold prev-col dn">+137.00</td></tr>
+                <tr><td class="ind2">Investments Current (Mutual Funds)</td><td><span class="nref">13</span></td><td class="num">320.00</td><td class="num prev-col" style="color:var(--text2);">282.00</td><td class="num prev-col dn">+38.00</td></tr>
+                <tr><td class="ind2">Trade Receivables</td><td><span class="nref">16</span></td><td class="num">890.00</td><td class="num prev-col" style="color:var(--text2);">830.00</td><td class="num prev-col dn">+60.00</td></tr>
+                <tr><td class="ind2">Cash and Cash Equivalents</td><td><span class="nref">19</span></td><td class="num">140.00</td><td class="num prev-col" style="color:var(--text2);">128.00</td><td class="num prev-col dn">+12.00</td></tr>
+                <tr><td class="ind2">Bank Balances (Fixed Deposits)</td><td><span class="nref">20</span></td><td class="num">480.00</td><td class="num prev-col" style="color:var(--text2);">422.00</td><td class="num prev-col dn">+58.00</td></tr>
+                <tr><td class="ind2">Loans &amp; Advances</td><td><span class="nref">21</span></td><td class="num">95.00</td><td class="num prev-col" style="color:var(--text2);">95.00</td><td class="num prev-col">—</td></tr>
+                <tr><td class="ind2">Other Current Assets</td><td><span class="nref">23</span></td><td class="num">210.00</td><td class="num prev-col" style="color:var(--text2);">190.00</td><td class="num prev-col dn">+20.00</td></tr>
+                <tr class="grand-row"><td class="bold">Total Assets</td><td></td><td class="num bold">4,000.00</td><td class="num bold prev-col">3,743.00</td><td class="num bold prev-col">+257.00</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════ P&amp;L ═══════════ -->
+      <section class="tab-panel" id="tab-pl">
+        <div class="dl-bar">
+          <div><div class="dl-bar-title">Statement of Profit &amp; Loss · FY 2025-26</div><div class="dl-bar-sub">Schedule III · IND AS · ₹ in Lakhs</div></div>
+          <label class="compare-toggle"><input type="checkbox" checked onchange="toggleCompare('plWrap',this.checked)"> Compare with FY25</label>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="ct">Statement of Profit &amp; Loss</span></div>
+          <div class="table-wrap" id="plWrap">
+            <table class="fc-table">
+              <thead><tr><th style="width:38%;">Particulars</th><th>Note</th><th class="num">FY26 (₹L)</th><th class="num prev-col" style="color:var(--text2);">FY25 (₹L)</th><th class="num prev-col">YoY Change</th></tr></thead>
+              <tbody>
+                <tr class="sec-row"><td colspan="5">I. Income</td></tr>
+                <tr><td class="ind1">Revenue from Operations</td><td><span class="nref">20</span></td><td class="num">3,180.00</td><td class="num prev-col" style="color:var(--text2);">2,608.00</td><td class="num prev-col up">+572.00</td></tr>
+                <tr><td class="ind1">Other Income</td><td><span class="nref">21</span></td><td class="num">58.00</td><td class="num prev-col" style="color:var(--text2);">48.00</td><td class="num prev-col up">+10.00</td></tr>
+                <tr class="tot-row"><td class="bold">Total Income (I)</td><td></td><td class="num bold">3,238.00</td><td class="num bold prev-col" style="color:var(--text2);">2,656.00</td><td class="num bold prev-col up">+582.00</td></tr>
+                <tr class="sec-row"><td colspan="5">II. Expenses</td></tr>
+                <tr><td class="ind1">Cost of Services</td><td><span class="nref">22</span></td><td class="num">1,485.00</td><td class="num prev-col" style="color:var(--text2);">1,218.00</td><td class="num prev-col">+267.00</td></tr>
+                <tr><td class="ind1">Employee Benefits Expense</td><td><span class="nref">23</span></td><td class="num">912.00</td><td class="num prev-col" style="color:var(--text2);">748.00</td><td class="num prev-col">+164.00</td></tr>
+                <tr><td class="ind1">Finance Costs</td><td><span class="nref">24</span></td><td class="num">42.00</td><td class="num prev-col" style="color:var(--text2);">34.00</td><td class="num prev-col">+8.00</td></tr>
+                <tr><td class="ind1">Depreciation &amp; Amortisation</td><td><span class="nref">25</span></td><td class="num">96.00</td><td class="num prev-col" style="color:var(--text2);">79.00</td><td class="num prev-col">+17.00</td></tr>
+                <tr><td class="ind1">Other Expenses</td><td><span class="nref">26</span></td><td class="num">268.00</td><td class="num prev-col" style="color:var(--text2);">220.00</td><td class="num prev-col">+48.00</td></tr>
+                <tr class="tot-row"><td class="bold">Total Expenses (II)</td><td></td><td class="num bold">2,803.00</td><td class="num bold prev-col" style="color:var(--text2);">2,299.00</td><td class="num bold prev-col">+504.00</td></tr>
+                <tr class="sec-row"><td colspan="5">III. Profit</td></tr>
+                <tr class="tot-row"><td class="bold">Profit Before Tax (I − II)</td><td></td><td class="num bold up">435.00</td><td class="num bold prev-col up" style="color:var(--text2);">357.00</td><td class="num bold prev-col up">+78.00</td></tr>
+                <tr><td class="ind1">Current Tax (25%, estimated)</td><td></td><td class="num">109.00</td><td class="num prev-col" style="color:var(--text2);">89.00</td><td class="num prev-col">+20.00</td></tr>
+                <tr><td class="ind1">Deferred Tax (1%, estimated)</td><td></td><td class="num">4.00</td><td class="num prev-col" style="color:var(--text2);">4.00</td><td class="num prev-col">—</td></tr>
+                <tr class="grand-row"><td class="bold">Profit After Tax (PAT)</td><td></td><td class="num bold">322.00</td><td class="num bold prev-col">264.00</td><td class="num bold prev-col">+58.00</td></tr>
+                <tr class="sec-row"><td colspan="5">IV. Other Comprehensive Income (IND AS 1)</td></tr>
+                <tr><td class="ind1">Remeasurement of Defined Benefit Obligation</td><td></td><td class="num">n/a</td><td class="num prev-col" style="color:var(--text2);">n/a</td><td class="num prev-col">n/a</td></tr>
+                <tr class="sec-row"><td colspan="5">V. Earnings Per Share (IND AS 33)</td></tr>
+                <tr><td class="ind1">Basic &amp; Diluted EPS (₹)</td><td></td><td class="num">n/a</td><td class="num prev-col" style="color:var(--text2);">n/a</td><td class="num prev-col">n/a</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="info-bar">Every line above Section IV is derived directly from ledger movements. OCI and EPS are shown as <strong>n/a</strong> rather than estimated — neither is derivable from a Trial Balance alone (illustrative note, matching production behaviour).</div>
+      </section>
+
+      <!-- ═══════════ CASH FLOW ═══════════ -->
+      <section class="tab-panel" id="tab-cashflow">
+        <div class="dl-bar">
+          <div><div class="dl-bar-title">Statement of Cash Flows · FY 2025-26</div><div class="dl-bar-sub">Indirect Method · IND AS 7 · ₹ in Lakhs</div></div>
+        </div>
+        <div class="grid4">
+          <div class="kpi"><div class="lbl">Operating Cash Flow</div><div class="val up">485.00</div><div class="chg neu">OCF/PAT = 1.51x</div></div>
+          <div class="kpi"><div class="lbl">Investing Cash Flow</div><div class="val dn">(254.00)</div><div class="chg neu">Capex + FD/MF movements</div></div>
+          <div class="kpi"><div class="lbl">Financing Cash Flow</div><div class="val dn">(219.00)</div><div class="chg neu">Debt movement + dividend</div></div>
+          <div class="kpi"><div class="lbl">Net Change in Cash</div><div class="val up">12.00</div><div class="chg neu">Closing: 140.00 Lakhs</div></div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="ct">Statement of Cash Flows — Indirect Method <span class="cbadge cb-blue">IND AS 7</span></span></div>
+          <div class="table-wrap">
+            <table class="fc-table">
+              <thead><tr><th style="width:70%;">Particulars</th><th class="num">FY26 (₹L)</th></tr></thead>
+              <tbody>
+                <tr class="sec-row"><td colspan="2">A. Cash Flow from Operating Activities</td></tr>
+                <tr class="tot-row"><td class="ind1 bold">Profit Before Tax</td><td class="num bold up">435.00</td></tr>
+                <tr class="sec-row"><td class="ind2" colspan="2">Adjustments for non-cash items:</td></tr>
+                <tr><td class="ind2">Depreciation &amp; Amortisation</td><td class="num up">96.00</td></tr>
+                <tr><td class="ind2">Finance Costs</td><td class="num up">42.00</td></tr>
+                <tr><td class="ind2">Less: Interest / Other Income</td><td class="num dn">(58.00)</td></tr>
+                <tr class="sec-row"><td class="ind2" colspan="2">Changes in Working Capital:</td></tr>
+                <tr><td class="ind2">(Increase)/Decrease in Trade Receivables</td><td class="num dn">(60.00)</td></tr>
+                <tr><td class="ind2">(Increase)/Decrease in Other Current Assets</td><td class="num dn">(20.00)</td></tr>
+                <tr><td class="ind2">Increase/(Decrease) in Trade Payables</td><td class="num up">35.00</td></tr>
+                <tr><td class="ind2">Increase/(Decrease) in Other Current Liabilities</td><td class="num up">15.00</td></tr>
+                <tr class="grand-row"><td class="bold">A. Net Cash from Operating Activities</td><td class="num bold">485.00</td></tr>
+                <tr><td colspan="2" style="height:8px;background:var(--bg2);border:none;"></td></tr>
+                <tr class="sec-row"><td colspan="2">B. Cash Flow from Investing Activities</td></tr>
+                <tr><td class="ind1">Net Purchase of Fixed Assets &amp; Investments</td><td class="num dn">(216.00)</td></tr>
+                <tr><td class="ind1">Movement in Fixed Deposits</td><td class="num dn">(58.00)</td></tr>
+                <tr><td class="ind1">Movement in Mutual Funds</td><td class="num dn">(38.00)</td></tr>
+                <tr><td class="ind1">Interest &amp; Dividend Income Received</td><td class="num up">58.00</td></tr>
+                <tr class="grand-row"><td class="bold">B. Net Cash from Investing Activities</td><td class="num bold dn">(254.00)</td></tr>
+                <tr><td colspan="2" style="height:8px;background:var(--bg2);border:none;"></td></tr>
+                <tr class="sec-row"><td colspan="2">C. Cash Flow from Financing Activities</td></tr>
+                <tr><td class="ind1">Long-Term Borrowings &amp; Lease Liabilities (Net)</td><td class="num up">46.00</td></tr>
+                <tr><td class="ind1">Short-Term Borrowings (Net)</td><td class="num dn">(10.00)</td></tr>
+                <tr><td class="ind1">Finance Costs Paid</td><td class="num dn">(42.00)</td></tr>
+                <tr><td class="ind1">Dividends Paid, Net</td><td class="num dn">(213.00)</td></tr>
+                <tr class="grand-row"><td class="bold">C. Net Cash from Financing Activities</td><td class="num bold dn">(219.00)</td></tr>
+                <tr><td colspan="2" style="height:8px;background:var(--bg2);border:none;"></td></tr>
+                <tr class="grand-row"><td class="bold">Net Change in Cash (A+B+C)</td><td class="num bold up">12.00</td></tr>
+                <tr><td class="ind1">Opening Cash &amp; Bank Balances</td><td class="num">128.00</td></tr>
+                <tr class="grand-row"><td class="bold">Closing Cash &amp; Bank Balances</td><td class="num bold">140.00</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="info-bar">Free Cash Flow (OCF − Capex): <strong>269.00 ₹L</strong> · OCF / PAT: <strong>1.51x</strong></div>
+      </section>
+
+      <!-- ═══════════ NOTES ═══════════ -->
+      <section class="tab-panel" id="tab-notes">
+        <div class="dl-bar"><div><div class="dl-bar-title">Notes to Accounts · FY 2025-26</div><div class="dl-bar-sub">Representative notes for this demo · ₹ in Lakhs</div></div></div>
+        <div class="info-bar">The full production app renders all 26 Schedule III notes with ledger-level, drag-to-reclassify detail. This demo shows a representative subset.</div>
+
+        <div class="card"><div class="card-hdr"><span class="ct">Note 1 — Share Capital</span><span class="num bold" style="font-size:12px;">1,200.00</span></div>
+          <div class="table-wrap"><table class="fc-table"><thead><tr><th>Ledger</th><th class="num">FY26</th></tr></thead><tbody>
+          <tr><td class="ind1">Equity Share Capital</td><td class="num">1,200.00</td></tr>
+          <tr class="tot-row"><td class="bold">Total</td><td class="num bold">1,200.00</td></tr></tbody></table></div></div>
+
+        <div class="card"><div class="card-hdr"><span class="ct">Note 2 — Other Equity</span><span class="num bold" style="font-size:12px;">1,450.00</span></div>
+          <div class="table-wrap"><table class="fc-table"><thead><tr><th>Ledger</th><th class="num">FY26</th><th class="num" style="color:var(--text2)">FY25</th><th class="num">YoY</th></tr></thead><tbody>
+          <tr><td class="ind1">Securities Premium Reserve</td><td class="num">300.00</td><td class="num" style="color:var(--text2)">300.00</td><td class="num">—</td></tr>
+          <tr><td class="ind1">General Reserve</td><td class="num">250.00</td><td class="num" style="color:var(--text2)">250.00</td><td class="num">—</td></tr>
+          <tr><td class="ind1">Retained Earnings</td><td class="num">900.00</td><td class="num" style="color:var(--text2)">738.00</td><td class="num up">+162.00</td></tr>
+          <tr class="tot-row"><td class="bold">Total</td><td class="num bold">1,450.00</td><td class="num bold" style="color:var(--text2)">1,288.00</td><td class="num bold up">+162.00</td></tr></tbody></table></div></div>
+
+        <div class="card"><div class="card-hdr"><span class="ct">Note 10 — Property, Plant and Equipment</span><span class="num bold" style="font-size:12px;">1,450.00</span></div>
+          <div class="table-wrap"><table class="fc-table"><thead><tr><th>Ledger</th><th class="num">FY26</th><th class="num" style="color:var(--text2)">FY25</th></tr></thead><tbody>
+          <tr><td class="ind1">Plant &amp; Machinery (net)</td><td class="num">820.00</td><td class="num" style="color:var(--text2)">760.00</td></tr>
+          <tr><td class="ind1">Computers &amp; Peripherals (net)</td><td class="num">410.00</td><td class="num" style="color:var(--text2)">365.00</td></tr>
+          <tr><td class="ind1">Office Equipment (net)</td><td class="num">220.00</td><td class="num" style="color:var(--text2)">205.00</td></tr>
+          <tr class="tot-row"><td class="bold">Total</td><td class="num bold">1,450.00</td><td class="num bold" style="color:var(--text2)">1,330.00</td></tr></tbody></table></div></div>
+
+        <div class="card"><div class="card-hdr"><span class="ct">Note 16 — Trade Receivables</span><span class="num bold" style="font-size:12px;">890.00</span></div>
+          <div class="table-wrap"><table class="fc-table"><thead><tr><th>Ledger</th><th class="num">FY26</th><th class="num" style="color:var(--text2)">FY25</th></tr></thead><tbody>
+          <tr><td class="ind1">Sundry Debtors &lt; 6 months</td><td class="num">760.00</td><td class="num" style="color:var(--text2)">705.00</td></tr>
+          <tr><td class="ind1">Sundry Debtors &gt; 6 months</td><td class="num">130.00</td><td class="num" style="color:var(--text2)">125.00</td></tr>
+          <tr class="tot-row"><td class="bold">Total</td><td class="num bold">890.00</td><td class="num bold" style="color:var(--text2)">830.00</td></tr></tbody></table></div></div>
+
+        <div class="card"><div class="card-hdr"><span class="ct">Note 19 — Cash and Cash Equivalents</span><span class="num bold" style="font-size:12px;">140.00</span></div>
+          <div class="table-wrap"><table class="fc-table"><thead><tr><th>Ledger</th><th class="num">FY26</th><th class="num" style="color:var(--text2)">FY25</th></tr></thead><tbody>
+          <tr><td class="ind1">Cash in Hand</td><td class="num">8.00</td><td class="num" style="color:var(--text2)">7.00</td></tr>
+          <tr><td class="ind1">HDFC Bank — Current Account</td><td class="num">60.00</td><td class="num" style="color:var(--text2)">53.00</td></tr>
+          <tr><td class="ind1">ICICI Bank — Current Account</td><td class="num">32.00</td><td class="num" style="color:var(--text2)">28.00</td></tr>
+          <tr><td class="ind1">Kotak Bank — Savings / Sweep</td><td class="num">40.00</td><td class="num" style="color:var(--text2)">40.00</td></tr>
+          <tr class="tot-row"><td class="bold">Total</td><td class="num bold">140.00</td><td class="num bold" style="color:var(--text2)">128.00</td></tr></tbody></table></div></div>
+
+        <div class="card"><div class="card-hdr"><span class="ct">Note 7 — Trade Payables</span><span class="num bold" style="font-size:12px;">420.00</span></div>
+          <div class="table-wrap"><table class="fc-table"><thead><tr><th>Ledger</th><th class="num">FY26</th><th class="num" style="color:var(--text2)">FY25</th></tr></thead><tbody>
+          <tr><td class="ind1">MSME Trade Creditors</td><td class="num">260.00</td><td class="num" style="color:var(--text2)">230.00</td></tr>
+          <tr><td class="ind1">Other Trade Creditors</td><td class="num">160.00</td><td class="num" style="color:var(--text2)">155.00</td></tr>
+          <tr class="tot-row"><td class="bold">Total</td><td class="num bold">420.00</td><td class="num bold" style="color:var(--text2)">385.00</td></tr></tbody></table></div></div>
+      </section>
+
+      <!-- ═══════════ MIS ═══════════ -->
+      <section class="tab-panel" id="tab-mis">
+        <div class="dl-bar"><div><div class="dl-bar-title">MIS Report — Quarterly P&amp;L · FY 2025-26</div><div class="dl-bar-sub">Revenue · Gross Profit · EBITDA · PAT · Margins · ₹ in Lakhs</div></div></div>
+        <div class="grid3">
+          <div class="kpi"><div class="lbl">Period Revenue</div><div class="val">3,180.00</div><div class="chg up">+21.9% vs FY25</div></div>
+          <div class="kpi"><div class="lbl">Gross Margin</div><div class="val up">53.3%</div><div class="chg neu">GP 1,695.00 L</div></div>
+          <div class="kpi"><div class="lbl">EBITDA Margin</div><div class="val up">16.2%</div><div class="chg neu">EBITDA 515.00 L</div></div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="ct">Quarterly MIS — P&amp;L</span><span class="cbadge cb-blue">₹ in Lakhs</span></div>
+          <div class="table-wrap">
+            <table class="fc-table">
+              <thead><tr><th>Particulars</th><th class="num">Q1</th><th class="num">Q2</th><th class="num">Q3</th><th class="num">Q4</th><th class="num bold">Total</th></tr></thead>
+              <tbody>
+                <tr class="tot-row"><td class="bold">Revenue from Operations</td><td class="num">758.00</td><td class="num">798.00</td><td class="num">818.00</td><td class="num">806.00</td><td class="num bold">3,180.00</td></tr>
+                <tr><td>Other Income</td><td class="num">15.00</td><td class="num">14.00</td><td class="num">15.00</td><td class="num">14.00</td><td class="num bold">58.00</td></tr>
+                <tr class="tot-row"><td class="bold">Total Income</td><td class="num">773.00</td><td class="num">812.00</td><td class="num">833.00</td><td class="num">820.00</td><td class="num bold">3,238.00</td></tr>
+                <tr><td>Cost of Services</td><td class="num">354.00</td><td class="num">373.00</td><td class="num">382.00</td><td class="num">376.00</td><td class="num bold">1,485.00</td></tr>
+                <tr><td>Employee Benefits</td><td class="num">218.00</td><td class="num">229.00</td><td class="num">235.00</td><td class="num">231.00</td><td class="num bold">913.00</td></tr>
+                <tr><td>Other Expenses</td><td class="num">64.00</td><td class="num">67.00</td><td class="num">69.00</td><td class="num">68.00</td><td class="num bold">268.00</td></tr>
+                <tr class="tot-row"><td class="bold up">EBITDA (Operating)</td><td class="num up">122.00</td><td class="num up">129.00</td><td class="num up">132.00</td><td class="num up">131.00</td><td class="num bold up">514.00</td></tr>
+                <tr><td>Finance Costs</td><td class="num">10.00</td><td class="num">10.00</td><td class="num">11.00</td><td class="num">10.00</td><td class="num bold">41.00</td></tr>
+                <tr><td>Depreciation &amp; Amortisation</td><td class="num">23.00</td><td class="num">24.00</td><td class="num">25.00</td><td class="num">24.00</td><td class="num bold">96.00</td></tr>
+                <tr class="tot-row"><td class="bold up">Profit Before Tax</td><td class="num up">104.00</td><td class="num up">109.00</td><td class="num up">111.00</td><td class="num up">111.00</td><td class="num bold up">435.00</td></tr>
+                <tr><td>Tax (25%, estimated)</td><td class="num">26.00</td><td class="num">27.00</td><td class="num">28.00</td><td class="num">28.00</td><td class="num bold">109.00</td></tr>
+                <tr class="grand-row"><td class="bold">Profit After Tax</td><td class="num">78.00</td><td class="num">82.00</td><td class="num">83.00</td><td class="num">83.00</td><td class="num bold">326.00</td></tr>
+                <tr><td>Gross Margin %</td><td class="num">53.3%</td><td class="num">53.3%</td><td class="num">53.3%</td><td class="num">53.3%</td><td class="num bold">53.3%</td></tr>
+                <tr><td>EBITDA Margin %</td><td class="num">16.1%</td><td class="num">16.2%</td><td class="num">16.1%</td><td class="num">16.3%</td><td class="num bold">16.2%</td></tr>
+                <tr><td>PAT Margin %</td><td class="num">10.3%</td><td class="num">10.3%</td><td class="num">10.1%</td><td class="num">10.3%</td><td class="num bold">10.3%</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="notice">Quarterly granularity shown for this demo (production also renders full 12-month columns). Tax is a disclosed flat-rate estimate — this Trial Balance carries no dedicated tax-provision ledger.</div>
+      </section>
+
+      <!-- ═══════════ TREASURY ═══════════ -->
+      <section class="tab-panel" id="tab-treasury">
+        <div class="dl-bar"><div><div class="dl-bar-title">Treasury · FY 2025-26</div><div class="dl-bar-sub">Cash, Bank, FDs &amp; MFs · ₹ in Lakhs</div></div></div>
+        <div class="grid4">
+          <div class="kpi"><div class="lbl">Cash &amp; Bank</div><div class="val">140.00</div><div class="chg up">+9.4% vs FY25</div></div>
+          <div class="kpi"><div class="lbl">Fixed Deposits</div><div class="val">480.00</div><div class="chg up">+13.7% vs FY25</div></div>
+          <div class="kpi"><div class="lbl">Mutual Funds</div><div class="val">320.00</div><div class="chg up">+13.5% vs FY25</div></div>
+          <div class="kpi"><div class="lbl">Total Treasury</div><div class="val">940.00</div><div class="chg up">+13.0% vs FY25</div></div>
+        </div>
+        <div class="grid2">
+          <div class="card"><div class="card-hdr"><span class="ct">Treasury Composition</span><span class="cbadge cb-blue">₹ in Lakhs</span></div>
+            <div class="card-body"><div class="chart-box" style="height:210px;"><canvas id="chartTreasury"></canvas></div></div></div>
+          <div class="card"><div class="card-hdr"><span class="ct">Liquidity &amp; Concentration</span></div>
+            <div class="card-body so-grid">
+              <div class="so-item"><div class="so-lbl">Liquid (Cash + Bank)</div><div class="so-val">14.9%</div></div>
+              <div class="so-item"><div class="so-lbl">Invested (FD + MF)</div><div class="so-val">85.1%</div></div>
+              <div class="so-item" style="grid-column:1/-1;"><div class="so-lbl">Largest Single Holding</div><div class="so-val" style="font-size:13px;">HDFC Fixed Deposit — 280.00 L (29.8% of treasury)</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="card"><div class="card-hdr"><span class="ct">Fixed Deposits</span></div><div class="table-wrap"><table class="fc-table"><thead><tr><th>Instrument</th><th class="num">Closing (₹L)</th></tr></thead><tbody>
+            <tr><td>HDFC Fixed Deposit</td><td class="num">280.00</td></tr><tr><td>ICICI Fixed Deposit</td><td class="num">120.00</td></tr><tr><td>Axis Fixed Deposit</td><td class="num">80.00</td></tr>
+            <tr class="tot-row"><td class="bold">Subtotal</td><td class="num bold">480.00</td></tr></tbody></table></div></div>
+          <div class="card"><div class="card-hdr"><span class="ct">Mutual Funds</span></div><div class="table-wrap"><table class="fc-table"><thead><tr><th>Instrument</th><th class="num">Closing (₹L)</th></tr></thead><tbody>
+            <tr><td>HDFC Liquid Fund</td><td class="num">180.00</td></tr><tr><td>ICICI Pru Money Market Fund</td><td class="num">140.00</td></tr>
+            <tr class="tot-row"><td class="bold">Subtotal</td><td class="num bold">320.00</td></tr></tbody></table></div></div>
+        </div>
+      </section>
+
+      <!-- ═══════════ RATIOS ═══════════ -->
+      <section class="tab-panel" id="tab-ratios">
+        <div class="dl-bar"><div><div class="dl-bar-title">Key Financial Ratios · FY 2025-26</div><div class="dl-bar-sub">Liquidity · Profitability · Leverage · Efficiency</div></div></div>
+        <div class="grid2">
+          <div class="ratio-card">
+            <div style="font-size:11px;font-weight:700;margin-bottom:9px;">Liquidity</div>
+            <div class="ratio-row"><div class="ratio-top"><span class="k">Current Ratio</span><span class="v">2.67x</span></div><div class="gauge-wrap"><div class="gauge-fill" style="width:100%;background:var(--good);"></div></div><div class="gauge-note">Benchmark &gt; 1.5x</div></div>
+            <div class="ratio-row"><div class="ratio-top"><span class="k">Quick Ratio</span><span class="v">2.67x</span></div><div class="gauge-wrap"><div class="gauge-fill" style="width:100%;background:var(--good);"></div></div><div class="gauge-note">Benchmark &gt; 1.0x</div></div>
+            <div class="ratio-row"><div class="ratio-top"><span class="k">Cash Ratio</span><span class="v">0.18x</span></div><div class="gauge-wrap"><div class="gauge-fill" style="width:35%;background:var(--accent);"></div></div><div class="gauge-note">n/a benchmark</div></div>
+          </div>
+          <div class="ratio-card">
+            <div style="font-size:11px;font-weight:700;margin-bottom:9px;">Profitability</div>
+            <div class="ratio-row"><div class="ratio-top"><span class="k">Gross Margin</span><span class="v">53.3%</span></div><div class="gauge-wrap"><div class="gauge-fill" style="width:100%;background:var(--good);"></div></div><div class="gauge-note">Benchmark &gt; 45%</div></div>
+            <div class="ratio-row"><div class="ratio-top"><span class="k">EBITDA Margin</span><span class="v">16.2%</span></div><div class="gauge-wrap"><div class="gauge-fill" style="width:100%;background:var(--good);"></div></div><div class="gauge-note">Benchmark &gt; 10%</div></div>
+            <div class="ratio-row"><div class="ratio-top"><span class="k">ROE</span><span class="v">12.2%</span></div><div class="gauge-wrap"><div class="gauge-fill" style="width:81%;background:var(--warn);"></div></div><div class="gauge-note">Benchmark &gt; 15%</div></div>
+            <div class="ratio-row"><div class="ratio-top"><span class="k">ROCE</span><span class="v">14.9%</span></div><div class="gauge-wrap"><div class="gauge-fill" style="width:99%;background:var(--warn);"></div></div><div class="gauge-note">Benchmark &gt; 15%</div></div>
+          </div>
+          <div class="ratio-card">
+            <div style="font-size:11px;font-weight:700;margin-bottom:9px;">Leverage</div>
+            <div class="ratio-row"><div class="ratio-top"><span class="k">Debt / Equity</span><span class="v">0.51x</span></div><div class="gauge-wrap"><div class="gauge-fill" style="width:100%;background:var(--good);"></div></div><div class="gauge-note">Benchmark &lt; 1.0x</div></div>
+            <div class="ratio-row"><div class="ratio-top"><span class="k">Interest Cover</span><span class="v">11.36x</span></div><div class="gauge-wrap"><div class="gauge-fill" style="width:100%;background:var(--good);"></div></div><div class="gauge-note">Benchmark &gt; 3.0x</div></div>
+            <div class="ratio-row"><div class="ratio-top"><span class="k">DSCR</span><span class="v">11.55x</span></div><div class="gauge-wrap"><div class="gauge-fill" style="width:60%;background:var(--accent);"></div></div><div class="gauge-note">n/a benchmark</div></div>
+          </div>
+          <div class="ratio-card">
+            <div style="font-size:11px;font-weight:700;margin-bottom:9px;">Efficiency</div>
+            <div class="ratio-row"><div class="ratio-top"><span class="k">Asset Turnover</span><span class="v">0.80x</span></div><div class="gauge-wrap"><div class="gauge-fill" style="width:55%;background:var(--accent);"></div></div><div class="gauge-note">n/a benchmark</div></div>
+            <div class="ratio-row"><div class="ratio-top"><span class="k">DSO</span><span class="v">102 days</span></div><div class="gauge-wrap"><div class="gauge-fill" style="width:59%;background:var(--warn);"></div></div><div class="gauge-note">Benchmark &lt; 60 days</div></div>
+            <div class="ratio-row"><div class="ratio-top"><span class="k">DPO</span><span class="v">103 days</span></div><div class="gauge-wrap"><div class="gauge-fill" style="width:70%;background:var(--accent);"></div></div><div class="gauge-note">Benchmark 30–45 days</div></div>
+            <div class="ratio-row"><div class="ratio-top"><span class="k">Cash Conversion Cycle</span><span class="v">(1) day</span></div><div class="gauge-wrap"><div class="gauge-fill" style="width:5%;background:var(--good);"></div></div><div class="gauge-note">Lower is better</div></div>
+          </div>
+        </div>
+        <div class="card"><div class="card-hdr"><span class="ct">DuPont Analysis</span></div><div class="card-body so-grid" style="margin-bottom:0;">
+          <div class="so-item"><div class="so-lbl">Net Margin</div><div class="so-val">10.1%</div></div>
+          <div class="so-item"><div class="so-lbl">Asset Turnover</div><div class="so-val">0.80x</div></div>
+          <div class="so-item"><div class="so-lbl">Equity Multiplier</div><div class="so-val">1.51x</div></div>
+          <div class="so-item" style="grid-column:1/-1;"><div class="so-lbl">Return on Equity (Net Margin × Turnover × Multiplier)</div><div class="so-val">12.2%</div></div>
+        </div></div>
+      </section>
+
+      <!-- ═══════════ WORKING CAPITAL ═══════════ -->
+      <section class="tab-panel" id="tab-wc">
+        <div class="dl-bar"><div><div class="dl-bar-title">Working Capital Analysis · FY 2025-26</div><div class="dl-bar-sub">DSO, DPO, CCC &amp; Current Position · ₹ in Lakhs</div></div></div>
+        <div class="info-bar">Cash Conversion Cycle: <strong>(1) day</strong> (DSO 102d − DPO 103d, no inventory carried). Net Working Capital: <strong class="up">1,335.00 ₹L</strong>.</div>
+        <div class="card"><div class="card-hdr"><span class="ct">Working Capital Components</span><span class="cbadge cb-blue">₹ in Lakhs</span></div>
+          <div class="card-body">
+            <div class="wc-row"><span class="wc-name">Trade Receivables</span><div class="wc-bar-outer"><div class="wc-bar-inner" style="width:42%;background:var(--chart-1);"></div></div><span class="wc-val">890.00</span><span class="wc-bench">DSO 102d</span></div>
+            <div class="wc-row"><span class="wc-name">Trade Payables</span><div class="wc-bar-outer"><div class="wc-bar-inner" style="width:20%;background:var(--chart-3);"></div></div><span class="wc-val">420.00</span><span class="wc-bench">DPO 103d</span></div>
+            <div class="wc-row"><span class="wc-name">Other Current Assets</span><div class="wc-bar-outer"><div class="wc-bar-inner" style="width:10%;background:var(--chart-2);"></div></div><span class="wc-val">210.00</span><span class="wc-bench">vs CA</span></div>
+          </div>
+        </div>
+        <div class="grid3">
+          <div class="kpi"><div class="lbl">Current Ratio</div><div class="val">2.67x</div><div class="chg neu">Benchmark &gt; 1.5x</div></div>
+          <div class="kpi"><div class="lbl">Quick Ratio</div><div class="val">2.67x</div><div class="chg neu">Benchmark &gt; 1.0x</div></div>
+          <div class="kpi"><div class="lbl">Cash Conversion Cycle</div><div class="val">(1)d</div><div class="chg neu">Lower is better</div></div>
+        </div>
+      </section>
+
+      <!-- ═══════════ CUSTOMER MARGIN ═══════════ -->
+      <section class="tab-panel" id="tab-custmargin">
+        <div class="dl-bar"><div><div class="dl-bar-title">Customer Margin Report · FY 2025-26</div><div class="dl-bar-sub">Real revenue vs. direct cost by customer</div></div></div>
+        <div class="grid3">
+          <div class="kpi"><div class="lbl">Total Revenue</div><div class="val">1,571.00</div><div class="chg neu">2 customers tracked</div></div>
+          <div class="kpi"><div class="lbl">Total Direct Cost</div><div class="val">290.00</div><div class="chg neu">Billable expenses tagged in Zoho</div></div>
+          <div class="kpi"><div class="lbl">Total Direct Margin</div><div class="val up">1,281.00</div><div class="chg neu">Revenue − direct cost</div></div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="ct">Revenue &amp; Direct Margin by Customer</span><span class="cbadge cb-blue">₹ in Lakhs</span></div>
+          <div class="table-wrap"><table class="fc-table">
+            <thead><tr><th>Customer</th><th class="num">Revenue</th><th class="num">Direct Cost</th><th class="num">Direct Margin</th><th class="num">Margin %</th></tr></thead>
+            <tbody>
+              <tr><td>Vantage Retail Group</td><td class="num">903.00</td><td class="num">190.00</td><td class="num up">713.00</td><td class="num">79.0%</td></tr>
+              <tr><td>Blackwell Financial Services</td><td class="num">668.00</td><td class="num">100.00</td><td class="num up">568.00</td><td class="num">85.0%</td></tr>
+              <tr><td>Northbridge Manufacturing Co.</td><td class="num">461.00</td><td class="num">—</td><td class="num up">461.00</td><td class="num">100.0%</td></tr>
+              <tr class="tot-row"><td class="bold">Total</td><td class="num bold">2,032.00</td><td class="num bold">290.00</td><td class="num bold up">1,742.00</td><td class="num bold">85.7%</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+        <div class="info-bar">"Direct Margin" excludes indirect/shared costs (salaries, cloud infrastructure, rent) — intentionally not a fully-loaded profitability figure. Northbridge shows no direct cost because no expense has been tagged billable to them in Zoho, not because they cost nothing.</div>
+      </section>
+
+      <!-- ═══════════ VENDOR EXPENSE ═══════════ -->
+      <section class="tab-panel" id="tab-vendor">
+        <div class="dl-bar"><div><div class="dl-bar-title">Vendor Expense Report · FY 2025-26</div><div class="dl-bar-sub">Per-vendor spend from Zoho Bills</div></div></div>
+        <div class="grid3">
+          <div class="kpi"><div class="lbl">Total Vendor Spend</div><div class="val">1,180.00</div><div class="chg neu">6 vendors · FY26</div></div>
+          <div class="kpi"><div class="lbl">Largest Vendor</div><div class="val">289.00</div><div class="chg neu">CloudNova Infrastructure Pvt Ltd</div></div>
+          <div class="kpi"><div class="lbl">Concentration Risk</div><div class="val">0</div><div class="chg neu">vendors &gt; 30% of spend</div></div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="ct">Vendors Ranked by Spend</span><span class="cbadge cb-blue">₹ in Lakhs</span></div>
+          <div class="table-wrap"><table class="fc-table">
+            <thead><tr><th>Vendor</th><th class="num">Spend</th><th class="num">% of Total</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td>CloudNova Infrastructure Pvt Ltd</td><td class="num">289.00</td><td class="num">24.5%</td><td><span class="pill pa">Key Vendor</span></td></tr>
+              <tr><td>Apex Staffing Partners</td><td class="num">224.00</td><td class="num">19.0%</td><td><span class="pill pa">Key Vendor</span></td></tr>
+              <tr><td>Whitfield Office Realty</td><td class="num">177.00</td><td class="num">15.0%</td><td><span class="pill pg">Healthy</span></td></tr>
+              <tr><td>Sentinel Legal &amp; Compliance</td><td class="num">136.00</td><td class="num">11.5%</td><td><span class="pill pg">Healthy</span></td></tr>
+              <tr><td>BluePeak Marketing Agency</td><td class="num">106.00</td><td class="num">9.0%</td><td><span class="pill pg">Healthy</span></td></tr>
+              <tr><td>Sundry Vendors (below reporting threshold)</td><td class="num">248.00</td><td class="num">21.0%</td><td><span class="pill pg">Healthy</span></td></tr>
+              <tr class="tot-row"><td class="bold">Total</td><td class="num bold">1,180.00</td><td class="num bold">100.0%</td><td></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </section>
+
+      <!-- ═══════════ SCENARIO PLANNER ═══════════ -->
+      <section class="tab-panel" id="tab-scenario">
+        <div class="dl-bar"><div><div class="dl-bar-title">Scenario Planner &amp; Sensitivity Model</div><div class="dl-bar-sub">Interactive what-if financial projections</div></div></div>
+        <div class="info-bar">What-if projections start from FY26 actuals and apply the adjustments below. Finance costs and depreciation are held constant. <strong>Sliders below are live</strong> — try them.</div>
+        <div class="card"><div class="card-hdr"><span class="ct">Scenario Inputs</span></div>
+          <div class="card-body">
+            <div class="sc-row"><span class="sc-lbl">Revenue growth</span><input type="range" id="scRev" min="-30" max="50" value="10" oninput="scRun()"><span class="sc-val" id="scRevVal">+10%</span></div>
+            <div class="sc-row"><span class="sc-lbl">Cost of Services change</span><input type="range" id="scCos" min="-30" max="50" value="0" oninput="scRun()"><span class="sc-val" id="scCosVal">0%</span></div>
+            <div class="sc-row"><span class="sc-lbl">Employee cost change</span><input type="range" id="scEmp" min="-30" max="50" value="5" oninput="scRun()"><span class="sc-val" id="scEmpVal">+5%</span></div>
+            <div class="sc-row"><span class="sc-lbl">Other Opex change</span><input type="range" id="scOex" min="-30" max="50" value="0" oninput="scRun()"><span class="sc-val" id="scOexVal">0%</span></div>
+            <button class="btn btn-se btn-sm" onclick="scReset()">Reset</button>
+          </div>
+        </div>
+        <div class="so-grid">
+          <div class="so-item"><div class="so-lbl">Projected Revenue</div><div class="so-val" id="scOutRev">₹34.98 Cr</div></div>
+          <div class="so-item"><div class="so-lbl">Projected EBITDA</div><div class="so-val up" id="scOutEbitda">₹5.65 Cr</div></div>
+          <div class="so-item"><div class="so-lbl">Projected PAT</div><div class="so-val up" id="scOutPat">₹3.63 Cr</div></div>
+        </div>
+        <div class="card"><div class="card-hdr"><span class="ct">Actual vs Projected</span><span class="cbadge cb-blue">₹ in Lakhs</span></div>
+          <table class="fc-table"><thead><tr><th>Metric</th><th class="num">Actual</th><th class="num">Projected</th><th class="num">Δ</th></tr></thead>
+          <tbody>
+            <tr><td>Revenue</td><td class="num">3,180.00</td><td class="num" id="scRowRev">3,498.00</td><td class="num up" id="scRowRevD">+318.00</td></tr>
+            <tr><td>EBITDA</td><td class="num up">515.00</td><td class="num up" id="scRowEbitda">565.20</td><td class="num up" id="scRowEbitdaD">+50.20</td></tr>
+            <tr><td>PAT</td><td class="num up">322.00</td><td class="num up" id="scRowPat">362.62</td><td class="num up" id="scRowPatD">+40.62</td></tr>
+          </tbody></table>
+        </div>
+      </section>
+
+      <!-- ═══════════ ALERTS ═══════════ -->
+      <section class="tab-panel" id="tab-alerts">
+        <div class="dl-bar"><div><div class="dl-bar-title">Smart Alerts &amp; Audit Triggers · FY 2025-26</div><div class="dl-bar-sub">Risk indicators &amp; compliance checks</div></div></div>
+        <div class="card"><div class="card-hdr"><span class="ct">Smart Alerts — FY26</span><span class="cbadge cb-blue">5 items</span></div>
+          <div class="card-body">
+            <div class="alert-item success-a"><span class="alert-dot dot-ok"></span><span>Balance Sheet tallies for FY 2025-26 (Assets = Equity + Liabilities).</span></div>
+            <div class="alert-item success-a"><span class="alert-dot dot-ok"></span><span>Current ratio (2.67x) is comfortably above the 1.5x benchmark.</span></div>
+            <div class="alert-item success-a"><span class="alert-dot dot-ok"></span><span>EBITDA margin (16.2%) is healthy against the 10% benchmark.</span></div>
+            <div class="alert-item warning"><span class="alert-dot dot-wa"></span><span>DSO (102 days) exceeds the 60-day benchmark — receivables collection may be slowing.</span></div>
+            <div class="alert-item info-a"><span class="alert-dot dot-in"></span><span>ROE (12.2%) sits just below the 15% benchmark — worth monitoring against next quarter.</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════ COMPLIANCE ═══════════ -->
+      <section class="tab-panel" id="tab-compliance">
+        <div class="dl-bar"><div><div class="dl-bar-title">Statutory &amp; Compliance Checklist · FY 2025-26</div><div class="dl-bar-sub">IND AS, Audit Trail &amp; Financial Lock Status</div></div></div>
+        <div class="card"><div class="card-hdr"><span class="ct">Compliance Checklist</span></div>
+          <div>
+            <div class="comp-row"><div style="display:flex;align-items:center;gap:10px;"><span class="comp-icon" style="background:var(--good-l);color:var(--good);">✓</span><span>Trial Balance loaded for the period</span></div><span class="pill pg">Loaded</span></div>
+            <div class="comp-row"><div style="display:flex;align-items:center;gap:10px;"><span class="comp-icon" style="background:var(--good-l);color:var(--good);">✓</span><span>Balance Sheet tallies (Schedule III)</span></div><span class="pill pg">Balanced</span></div>
+            <div class="comp-row"><div style="display:flex;align-items:center;gap:10px;"><span class="comp-icon" style="background:var(--good-l);color:var(--good);">✓</span><span>Financial Year lock status</span></div><span class="pill pg">Open for updates</span></div>
+            <div class="comp-row"><div style="display:flex;align-items:center;gap:10px;"><span class="comp-icon" style="background:var(--good-l);color:var(--good);">✓</span><span>Data source</span></div><span class="pill pg">Live API / uploaded TB</span></div>
+            <div class="comp-row"><div style="display:flex;align-items:center;gap:10px;"><span class="comp-icon" style="background:var(--good-l);color:var(--good);">✓</span><span>IND AS 7 Cash Flow (Indirect Method)</span></div><span class="pill pg">Generated</span></div>
+            <div class="comp-row"><div style="display:flex;align-items:center;gap:10px;"><span class="comp-icon" style="background:var(--bg3);color:var(--text3);">—</span><span>IND AS 19 — Employee Benefits (OCI)</span></div><span class="pill pgy">n/a — requires actuarial valuation</span></div>
+            <div class="comp-row"><div style="display:flex;align-items:center;gap:10px;"><span class="comp-icon" style="background:var(--good-l);color:var(--good);">✓</span><span>IND AS 116 — Lease Liabilities classified</span></div><span class="pill pg">NC/Current split available</span></div>
+            <div class="comp-row"><div style="display:flex;align-items:center;gap:10px;"><span class="comp-icon" style="background:var(--good-l);color:var(--good);">✓</span><span>Audit trail enabled</span></div><span class="pill pg">14 events logged · last today</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════ BOARD PACK ═══════════ -->
+      <section class="tab-panel" id="tab-boardpack">
+        <div class="dl-bar"><div><div class="dl-bar-title">Board Pack · FY 2025-26</div><div class="dl-bar-sub">Executive summary · Annual</div></div></div>
+        <div class="bp-section">
+          <div class="bp-hdr"><span>Financial Highlights</span></div>
+          <div class="bp-body">
+            <div class="grid4" style="margin-bottom:10px;">
+              <div class="kpi"><div class="lbl">Revenue</div><div class="val">₹31.80 Cr</div></div>
+              <div class="kpi"><div class="lbl">EBITDA</div><div class="val up">₹5.15 Cr</div></div>
+              <div class="kpi"><div class="lbl">PAT</div><div class="val up">₹3.22 Cr</div></div>
+              <div class="kpi"><div class="lbl">OCF</div><div class="val up">₹4.85 Cr</div></div>
+            </div>
+            <div class="hl-row hl-green">Revenue of ₹31.80 Cr with EBITDA margin of 16.2% for FY 2025-26 — up 21.9% year-on-year.</div>
+            <div class="hl-row hl-blue">Balance Sheet tallies — no reconciliation issues flagged.</div>
+            <div class="hl-row hl-green">Current ratio at 2.67x (benchmark 1.5x) — strong short-term liquidity.</div>
+            <div class="hl-row hl-blue">Treasury position of ₹9.40 Cr across cash, bank, FDs and mutual funds.</div>
+          </div>
+        </div>
+        <div class="bp-section">
+          <div class="bp-hdr"><span>Key Ratios</span></div>
+          <div class="bp-body so-grid" style="margin-bottom:0;">
+            <div class="so-item"><div class="so-lbl">ROE</div><div class="so-val">12.2%</div></div>
+            <div class="so-item"><div class="so-lbl">ROCE</div><div class="so-val">14.9%</div></div>
+            <div class="so-item"><div class="so-lbl">Debt/Equity</div><div class="so-val">0.51x</div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════ REPORT BUILDER ═══════════ -->
+      <section class="tab-panel" id="tab-reportbuilder">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:4px;">
+          <div style="font-size:18px;font-weight:700;">Report Builder</div><span class="pill pb">Custom formats</span>
+        </div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:16px;">Build reusable statement formats — nested lines, subtotals, signs, per-format ledger mapping — then run them against any period.</p>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px;">
+          <button class="btn btn-se" onclick="showToast('Demo build — available in the live app')">✨ Quick build</button>
+          <button class="btn btn-pr" onclick="showToast('Demo build — available in the live app')">+ New format</button>
+        </div>
+        <div class="grid2">
+          <div class="format-card"><div class="fname">Management P&amp;L</div><div class="fmeta">14 lines · 6 detail</div><div style="margin-bottom:10px;"><span style="color:var(--good);font-size:11px;">✓ Validated</span></div>
+            <div style="display:flex;gap:6px;"><button class="btn btn-se btn-sm" onclick="showToast('Demo build')">Edit format</button><button class="btn btn-se btn-sm" onclick="showToast('Demo build')">▶ Run</button></div></div>
+          <div class="format-card"><div class="fname">Board P&amp;L Summary</div><div class="fmeta">9 lines · 4 detail</div><div style="margin-bottom:10px;"><span style="color:var(--warn);font-size:11px;">⚠ 1 warning</span></div>
+            <div style="display:flex;gap:6px;"><button class="btn btn-se btn-sm" onclick="showToast('Demo build')">Edit format</button><button class="btn btn-se btn-sm" onclick="showToast('Demo build')">▶ Run</button></div></div>
+          <div class="format-card"><div class="fname">Working Capital View</div><div class="fmeta">8 lines · 5 detail</div><div style="margin-bottom:10px;"><span style="color:var(--good);font-size:11px;">✓ Validated</span></div>
+            <div style="display:flex;gap:6px;"><button class="btn btn-se btn-sm" onclick="showToast('Demo build')">Edit format</button><button class="btn btn-se btn-sm" onclick="showToast('Demo build')">▶ Run</button></div></div>
+          <div class="format-card"><div class="fname">FP&amp;A — Opex by Category</div><div class="fmeta">9 lines · 4 detail</div><div style="margin-bottom:10px;"><span style="color:var(--good);font-size:11px;">✓ Validated</span></div>
+            <div style="display:flex;gap:6px;"><button class="btn btn-se btn-sm" onclick="showToast('Demo build')">Edit format</button><button class="btn btn-se btn-sm" onclick="showToast('Demo build')">▶ Run</button></div></div>
+        </div>
+      </section>
+
+      <!-- ═══════════ UPLOAD ═══════════ -->
+      <section class="tab-panel" id="tab-upload">
+        <div class="info-bar"><strong>Two data modes:</strong> Upload a Trial Balance Excel (auto-populates all statements) or connect <strong>Zoho Books</strong> via OAuth for live monthly sync.</div>
+        <div class="step-grid">
+          <div class="step-box" style="border-left:3px solid var(--accent);"><div class="step-num" style="color:var(--accent);">LAYER 1 · SOURCE</div><div style="font-size:13px;font-weight:700;margin-bottom:6px;">Trial Balance</div><div style="font-size:11px;color:var(--text2);line-height:1.6;">Opening balances + 12 months × Dr/Cr per ledger.</div></div>
+          <div class="step-box" style="border-left:3px solid var(--good);"><div class="step-num" style="color:var(--good);">LAYER 2 · MAP</div><div style="font-size:13px;font-weight:700;margin-bottom:6px;">Ledger Master</div><div style="font-size:11px;color:var(--text2);line-height:1.6;">Pre-seeded IND AS mappings, note-wise.</div></div>
+          <div class="step-box" style="border-left:3px solid var(--warn);"><div class="step-num" style="color:var(--warn);">LAYER 3 · COMPUTE</div><div style="font-size:13px;font-weight:700;margin-bottom:6px;">Period Engine</div><div style="font-size:11px;color:var(--text2);line-height:1.6;">BS = cumulative, P&amp;L = selected months.</div></div>
+          <div class="step-box" style="border-left:3px solid var(--info);"><div class="step-num" style="color:var(--info);">LAYER 4 · OUTPUT</div><div style="font-size:13px;font-weight:700;margin-bottom:6px;">All Reports</div><div style="font-size:11px;color:var(--text2);line-height:1.6;">MIS, Balance Sheet, P&amp;L, Notes, Treasury.</div></div>
+        </div>
+        <div class="grid2">
+          <div class="card"><div class="card-hdr"><span class="ct">Option 1 — Upload Trial Balance</span></div>
+            <div class="card-body">
+              <div class="upload-zone"><div style="font-size:26px;margin-bottom:8px;opacity:.5;">📂</div><div style="font-size:13px;font-weight:600;">Drop Trial Balance Excel here or click to browse</div><div style="font-size:11px;color:var(--text2);margin-top:4px;">Disabled in this demo</div></div>
+              <button class="btn btn-pr" disabled>Upload &amp; Recompute Reports</button>
+            </div>
+          </div>
+          <div class="card"><div class="card-hdr" style="display:flex;justify-content:space-between;"><span class="ct">Option 2 — Zoho Books</span><span class="pill pg">● Connected</span></div>
+            <div class="card-body">
+              <div style="font-size:11px;line-height:1.7;color:var(--text2);margin-bottom:12px;">🟢 <strong>Live Sync Active</strong> · Connected via OAuth 2.0. Auto-sync runs every 6 hours.</div>
+              <button class="btn btn-gr" style="background:var(--good);color:#fff;" onclick="showToast('Demo build — sync disabled')">⚡ Sync Trial Balance</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   THEMES
+   ══════════════════════════════════════════════════════════════════ */
+var THEMES = [
+  { id:'corporate', name:'Corporate Blue',  desc:'Current production default', swatches:['#185fa5','#ffffff','#f7f8fa','#157a3d'] },
+  { id:'midnight',  name:'Midnight Navy',   desc:'Dark mode, from the app\'s own marketing pages', swatches:['#5b9fe0','#101a2c','#0c1524','#4fd28a'] },
+  { id:'emerald',   name:'Emerald Ledger',  desc:'Deep teal on warm paper', swatches:['#0f6e56','#ffffff','#f2f9f6','#12844a'] },
+  { id:'amber',     name:'Amber Statement', desc:'Warm ochre-gold on ivory', swatches:['#8a5a00','#fffdf9','#fbf4e8','#3f7d2c'] },
+  { id:'slate',     name:'Slate Graphite',  desc:'Minimal, cool indigo accent', swatches:['#3e4c6d','#ffffff','#f4f5f8','#146c43'] },
+  { id:'amethyst',  name:'Royal Amethyst',  desc:'Premium violet identity', swatches:['#5b3fa0','#fffdff','#f7f2fb','#227a45'] }
+];
+var CHART_SERIES = { // validated categorical set (see palette.md) — fixed across every theme so data identity never shifts meaning
+  light: { c1:'#2a78d6', c2:'#eb6834', c3:'#1baf7a', c4:'#eda100', c5:'#e87ba4' },
+  dark:  { c1:'#3987e5', c2:'#d95926', c3:'#199e70', c4:'#c98500', c5:'#d55181' }
+};
+
+function buildThemeGrid(){
+  var grid = document.getElementById('themeGrid');
+  var current = document.documentElement.getAttribute('data-theme');
+  grid.innerHTML = THEMES.map(function(t){
+    var active = t.id === current ? ' active' : '';
+    return '<button type="button" class="theme-opt' + active + '" onclick="applyTheme(\'' + t.id + '\')">' +
+      '<div class="swatch-row">' + t.swatches.map(function(s){ return '<span class="swatch" style="background:' + s + '"></span>'; }).join('') + '</div>' +
+      '<div class="theme-opt-name">' + t.name + (active ? '<span class="theme-check">✓</span>' : '') + '</div>' +
+      '<div class="theme-opt-desc">' + t.desc + '</div>' +
+    '</button>';
+  }).join('');
+}
+function applyTheme(id){
+  document.documentElement.setAttribute('data-theme', id);
+  try { localStorage.setItem('fc_demo_theme', id); } catch(e){}
+  buildThemeGrid();
+  updateChartColors();
+  var t = THEMES.find(function(x){return x.id===id;});
+  showToast('Theme set to "' + t.name + '"');
+}
+function toggleThemePop(){
+  document.getElementById('themePop').classList.toggle('open');
+}
+document.addEventListener('click', function(e){
+  var wrap = document.querySelector('.theme-pop-wrap');
+  if (wrap && !wrap.contains(e.target)) document.getElementById('themePop').classList.remove('open');
+});
+
+/* Boot: explicit saved choice wins; otherwise infer a sensible starting theme from the host's own color-scheme signal. */
+(function(){
+  var saved = null;
+  try { saved = localStorage.getItem('fc_demo_theme'); } catch(e){}
+  if (saved && THEMES.some(function(t){return t.id===saved;})) {
+    document.documentElement.setAttribute('data-theme', saved);
+  } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    document.documentElement.setAttribute('data-theme', 'midnight');
+  }
+})();
+
+/* ══════════════════════════════════════════════════════════════════
+   TAB NAVIGATION
+   ══════════════════════════════════════════════════════════════════ */
+document.querySelectorAll('.sidebar-item').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    document.querySelectorAll('.sidebar-item').forEach(function(b){ b.classList.remove('active'); });
+    btn.classList.add('active');
+    document.querySelectorAll('.tab-panel').forEach(function(p){ p.classList.remove('active'); });
+    var panel = document.getElementById('tab-' + btn.dataset.tab);
+    if (panel) panel.classList.add('active');
+    document.querySelector('.dash-main').scrollTop = 0;
+    window.scrollTo({top:0, behavior:'instant'});
+  });
+});
+
+/* Period bar — cosmetic toggles only (static demo, no recompute) */
+document.querySelectorAll('.pbar .pbp').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var group = btn.closest('.pb-grp');
+    group.querySelectorAll('.pbp').forEach(function(b){ b.classList.remove('on'); });
+    btn.classList.add('on');
+  });
+});
+
+/* Compare-with-prior-year toggles */
+function toggleCompare(wrapId, on){
+  var el = document.getElementById(wrapId);
+  if (!el) return;
+  el.classList.toggle('no-compare', !on);
+}
+
+/* Toast */
+var toastTimer;
+function showToast(msg){
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 2400);
+}
+
+/* Scenario planner — live client-side recompute, base = FY26 actuals */
+var SC_BASE = { rev:3180, cos:1485, emp:912, oex:268, fin:42, dep:96, taxRate:0.25 };
+function scRun(){
+  var rev = +document.getElementById('scRev').value;
+  var cos = +document.getElementById('scCos').value;
+  var emp = +document.getElementById('scEmp').value;
+  var oex = +document.getElementById('scOex').value;
+  document.getElementById('scRevVal').textContent = (rev>0?'+':'') + rev + '%';
+  document.getElementById('scCosVal').textContent = (cos>0?'+':'') + cos + '%';
+  document.getElementById('scEmpVal').textContent = (emp>0?'+':'') + emp + '%';
+  document.getElementById('scOexVal').textContent = (oex>0?'+':'') + oex + '%';
+
+  var pRev = SC_BASE.rev * (1+rev/100);
+  var pCos = SC_BASE.cos * (1+cos/100);
+  var pEmp = SC_BASE.emp * (1+emp/100);
+  var pOex = SC_BASE.oex * (1+oex/100);
+  var pGp = pRev - pCos;
+  var pEbitda = pGp - pEmp - pOex;
+  var pPbt = pEbitda - SC_BASE.fin - SC_BASE.dep;
+  var pTax = pPbt > 0 ? Math.round(pPbt * SC_BASE.taxRate) : 0;
+  var pPat = pPbt - pTax;
+
+  var fmt = function(n){ return n.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}); };
+  var fmtCr = function(n){ return '₹' + (n/100).toFixed(2) + ' Cr'; };
+  var fmtD = function(n){ return (n>=0?'+':'') + fmt(n); };
+
+  document.getElementById('scOutRev').textContent = fmtCr(pRev);
+  document.getElementById('scOutEbitda').textContent = fmtCr(pEbitda);
+  document.getElementById('scOutPat').textContent = fmtCr(pPat);
+  document.getElementById('scRowRev').textContent = fmt(pRev);
+  document.getElementById('scRowRevD').textContent = fmtD(pRev-SC_BASE.rev);
+  document.getElementById('scRowEbitda').textContent = fmt(pEbitda);
+  document.getElementById('scRowEbitdaD').textContent = fmtD(pEbitda-515);
+  document.getElementById('scRowPat').textContent = fmt(pPat);
+  document.getElementById('scRowPatD').textContent = fmtD(pPat-322);
+}
+function scReset(){
+  document.getElementById('scRev').value = 10;
+  document.getElementById('scCos').value = 0;
+  document.getElementById('scEmp').value = 5;
+  document.getElementById('scOex').value = 0;
+  scRun();
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   CHARTS — data-identity colors are fixed across every theme;
+   only grid/tick/legend chrome is re-read from the active theme.
+   ══════════════════════════════════════════════════════════════════ */
+var charts = {};
+function themeMode(){ return document.documentElement.getAttribute('data-theme') === 'midnight' ? 'dark' : 'light'; }
+function cssVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+function buildCharts(){
+  var mode = themeMode();
+  var s = CHART_SERIES[mode];
+  var gridColor = mode === 'dark' ? 'rgba(255,255,255,.08)' : 'rgba(15,23,42,.06)';
+  var tickColor = cssVar('--text3');
+
+  charts.revEbitda = new Chart(document.getElementById('chartRevEbitda'), {
+    type:'bar',
+    data:{
+      labels:['Q1','Q2','Q3','Q4'],
+      datasets:[
+        { label:'Revenue', data:[758,798,818,806], backgroundColor:s.c1, borderRadius:3, maxBarThickness:30 },
+        { label:'EBITDA', data:[122,129,132,131], backgroundColor:s.c3, borderRadius:3, maxBarThickness:30 }
+      ]
+    },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ y:{ ticks:{color:tickColor,font:{size:10}}, grid:{color:gridColor} }, x:{ ticks:{color:tickColor,font:{size:10}}, grid:{display:false} } } }
+  });
+
+  charts.margin = new Chart(document.getElementById('chartMargin'), {
+    type:'line',
+    data:{
+      labels:['Q1','Q2','Q3','Q4'],
+      datasets:[
+        { label:'GM%', data:[53.3,53.3,53.3,53.3], borderColor:s.c1, backgroundColor:s.c1, tension:.3, pointRadius:3, fill:false, borderWidth:2 },
+        { label:'EBITDA%', data:[16.1,16.2,16.1,16.3], borderColor:s.c3, backgroundColor:s.c3, tension:.3, pointRadius:3, fill:false, borderWidth:2 },
+        { label:'PAT%', data:[10.3,10.3,10.1,10.3], borderColor:s.c4, backgroundColor:s.c4, tension:.3, pointRadius:3, fill:false, borderWidth:2 }
+      ]
+    },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ y:{ min:0, max:60, ticks:{color:tickColor,font:{size:10},callback:function(v){return v+'%';}}, grid:{color:gridColor} }, x:{ ticks:{color:tickColor,font:{size:10}}, grid:{display:false} } } }
+  });
+
+  charts.treasury = new Chart(document.getElementById('chartTreasury'), {
+    type:'doughnut',
+    data:{
+      labels:['Cash in Hand','Bank — Current','Bank — Savings','Fixed Deposits','Mutual Funds'],
+      datasets:[{ data:[8,92,40,480,320], backgroundColor:[s.c1,s.c2,s.c3,s.c4,s.c5], borderColor:cssVar('--bg'), borderWidth:2 }]
+    },
+    options:{ responsive:true, maintainAspectRatio:false, cutout:'62%',
+      plugins:{ legend:{ position:'right', labels:{ color:tickColor, font:{size:10}, boxWidth:10, padding:9 } } } }
+  });
+}
+function updateChartColors(){
+  Object.values(charts).forEach(function(c){ c.destroy(); });
+  buildCharts();
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  buildThemeGrid();
+  buildCharts();
+  scRun();
+});
+</script>
+</body>
+</html>

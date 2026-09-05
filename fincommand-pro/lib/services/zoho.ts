@@ -330,34 +330,108 @@ function classifyHint(categoryHint: string | undefined, broadType: string): stri
   return broadType;
 }
 
-async function refreshZohoToken(config: ZohoConfigRow): Promise<string> {
+/** One attempt at the actual OAuth call — factored out so refreshZohoToken() can retry it without duplicating the request. Returns the raw response; never throws for an in-band `{error: ...}` response body (only for a genuine transport failure), so the caller can inspect and decide. */
+async function requestZohoTokenRefresh(config: ZohoConfigRow) {
   const base = ZOHO_ACCOUNTS[config.data_center] || ZOHO_ACCOUNTS.IN;
+  return axios.post(`${base}/oauth/v2/token`, null, {
+    timeout: 15000,
+    params: {
+      refresh_token: config.refresh_token,
+      client_id: process.env.ZOHO_CLIENT_ID,
+      client_secret: process.env.ZOHO_CLIENT_SECRET,
+      grant_type: 'refresh_token',
+    },
+  });
+}
+
+/**
+ * Refreshes the access token, deactivating the connection (is_active=FALSE)
+ * only once a SECOND consecutive attempt also fails — confirmed in
+ * production on this exact company: Zoho's OAuth endpoint returned an
+ * in-band error for a refresh_token that was proven, seconds later by hand,
+ * to still be completely valid — twice, on different days. A single-shot
+ * "any error means the token is dead" policy was silently disconnecting a
+ * perfectly good integration on what was really Zoho-side flakiness (an
+ * intermittent OAuth-endpoint blip, not a token-level 43/429 rate limit —
+ * this app already retries those separately in callZoho() — and not a
+ * transport failure either, which was never treated as "invalid" here,
+ * only an in-band `{error: ...}` response body was). One retry after a
+ * short delay costs nothing on the (common) success path and prevents that
+ * exact false-positive disconnect; a token that's genuinely revoked will
+ * still fail the retry identically and correctly deactivate.
+ */
+async function refreshZohoToken(config: ZohoConfigRow): Promise<string> {
   let res;
   try {
-    res = await axios.post(`${base}/oauth/v2/token`, null, {
-      timeout: 15000,
-      params: {
-        refresh_token: config.refresh_token,
-        client_id: process.env.ZOHO_CLIENT_ID,
-        client_secret: process.env.ZOHO_CLIENT_SECRET,
-        grant_type: 'refresh_token',
-      },
-    });
+    res = await requestZohoTokenRefresh(config);
   } catch (err) {
     throw new Error(`Zoho token refresh failed: ${zohoErrorMessage(err)}`);
   }
+
+  if (res.data.error || !res.data.access_token) {
+    const firstAttemptError = res.data.error || 'no access_token returned';
+    console.warn(`Zoho token refresh returned an error on the first attempt (${firstAttemptError}) — retrying once before treating the connection as dead...`);
+    await new Promise((r) => setTimeout(r, 1500));
+    try {
+      res = await requestZohoTokenRefresh(config);
+    } catch (err) {
+      throw new Error(`Zoho token refresh failed on retry: ${zohoErrorMessage(err)}`);
+    }
+  }
+
   if (res.data.error || !res.data.access_token) {
     await query(
       `UPDATE zoho_config SET is_active=FALSE, last_sync_status='error',
         last_sync_error=$1, updated_at=NOW() WHERE company_id=$2`,
-      [`Refresh token invalid (${res.data.error || 'no access_token returned'}). Please reconnect Zoho Books.`, config.company_id]
+      [`Refresh token invalid (${res.data.error || 'no access_token returned'}) after 2 attempts. Please reconnect Zoho Books.`, config.company_id]
     );
-    throw new Error(`Zoho refresh token is no longer valid (${res.data.error || 'unknown reason'}). Please reconnect Zoho Books.`);
+    throw new Error(`Zoho refresh token is no longer valid (${res.data.error || 'unknown reason'}) after 2 attempts. Please reconnect Zoho Books.`);
   }
+
   const { access_token, expires_in } = res.data;
   const expiry = new Date(Date.now() + (expires_in - 60) * 1000);
   await query(`UPDATE zoho_config SET access_token=$1, token_expiry=$2 WHERE company_id=$3`, [access_token, expiry, config.company_id]);
   return access_token;
+}
+
+/**
+ * Single-flight de-duplication for refreshZohoToken(), keyed by company_id —
+ * root-caused fix for a real, confirmed-in-production bug where unattended
+ * (cron) syncs failed most of the time with "Apr: Invalid URL Passed (code
+ * 5)" while manually-triggered syncs never did.
+ *
+ * syncFromZoho() fires up to 3 concurrent callZoho() calls per batch
+ * (Promise.all), and callZoho() independently reads zoho_config and checks
+ * token_expiry on every call. A manual sync almost always starts with a
+ * token that's fresh (the CFO just authenticated recently in the same
+ * session), so this path is rarely exercised. An unattended sync can start
+ * after a long idle gap, right as the token is expiring — and when that
+ * happens, 2-3 concurrent callZoho() calls in the same batch each
+ * independently decide the token is expired and each call
+ * refreshZohoToken() at once. Zoho's OAuth endpoint does not cleanly support
+ * concurrent refresh_token grants for the same token: the racing calls can
+ * each get a response, but a report request already in flight with the
+ * token one racer captured before another racer's DB UPDATE lands ends up
+ * using a token Zoho no longer honors — observed as a generic, misleading
+ * "Invalid URL Passed (code 5)" rather than an auth error, so callZoho's
+ * existing 401/code-57 auto-refresh-and-retry never catches it (see below).
+ * A losing race can also make a perfectly valid refresh_token look like it
+ * failed twice in a row, which used to wrongly deactivate the connection —
+ * see refreshZohoToken's own doc comment for that half of the fix.
+ *
+ * Memoizing the in-flight refresh Promise per company means every
+ * concurrent caller within the same process awaits the exact same
+ * underlying Zoho call and DB update instead of racing separate ones.
+ */
+const inFlightTokenRefresh = new Map<string, Promise<string>>();
+function refreshZohoTokenSingleFlight(config: ZohoConfigRow): Promise<string> {
+  const existing = inFlightTokenRefresh.get(config.company_id);
+  if (existing) return existing;
+  const p = refreshZohoToken(config).finally(() => {
+    inFlightTokenRefresh.delete(config.company_id);
+  });
+  inFlightTokenRefresh.set(config.company_id, p);
+  return p;
 }
 
 /**
@@ -380,7 +454,7 @@ export async function callZoho<T>(
   if (!rows.length) throw new Error('Zoho Books not connected. Please authenticate first by clicking "Connect Zoho Books".');
   const cfg = rows[0];
 
-  let token = new Date(cfg.token_expiry) <= new Date() ? await refreshZohoToken(cfg) : cfg.access_token;
+  let token = new Date(cfg.token_expiry) <= new Date() ? await refreshZohoTokenSingleFlight(cfg) : cfg.access_token;
 
   try {
     return await requestFn(token);
@@ -404,7 +478,7 @@ export async function callZoho<T>(
       throw e;
     }
     try {
-      token = await refreshZohoToken(cfg);
+      token = await refreshZohoTokenSingleFlight(cfg);
     } catch (refreshErr) {
       const e = new Error(
         `Zoho re-authentication failed: ${zohoErrorMessage(refreshErr)}. ` +
@@ -490,7 +564,29 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
   const orgId = cfg.org_id;
   if (!orgId) throw new Error('Zoho Organisation ID not set');
 
-  await query(`UPDATE zoho_config SET last_sync_status='running', updated_at=NOW() WHERE company_id=$1`, [companyId]);
+  // Atomically claim the "running" slot — reject if another sync for this
+  // company is already in flight, rather than letting two syncFromZoho()
+  // runs race each other. Nothing previously stopped this: a cron tick
+  // landing at the same moment as a manual "Sync Now" click (or two cron
+  // ticks overlapping if a run ever took longer than the schedule interval)
+  // would both proceed, each flipping tb_uploads.is_current and racing
+  // Zoho's OAuth endpoint for the same company — see
+  // refreshZohoTokenSingleFlight's doc comment for how that race surfaced in
+  // production. A stale 'running' row (a previous run that crashed before
+  // reaching any terminal status) self-heals after 5 minutes — comfortably
+  // longer than a real sync's observed ~30-40s — rather than permanently
+  // wedging this company's syncs.
+  const { rowCount: claimed } = await query(
+    `UPDATE zoho_config SET last_sync_status='running', updated_at=NOW()
+     WHERE company_id=$1
+       AND NOT (last_sync_status='running' AND updated_at > NOW() - INTERVAL '5 minutes')`,
+    [companyId]
+  );
+  if (!claimed) {
+    const e = new Error('A Zoho sync is already in progress for this company. Please wait for it to finish.') as Error & { status?: number };
+    e.status = 409;
+    throw e;
+  }
   await query(
     `INSERT INTO sync_logs (id,company_id,source,financial_year,triggered_by,status,started_at)
      VALUES ($1,$2,'zoho',$3,$4,'running',NOW())`,
@@ -500,9 +596,13 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
   const apiBase = ZOHO_API[cfg.data_center] || ZOHO_API.IN;
   const ZOHO_TIMEOUT_MS = 20000;
 
-  // Ensure token is fresh before starting requests
+  // Ensure token is fresh before starting requests. Single-flight so that if
+  // the very first batch's concurrent callZoho() calls also see the token as
+  // expiring, they join this same refresh instead of each starting their
+  // own race against Zoho's OAuth endpoint — see
+  // refreshZohoTokenSingleFlight's doc comment for the full root cause.
   if (new Date(cfg.token_expiry) <= new Date(Date.now() + 30000)) {
-    await refreshZohoToken(cfg).catch(() => {});
+    await refreshZohoTokenSingleFlight(cfg).catch(() => {});
   }
 
   // 1. Fetch Chart of Accounts
@@ -1471,5 +1571,219 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
 
   invalidateReportCache(companyId);
 
+  // Real customer & vendor MASTER data (contact details, live outstanding
+  // balances) — independent of the Trial Balance upload above (a contact
+  // isn't period-scoped the way a ledger movement is), so a failure here
+  // must never fail the main sync — purely logged, matching the same
+  // non-fatal convention already used for vendor bills/customer expenses
+  // above. See zoho_contacts' own schema comment for why this is upserted
+  // in place rather than versioned per upload like everything else here.
+  try {
+    const contactResult = await syncZohoContacts(companyId);
+    if (contactResult.errors.length) {
+      console.warn(`Zoho contacts sync: ${contactResult.errors.length} issue(s) — ${contactResult.errors.join('; ')}`);
+    } else {
+      console.log(`Zoho contacts synced: ${contactResult.synced} (${contactResult.customers} customers, ${contactResult.vendors} vendors)`);
+    }
+  } catch (e) {
+    console.warn('Zoho contacts sync failed (non-fatal):', (e as Error).message);
+  }
+
   return { ledgers_synced: tbRows.length, mapped, upload_id: uploadId, duration_ms: duration, warning: partialWarning };
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Zoho Contacts — real customer & vendor MASTER data
+// ═══════════════════════════════════════════════════════════
+
+export interface ZohoContactSyncResult {
+  synced: number;
+  customers: number;
+  vendors: number;
+  errors: string[];
+}
+
+interface ExtractedContact {
+  zoho_contact_id: string;
+  contact_type: 'customer' | 'vendor';
+  contact_name: string;
+  company_name: string | null;
+  email: string | null;
+  phone: string | null;
+  mobile: string | null;
+  gst_no: string | null;
+  pan_no: string | null;
+  gst_treatment: string | null;
+  currency_code: string | null;
+  payment_terms_label: string | null;
+  status: string | null;
+  outstanding_receivable_amount: number;
+  outstanding_receivable_amount_bcy: number;
+  outstanding_payable_amount: number;
+  outstanding_payable_amount_bcy: number;
+  zoho_created_at: string | null;
+  zoho_last_modified_at: string | null;
+}
+
+/**
+ * Field names confirmed against a real org's response (see the
+ * zoho_debug_contacts_{customer,vendor}.json dumps this function writes on
+ * its first page of each type) — not guessed. `billing_address` is
+ * deliberately never populated: Zoho's LIST /contacts response (confirmed
+ * against that same real dump) doesn't include it at all — only the
+ * single-contact GET /contacts/{id} does, and calling that once per contact
+ * would mean one extra Zoho API request per customer/vendor instead of one
+ * request per 200 of them, working against the exact rate-limit-conscious
+ * batching this whole sync engine is built around. Left NULL rather than
+ * fetched at that cost or guessed at — same "honestly undetermined, never
+ * fabricated" convention as tb-engine.ts's OCI/EPS/tax_paid.
+ */
+function extractContact(raw: Record<string, unknown>, contactType: 'customer' | 'vendor'): ExtractedContact | null {
+  const id = raw.contact_id;
+  const name = raw.contact_name ?? raw.customer_name ?? raw.vendor_name ?? raw.company_name;
+  if (!id || !name) return null;
+  const num = (v: unknown) => parseFloat(String(v ?? 0)) || 0;
+  const str = (v: unknown) => (v != null && String(v).trim() ? String(v).trim() : null);
+  return {
+    zoho_contact_id: String(id),
+    contact_type: contactType,
+    contact_name: String(name).trim(),
+    company_name: str(raw.company_name),
+    email: str(raw.email),
+    phone: str(raw.phone),
+    mobile: str(raw.mobile),
+    gst_no: str(raw.gst_no),
+    pan_no: str(raw.pan_no),
+    gst_treatment: str(raw.gst_treatment),
+    currency_code: raw.currency_code ? String(raw.currency_code).toUpperCase() : null,
+    payment_terms_label: str(raw.payment_terms_label),
+    status: str(raw.status),
+    outstanding_receivable_amount: num(raw.outstanding_receivable_amount),
+    outstanding_receivable_amount_bcy: num(raw.outstanding_receivable_amount_bcy),
+    outstanding_payable_amount: num(raw.outstanding_payable_amount),
+    outstanding_payable_amount_bcy: num(raw.outstanding_payable_amount_bcy),
+    zoho_created_at: str(raw.created_time),
+    zoho_last_modified_at: str(raw.last_modified_time),
+  };
+}
+
+/**
+ * Pulls every real customer AND vendor contact record (not just the ones
+ * with revenue/bill activity this year — the full live directory) and
+ * upserts them into zoho_contacts. Callable on its own (e.g. a future
+ * "refresh contacts" action) as well as from syncFromZoho() above.
+ */
+export async function syncZohoContacts(companyId: string): Promise<ZohoContactSyncResult> {
+  const errors: string[] = [];
+  const { rows: cfgRows } = await query<ZohoConfigRow>(
+    `SELECT * FROM zoho_config WHERE company_id=$1 AND is_active=TRUE AND refresh_token IS NOT NULL`, [companyId]
+  );
+  if (!cfgRows.length) { errors.push('Zoho Books not connected'); return { synced: 0, customers: 0, vendors: 0, errors }; }
+  const cfg = cfgRows[0]!;
+  const orgId = cfg.org_id;
+  if (!orgId) { errors.push('Zoho Organisation ID not set'); return { synced: 0, customers: 0, vendors: 0, errors }; }
+  const apiBase = ZOHO_API[cfg.data_center] || ZOHO_API.IN;
+
+  async function fetchAllContacts(contactType: 'customer' | 'vendor'): Promise<Record<string, unknown>[]> {
+    const all: Record<string, unknown>[] = [];
+    let page = 1;
+    for (;;) {
+      const res = await callZoho(companyId, (token) => axios.get(`${apiBase}/contacts`, {
+        headers: { Authorization: `Zoho-oauthtoken ${token}` },
+        params: { organization_id: orgId, contact_type: contactType, per_page: 200, page },
+        timeout: 20000,
+      }));
+      const items = Array.isArray(res.data?.contacts) ? res.data.contacts as Record<string, unknown>[] : [];
+      all.push(...items);
+      if (page === 1) {
+        try {
+          const debugFile = path.join(process.cwd(), `zoho_debug_contacts_${contactType}.json`);
+          fs.writeFileSync(debugFile, JSON.stringify({
+            _debug_info: {
+              contactType, http_status: res.status, zoho_code: res.data?.code,
+              page_count_so_far: items.length, first_record_keys: items[0] ? Object.keys(items[0]) : [],
+              written_at: new Date().toISOString(),
+            },
+            raw_response: res.data,
+          }, null, 2), 'utf8');
+        } catch (writeErr) {
+          console.warn(`[ZOHO DEBUG] Could not write contacts_${contactType} debug file:`, (writeErr as Error).message);
+        }
+      }
+      if (!res.data?.page_context?.has_more_page) break;
+      page++;
+    }
+    return all;
+  }
+
+  let customerRaw: Record<string, unknown>[] = [];
+  let vendorRaw: Record<string, unknown>[] = [];
+  try {
+    customerRaw = await fetchAllContacts('customer');
+  } catch (e) {
+    errors.push(`Customers: ${zohoErrorMessage(e)}`);
+  }
+  try {
+    vendorRaw = await fetchAllContacts('vendor');
+  } catch (e) {
+    errors.push(`Vendors: ${zohoErrorMessage(e)}`);
+  }
+
+  const extracted = [
+    ...customerRaw.map((r) => extractContact(r, 'customer')),
+    ...vendorRaw.map((r) => extractContact(r, 'vendor')),
+  ].filter((c): c is ExtractedContact => c !== null);
+
+  if (extracted.length === 0) {
+    return { synced: 0, customers: customerRaw.length, vendors: vendorRaw.length, errors };
+  }
+
+  const chunkSize = 50;
+  for (let i = 0; i < extracted.length; i += chunkSize) {
+    const chunk = extracted.slice(i, i + chunkSize);
+    const valueClauses: string[] = [];
+    const params: unknown[] = [];
+    let paramIdx = 1;
+    for (const c of chunk) {
+      const row = [
+        companyId, c.zoho_contact_id, c.contact_type, c.contact_name, c.company_name,
+        c.email, c.phone, c.mobile, c.gst_no, c.pan_no, c.gst_treatment, c.currency_code,
+        c.payment_terms_label, c.status,
+        c.outstanding_receivable_amount, c.outstanding_receivable_amount_bcy,
+        c.outstanding_payable_amount, c.outstanding_payable_amount_bcy,
+        c.zoho_created_at, c.zoho_last_modified_at,
+      ];
+      const placeholders = row.map(() => `$${paramIdx++}`);
+      valueClauses.push(`(${placeholders.join(',')})`);
+      params.push(...row);
+    }
+    try {
+      await query(
+        `INSERT INTO zoho_contacts
+          (company_id, zoho_contact_id, contact_type, contact_name, company_name,
+           email, phone, mobile, gst_no, pan_no, gst_treatment, currency_code,
+           payment_terms_label, status,
+           outstanding_receivable_amount, outstanding_receivable_amount_bcy,
+           outstanding_payable_amount, outstanding_payable_amount_bcy,
+           zoho_created_at, zoho_last_modified_at)
+         VALUES ${valueClauses.join(', ')}
+         ON CONFLICT (company_id, zoho_contact_id) DO UPDATE SET
+           contact_type=EXCLUDED.contact_type, contact_name=EXCLUDED.contact_name, company_name=EXCLUDED.company_name,
+           email=EXCLUDED.email, phone=EXCLUDED.phone, mobile=EXCLUDED.mobile,
+           gst_no=EXCLUDED.gst_no, pan_no=EXCLUDED.pan_no, gst_treatment=EXCLUDED.gst_treatment,
+           currency_code=EXCLUDED.currency_code, payment_terms_label=EXCLUDED.payment_terms_label, status=EXCLUDED.status,
+           outstanding_receivable_amount=EXCLUDED.outstanding_receivable_amount,
+           outstanding_receivable_amount_bcy=EXCLUDED.outstanding_receivable_amount_bcy,
+           outstanding_payable_amount=EXCLUDED.outstanding_payable_amount,
+           outstanding_payable_amount_bcy=EXCLUDED.outstanding_payable_amount_bcy,
+           zoho_created_at=EXCLUDED.zoho_created_at, zoho_last_modified_at=EXCLUDED.zoho_last_modified_at,
+           synced_at=NOW()`,
+        params
+      );
+    } catch (e) {
+      errors.push(`Batch upsert failed: ${(e as Error).message}`);
+    }
+  }
+
+  return { synced: extracted.length, customers: customerRaw.length, vendors: vendorRaw.length, errors };
 }

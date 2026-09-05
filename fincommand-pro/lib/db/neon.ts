@@ -16,6 +16,21 @@ declare global {
   var __fcPgPool: Pool | undefined;
 }
 
+// Guards every connection the pool ever hands out, regardless of which
+// query function is used to run it — a single slow/runaway query (a
+// missing index, an accidental cross-join, a report run against a
+// pathologically large ledger set) can otherwise hold a connection forever
+// and starve the pool for every other request. statement_timeout bounds a
+// single query; idle_in_transaction_session_timeout bounds a client that
+// opened a transaction (withTransaction()/BEGIN) and then never committed
+// or rolled back — e.g. a crash mid-transaction, or a bug that throws
+// between BEGIN and the COMMIT/ROLLBACK it's paired with — which would
+// otherwise hold both the connection AND whatever row locks it took
+// indefinitely. Both configurable via env so a genuinely long-running
+// admin/reporting query can be given more room without a code change.
+const STATEMENT_TIMEOUT_MS = parseInt(process.env.DB_STATEMENT_TIMEOUT_MS || '30000');
+const IDLE_IN_TRANSACTION_TIMEOUT_MS = parseInt(process.env.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS || '15000');
+
 function buildPool(): Pool {
   const ssl = process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false;
 
@@ -31,6 +46,9 @@ function buildPool(): Pool {
       // very first request after any idle period. 30s covers a cold start;
       // subsequent requests reuse the warm pooled connection and are fast.
       connectionTimeoutMillis: 30000,
+      statement_timeout: STATEMENT_TIMEOUT_MS,
+      query_timeout: STATEMENT_TIMEOUT_MS,
+      idle_in_transaction_session_timeout: IDLE_IN_TRANSACTION_TIMEOUT_MS,
       ssl,
     });
   }
@@ -45,6 +63,9 @@ function buildPool(): Pool {
     max: parseInt(process.env.DB_POOL_MAX || '10'),
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 15000,
+    statement_timeout: STATEMENT_TIMEOUT_MS,
+    query_timeout: STATEMENT_TIMEOUT_MS,
+    idle_in_transaction_session_timeout: IDLE_IN_TRANSACTION_TIMEOUT_MS,
     ssl,
   });
 }

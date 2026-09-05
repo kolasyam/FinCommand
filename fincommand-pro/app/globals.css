@@ -42,12 +42,103 @@ a { color: var(--blue); text-decoration: none; }
   .pbp.yt.on { background: var(--blue); color: #fff; }
   .pbp.sub.on { background: var(--green); color: #fff; }
   .pb-summary { margin-left: auto; font-size: 10px; color: var(--text3); white-space: nowrap; padding: 3px 9px; background: var(--bg); border-radius: 20px; border: 1px solid var(--border); }
-  .ntabs { @apply flex overflow-x-auto; padding: 0 24px; border-bottom: 1px solid var(--border); background: var(--bg); gap: 2px; }
-  .ntab { padding: 9px 13px; border: none; background: none; font-size: 11px; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: color .12s; }
-  .ntab.active { color: var(--text); font-weight: 600; border-bottom-color: var(--blue); }
-  .ntab:hover { color: var(--text); }
   .new-badge { font-size: 8px; padding: 1px 4px; border-radius: 5px; background: var(--amber-l); color: var(--amber); margin-left: 3px; vertical-align: middle; font-weight: 600; }
-  .content { padding: 18px 24px; max-width: 1400px; margin: 0 auto; }
+
+  /* Still used as a plain horizontal pill-tab switcher WITHIN a tab's own
+     content (e.g. ReportBuilderTab's Formats/My Reports toggle) — only the
+     top-level page nav moved to the sidebar below; this local pattern is
+     unrelated to that and stays. */
+  .ntabs { @apply flex overflow-x-auto; gap: 2px; margin-bottom: 4px; }
+  .ntab { @apply inline-flex items-center gap-1.5; padding: 8px 14px; border: none; border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: var(--bg2); font-size: 11px; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: color .12s, background .12s; }
+  .ntab.active { color: var(--text); font-weight: 600; background: var(--bg); border-bottom-color: var(--blue); }
+  .ntab:hover { color: var(--text); }
+
+  /* ── Sidebar navigation (replaces the old horizontal top-level tab bar) ──
+     Desktop (>=1024px): a normal-flow column beside the content, dark navy
+     to match this app's existing modal palette (AddFyModal/ConfirmModal
+     already use #0f1826 + rgba(255,255,255,.1) borders) against the light
+     content area — deliberately NOT position:sticky, matching how the old
+     .ntabs bar (and everything else in this shell except .topbar) already
+     scrolled with the page rather than pinning, so behavior stays
+     consistent with the rest of the app, not just the visual shell.
+     Mobile (<1024px): becomes a fixed slide-over drawer, toggled by
+     .sidebar-toggle-btn in TopBar, closed by its own backdrop or picking
+     a tab. */
+  .dash-shell { display: flex; height: calc(100vh - 54px); overflow: hidden; }
+  .dash-main {
+    flex: 1; min-width: 0; height: 100%; overflow-y: auto; display: flex; flex-direction: column;
+    scrollbar-width: thin; scrollbar-color: var(--border2) transparent;
+  }
+  .dash-main::-webkit-scrollbar { width: 7px; }
+  .dash-main::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+  .dash-main::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+  .sidebar {
+    width: 244px; flex-shrink: 0; display: flex; flex-direction: column; height: 100%;
+    background: #0f1826; border-right: 1px solid rgba(255,255,255,.08); overflow: hidden;
+  }
+  .sidebar-nav {
+    flex: 1; overflow-y: auto; padding: 14px 10px;
+    scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.18) transparent;
+  }
+  .sidebar-nav::-webkit-scrollbar { width: 5px; }
+  .sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 4px; }
+  .sidebar-nav::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.3); }
+  .sidebar-group + .sidebar-group { margin-top: 16px; }
+  .sidebar-group-label {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px;
+    color: #64748b; padding: 0 10px 6px;
+  }
+  .sidebar-item {
+    width: 100%; display: flex; align-items: center; gap: 9px;
+    padding: 8px 10px; border: none; border-radius: 7px; background: transparent;
+    color: #cbd5e1; font-size: 12px; font-weight: 500; text-align: left; cursor: pointer;
+    transition: background .12s, color .12s;
+  }
+  .sidebar-item:hover { background: rgba(255,255,255,.07); color: #fff; }
+  .sidebar-item.active { background: var(--blue); color: #fff; font-weight: 600; }
+  .sidebar-item-icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
+  .sidebar-item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sidebar-item-badge {
+    font-size: 8px; font-weight: 700; padding: 2px 5px; border-radius: 5px;
+    background: rgba(255,255,255,.12); color: #cbd5e1; flex-shrink: 0;
+  }
+  .sidebar-item.active .sidebar-item-badge { background: rgba(255,255,255,.24); color: #fff; }
+  .sidebar-footer {
+    display: flex; align-items: center; gap: 9px; padding: 12px 14px;
+    border-top: 1px solid rgba(255,255,255,.08); flex-shrink: 0;
+  }
+  .sidebar-footer-avatar {
+    width: 30px; height: 30px; border-radius: 50%; background: var(--blue); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0;
+  }
+  .sidebar-footer-name { font-size: 11px; font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sidebar-footer-role { font-size: 9px; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .sidebar-toggle-btn { display: none; }
+  .sidebar-backdrop { display: none; }
+
+  @media (max-width: 1023px) {
+    .dash-shell { display: flex; height: auto; min-height: calc(100vh - 54px); overflow: visible; }
+    .dash-main { height: auto; overflow-y: visible; }
+    .sidebar-toggle-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px; border: 1px solid var(--border2); border-radius: var(--radius-sm);
+      background: var(--bg); font-size: 15px; cursor: pointer; margin-right: 10px; flex-shrink: 0;
+    }
+    .sidebar {
+      position: fixed; top: 0; left: 0; bottom: 0; z-index: 200; width: 264px; height: 100vh;
+      transform: translateX(-100%); transition: transform .22s ease; box-shadow: 0 0 40px rgba(0,0,0,.4);
+    }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-backdrop {
+      display: block; position: fixed; inset: 0; z-index: 190;
+      background: rgba(6,10,18,.55); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    }
+  }
+
+  .content { padding: 20px 28px; width: 100%; max-width: 100%; box-sizing: border-box; }
 
   /* ── Buttons ── */
   .btn { @apply inline-flex items-center gap-1; padding: 7px 14px; border: none; border-radius: var(--radius-sm); font-size: 11px; font-weight: 500; cursor: pointer; transition: all .12s; font-family: var(--font); }
@@ -58,20 +149,24 @@ a { color: var(--blue); text-decoration: none; }
   .btn-gr:hover { background: #085041; }
   .btn-se { background: transparent; color: var(--text); border: 1px solid var(--border2); }
   .btn-se:hover { background: var(--bg2); }
+  .btn-cancel-dark { background: transparent; color: #e5e7eb; border: 1px solid rgba(255,255,255,.18); }
+  .btn-cancel-dark:hover { background: rgba(255,255,255,.08); color: #ffffff; }
   .btn-sm { padding: 5px 10px; font-size: 10px; }
   .btn-dl { background: transparent; border: 1px solid var(--border2); color: var(--text); }
   .btn-dl:hover { filter: brightness(.95); }
   .btn-dl.pdf { background: var(--blue-l); color: var(--blue); border-color: #B5D4F4; }
   .btn-dl.xlsx { background: var(--green-l); color: var(--green); border-color: #9FE1CB; }
   .btn:disabled { opacity: .6; cursor: not-allowed; }
+  option { background-color: var(--bg, #ffffff); color: var(--text, #111827); }
+  select option { background-color: #0f1826; color: #e5e7eb; }
 
   /* ── Grids & cards ── */
-  .grid4 { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin-bottom: 14px; }
-  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-bottom: 14px; }
-  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; margin-bottom: 14px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-bottom: 16px; width: 100%; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-bottom: 16px; width: 100%; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin-bottom: 16px; width: 100%; }
   @media (max-width: 900px) { .grid4 { grid-template-columns: 1fr 1fr; } .grid3 { grid-template-columns: 1fr 1fr; } }
   @media (max-width: 600px) { .grid4, .grid3, .grid2 { grid-template-columns: 1fr; } }
-  .card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 14px; overflow: hidden; box-shadow: var(--shadow); }
+  .card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 16px; overflow: hidden; box-shadow: var(--shadow); width: 100%; }
   .card-hdr { @apply flex items-center justify-between flex-wrap gap-2; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--bg2); }
   .card-body { padding: 14px; }
   .ct { font-size: 12px; font-weight: 600; color: var(--text); }
@@ -211,10 +306,48 @@ a { color: var(--blue); text-decoration: none; }
   .note-hdr { @apply flex justify-between items-center; background: var(--bg2); padding: 8px 12px; border-bottom: 1px solid var(--border); }
   .note-hdr .nn { font-size: 10px; color: var(--blue); font-family: var(--mono); font-weight: 600; }
   .note-hdr .nb { font-size: 11px; font-weight: 600; color: var(--text); }
+
+  /* ── Tab Navigation (.ntabs & .ntab) ── */
+  .ntabs {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+  }
+  .ntab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #64748b;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    outline: none;
+    user-select: none;
+  }
+  .ntab:hover:not(.active) {
+    color: #1e293b;
+    background: rgba(255, 255, 255, 0.7);
+  }
+  .ntab.active {
+    color: #0f172a;
+    background: #ffffff;
+    font-weight: 600;
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 6px -1px rgba(15, 23, 42, 0.08), 0 1px 3px -1px rgba(15, 23, 42, 0.04);
+  }
 }
 
 @media print {
-  .topbar, .pbar, .ntabs, .dl-bar, .btn, .tbar-right { display: none !important; }
+  .topbar, .pbar, .sidebar, .sidebar-toggle-btn, .ntabs, .dl-bar, .btn, .tbar-right { display: none !important; }
   .content { padding: 0; max-width: 100%; }
   .card { box-shadow: none; break-inside: avoid; }
   body { font-size: 10px; }

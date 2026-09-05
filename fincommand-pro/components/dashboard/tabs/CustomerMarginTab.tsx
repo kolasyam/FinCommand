@@ -48,6 +48,8 @@ export function CustomerMarginTab() {
   const totalRevenue = entries.reduce((s, e) => s + e.revenue, 0);
   const totalCost = entries.reduce((s, e) => s + e.direct_cost, 0);
   const totalMargin = totalRevenue - totalCost;
+  // Real Zoho contact master data — see VendorExpenseTab's identical note.
+  const hasContactData = entries.some(e => e.contact);
 
   return (
     <div>
@@ -87,28 +89,47 @@ export function CustomerMarginTab() {
                 <thead>
                   <tr>
                     <th>Customer</th>
+                    {hasContactData && <th>Contact</th>}
                     <th className="num">Revenue ({unitSfx})</th>
                     <th className="num">Direct Cost ({unitSfx})</th>
                     <th className="num">Direct Margin ({unitSfx})</th>
                     <th className="num">Margin %</th>
+                    {hasContactData && <th className="num">Outstanding Receivable</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {entries.map(e => (
                     <tr key={e.customer}>
-                      <td>{e.customer}</td>
+                      <td>
+                        {e.customer}
+                        {e.contact?.gstNo && <span style={{ display: 'block', fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{e.contact.gstNo}</span>}
+                      </td>
+                      {hasContactData && (
+                        <td style={{ fontSize: 11, color: 'var(--text2)' }}>
+                          {e.contact?.email && <div>{e.contact.email}</div>}
+                          {e.contact?.phone && <div style={{ color: 'var(--text3)' }}>{e.contact.phone}</div>}
+                          {!e.contact && <span style={{ color: 'var(--text3)' }}>—</span>}
+                        </td>
+                      )}
                       <td className="num">{fl(e.revenue)}</td>
                       <td className="num">{e.direct_cost > 0 ? fl(e.direct_cost) : '—'}</td>
                       <td className={`num ${numTone(e.direct_margin)}`}>{fl(e.direct_margin)}</td>
                       <td className="num">{e.direct_margin_pct !== null ? pct(e.direct_margin_pct) : '—'}</td>
+                      {hasContactData && (
+                        <td className={`num ${e.contact?.outstandingBalance ? numTone(e.contact.outstandingBalance) : ''}`}>
+                          {e.contact?.outstandingBalance != null ? fl(e.contact.outstandingBalance) : '—'}
+                        </td>
+                      )}
                     </tr>
                   ))}
                   <tr className="tot-row">
                     <td>Total</td>
+                    {hasContactData && <td></td>}
                     <td className="num">{fl(totalRevenue)}</td>
                     <td className="num">{totalCost > 0 ? fl(totalCost) : '—'}</td>
                     <td className={`num ${numTone(totalMargin)}`}>{fl(totalMargin)}</td>
                     <td className="num">{totalRevenue > 0 ? pct((totalMargin / totalRevenue) * 100) : '—'}</td>
+                    {hasContactData && <td className="num">{fl(entries.reduce((s, e) => s + (e.contact?.outstandingBalance || 0), 0))}</td>}
                   </tr>
                 </tbody>
               </table>
@@ -118,6 +139,7 @@ export function CustomerMarginTab() {
             &quot;Direct Margin&quot; = real revenue − real direct cost only. It excludes indirect/shared costs (salaries, cloud
             infrastructure, rent, and every other company-wide expense not individually billed to a specific customer in Zoho) —
             it is intentionally not a fully-loaded profitability figure, to avoid presenting an allocated estimate as a measured fact.
+            {hasContactData && ' Contact details and Outstanding Receivable are Zoho’s own live contact record (real-time balance, independent of the period selected above), synced separately from period revenue.'}
           </div>
         </>
       )}

@@ -5,7 +5,7 @@ import { DashboardProvider, useDashboard } from '@/lib/dashboard/DashboardContex
 import { ToastProvider } from '@/lib/dashboard/ToastContext';
 import { TopBar } from '@/components/dashboard/TopBar';
 import { PeriodBar } from '@/components/dashboard/PeriodBar';
-import { NavTabs } from '@/components/dashboard/NavTabs';
+import { SidebarNav } from '@/components/dashboard/SidebarNav';
 import { LoginModal } from '@/components/dashboard/LoginModal';
 import { AddFyModal } from '@/components/dashboard/AddFyModal';
 import { LoadingBar, ErrorBanner } from '@/components/ui/StatusBanners';
@@ -24,6 +24,7 @@ import { VendorExpenseTab } from '@/components/dashboard/tabs/VendorExpenseTab';
 import { AlertsTab } from '@/components/dashboard/tabs/AlertsTab';
 import { ComplianceTab } from '@/components/dashboard/tabs/ComplianceTab';
 import { BoardPackTab } from '@/components/dashboard/tabs/BoardPackTab';
+import { ReportBuilderTab } from '@/components/dashboard/tabs/ReportBuilderTab';
 import { UploadTab } from '@/components/dashboard/tabs/UploadTab';
 import { exportAllPdf } from '@/lib/exports/pdf';
 import { exportAllXlsx } from '@/lib/exports/xlsx';
@@ -126,6 +127,7 @@ function DashboardShell() {
   const [activeTab, setActiveTab] = useState('overview');
   const [loginOpen, setLoginOpen] = useState(false);
   const [addFyOpen, setAddFyOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const toast = useToast();
 
   // On initial mount, respect query parameters (e.g. ?tab=upload or ?zoho=connected)
@@ -186,7 +188,12 @@ function DashboardShell() {
       );
     }
 
-    const noData = granularity !== '3year' && !bundle && !loading && !booting;
+    // Report Builder fetches its own data independently (its own /api/v1/
+    // report-builder/* calls, not the shared reports/all `bundle`) — it
+    // still needs a financial year to exist (gated above), but must not be
+    // blocked by a `bundle` that's null for reasons unrelated to it (e.g.
+    // viewing 3-Year mode, or another report tab's own compute failure).
+    const noData = activeTab !== 'report-builder' && granularity !== '3year' && !bundle && !loading && !booting;
     if (noData && dataMode === 'api') {
       return (
         <EmptyStateCard
@@ -215,6 +222,7 @@ function DashboardShell() {
       case 'alerts': return <AlertsTab />;
       case 'compliance': return <ComplianceTab />;
       case 'boardpack': return <BoardPackTab />;
+      case 'report-builder': return <ReportBuilderTab />;
       default: return null;
     }
   }
@@ -229,15 +237,25 @@ function DashboardShell() {
         onDownloadAllXlsx={downloadAllXlsx}
         onDownloadAllPdf={downloadAllPdf}
         onOpenAddFy={() => setAddFyOpen(true)}
+        onToggleSidebar={() => setSidebarOpen(v => !v)}
       />
-      <PeriodBar />
-      <NavTabs active={activeTab} onChange={setActiveTab} />
-      <div className="content">
-        {(booting || loading) && (
-          <LoadingBar label={user?.company_name ? `Loading financial reports for ${user.company_name}…` : 'Loading dashboard session…'} />
-        )}
-        {error && !loading && !booting && <ErrorBanner message={error} onRetry={refresh} />}
-        {!loading && !booting && renderTab()}
+      <div className="dash-shell">
+        <SidebarNav
+          active={activeTab}
+          onChange={setActiveTab}
+          mobileOpen={sidebarOpen}
+          onCloseMobile={() => setSidebarOpen(false)}
+        />
+        <div className="dash-main">
+          <PeriodBar />
+          <div className="content">
+            {(booting || loading) && (
+              <LoadingBar label={user?.company_name ? `Loading financial reports for ${user.company_name}…` : 'Loading dashboard session…'} />
+            )}
+            {error && !loading && !booting && <ErrorBanner message={error} onRetry={refresh} />}
+            {!loading && !booting && renderTab()}
+          </div>
+        </div>
       </div>
     </div>
   );

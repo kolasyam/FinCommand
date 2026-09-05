@@ -45,6 +45,38 @@ export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogi
   const [zohoLoading, setZohoLoading] = useState(false);
   const [zohoSyncing, setZohoSyncing] = useState(false);
 
+  // Real sync history (GET /zoho/logs -> sync_logs) — this endpoint already
+  // existed and worked, it just had no frontend caller anywhere, so this
+  // real data (every sync attempt this company has ever made, success or
+  // failure) was accumulating in the database with no way for a user to
+  // actually see it. Lazy-loaded on first expand, not on every tab visit.
+  interface SyncLogEntry {
+    id: string; source: string; status: string; ledgers_synced: number;
+    error_message: string | null; duration_ms: number | null;
+    started_at: string; completed_at: string | null;
+  }
+  const [syncHistory, setSyncHistory] = useState<SyncLogEntry[] | null>(null);
+  const [syncHistoryOpen, setSyncHistoryOpen] = useState(false);
+  const [syncHistoryLoading, setSyncHistoryLoading] = useState(false);
+
+  async function refreshSyncHistory() {
+    setSyncHistoryLoading(true);
+    try {
+      const rows = await apiFetch<SyncLogEntry[]>('/zoho/logs');
+      setSyncHistory(rows);
+    } catch {
+      setSyncHistory([]);
+    } finally {
+      setSyncHistoryLoading(false);
+    }
+  }
+
+  function toggleSyncHistory() {
+    const next = !syncHistoryOpen;
+    setSyncHistoryOpen(next);
+    if (next && syncHistory === null) refreshSyncHistory();
+  }
+
   const currentFy = fyList.find(f => f.id === currentFyId);
   const locked = !!currentFy?.is_locked;
 
@@ -215,6 +247,7 @@ export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogi
       toast(`✓ ${data.message} (${data.ledgers_synced} ledgers mapped)`);
       uploadComplete();
       loadZohoStatus();
+      if (syncHistoryOpen) refreshSyncHistory(); else setSyncHistory(null); // re-fetch if visible, else just invalidate for next open
     } catch (e) {
       toast(`Sync Error: ${(e as Error).message}`);
     } finally {
@@ -684,13 +717,68 @@ export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogi
                   )}
                 </div>
 
-                <div style={{ fontSize: 10, color: 'var(--text3)', lineHeight: 1.7 }}>
+                <div style={{ fontSize: 10, color: 'var(--text3)', lineHeight: 1.7, marginBottom: 10 }}>
                   {zohoStatus.connected ? (
                     <>🟢 <strong>Live Sync Active</strong> · Connected via OAuth 2.0. Auto-sync runs every 15 mins via Cron.</>
                   ) : (
                     <>🔒 <strong>OAuth 2.0 Integration</strong> · Click "Connect Zoho Books" to authorize direct REST API sync.</>
                   )}
                 </div>
+
+                {zohoStatus.connected && (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={toggleSyncHistory}
+                      className="btn btn-se btn-sm"
+                      style={{ width: '100%', justifyContent: 'space-between' }}
+                    >
+                      <span>📜 Recent Syncs (real sync_logs — every attempt, success or failure)</span>
+                      <span>{syncHistoryOpen ? '▲' : '▼'}</span>
+                    </button>
+                    {syncHistoryOpen && (
+                      <div style={{ marginTop: 8, border: '1px solid var(--border2)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                        {syncHistoryLoading ? (
+                          <div style={{ padding: 12, fontSize: 11, color: 'var(--text3)', textAlign: 'center' }}>Loading…</div>
+                        ) : !syncHistory || syncHistory.length === 0 ? (
+                          <div style={{ padding: 12, fontSize: 11, color: 'var(--text3)', textAlign: 'center' }}>No sync attempts logged yet.</div>
+                        ) : (
+                          <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10.5 }}>
+                              <thead>
+                                <tr style={{ background: 'var(--bg2)' }}>
+                                  <th style={{ textAlign: 'left', padding: '5px 8px', fontWeight: 600, color: 'var(--text3)' }}>Started</th>
+                                  <th style={{ textAlign: 'left', padding: '5px 8px', fontWeight: 600, color: 'var(--text3)' }}>Status</th>
+                                  <th style={{ textAlign: 'right', padding: '5px 8px', fontWeight: 600, color: 'var(--text3)' }}>Ledgers</th>
+                                  <th style={{ textAlign: 'right', padding: '5px 8px', fontWeight: 600, color: 'var(--text3)' }}>Duration</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {syncHistory.map((s) => (
+                                  <tr key={s.id} style={{ borderTop: '1px solid var(--border)' }} title={s.error_message || undefined}>
+                                    <td style={{ padding: '5px 8px', whiteSpace: 'nowrap' }}>{new Date(s.started_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
+                                    <td style={{ padding: '5px 8px' }}>
+                                      <span style={{
+                                        color: s.status === 'success' ? '#16a34a' : s.status === 'error' ? '#dc2626' : 'var(--text3)',
+                                        fontWeight: 600,
+                                      }}>
+                                        {s.status === 'success' ? '✓' : s.status === 'error' ? '✗' : '…'} {s.status}
+                                      </span>
+                                    </td>
+                                    <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'var(--mono)' }}>{s.ledgers_synced}</td>
+                                    <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'var(--mono)', color: 'var(--text3)' }}>
+                                      {s.duration_ms != null ? `${(s.duration_ms / 1000).toFixed(1)}s` : '—'}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             ) : (
               /* Coming Soon — no backend integration exists yet for this

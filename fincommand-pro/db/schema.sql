@@ -269,6 +269,84 @@ CREATE TABLE IF NOT EXISTS tb_customer_cost (
 CREATE INDEX IF NOT EXISTS idx_tb_customer_cost_upload  ON tb_customer_cost(upload_id);
 CREATE INDEX IF NOT EXISTS idx_tb_customer_cost_company ON tb_customer_cost(company_id, financial_year_id);
 
+-- ═══════════════════════════════════════════════════════════
+--  REPORT BUILDER — custom statement formats (Format Builder + Report
+--  Viewer). Fully additive: does not touch tb_ledgers, ledger_master, or
+--  any existing Note-based report. A user defines a reusable row structure
+--  (statement_templates/lines), maps real ledgers to each detail row by
+--  NAME (not tb_ledgers.id — that row is re-created every sync, ledger_name
+--  is the stable identity used everywhere else in this engine, e.g.
+--  zoho.ts's customerRevMap/vendorExpenseMap), then runs it against any
+--  period. Reports store configuration only, never computed amounts — every
+--  run recomputes from the live ledger data, same convention as
+--  tb_customer_revenue/saved dashboards elsewhere in this app.
+-- ═══════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS report_templates (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id              UUID REFERENCES companies(id) ON DELETE CASCADE,
+  name                    VARCHAR(200) NOT NULL,
+  created_by              UUID REFERENCES users(id),
+  cloned_from_template_id UUID REFERENCES report_templates(id) ON DELETE SET NULL,
+  created_at              TIMESTAMPTZ DEFAULT NOW(),
+  updated_at              TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS report_lines (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  template_id       UUID REFERENCES report_templates(id) ON DELETE CASCADE,
+  parent_line_id    UUID REFERENCES report_lines(id) ON DELETE SET NULL,
+  label             VARCHAR(200) NOT NULL,
+  sequence          INTEGER NOT NULL DEFAULT 0,
+  line_type         VARCHAR(10) NOT NULL DEFAULT 'detail'
+                    CHECK (line_type IN ('detail','subtotal','header')),
+  -- +1 adds, -1 subtracts into the running total.
+  sign              SMALLINT NOT NULL DEFAULT 1 CHECK (sign IN (1,-1)),
+  is_percent_base   BOOLEAN DEFAULT FALSE,
+  -- Subtotal-only. FALSE (default) = this subtotal snapshots the running
+  -- total and the total KEEPS ACCUMULATING past it — this is what makes a
+  -- cascading waterfall (Total Income -> Gross Profit -> EBITDA -> PBT)
+  -- compute correctly: each later subtotal's snapshot already includes
+  -- every earlier one's constituent lines. TRUE = this subtotal closes its
+  -- section and the running total resets to zero right after it (used once
+  -- a statement genuinely contains two unrelated blocks in one template,
+  -- e.g. a combined P&L-then-Balance-Sheet layout, where Total Assets must
+  -- not carry Profit Before Tax into it). See computeStatementReport() in
+  -- lib/financial/report-builder-engine.ts for exactly how this is used —
+  -- this fixes a real bug confirmed in the reference prototype this module
+  -- was ported from, which reset after EVERY subtotal unconditionally and
+  -- so could never actually cascade a multi-step waterfall.
+  resets_after      BOOLEAN DEFAULT FALSE,
+  created_at        TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS report_line_ledgers (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  line_id           UUID REFERENCES report_lines(id) ON DELETE CASCADE,
+  ledger_name       VARCHAR(300) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS report_saved_reports (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id        UUID REFERENCES companies(id) ON DELETE CASCADE,
+  template_id       UUID REFERENCES report_templates(id) ON DELETE CASCADE,
+  financial_year_id UUID REFERENCES financial_years(id),
+  name              VARCHAR(200) NOT NULL,
+  -- Array of month indices (0=m1..11=m12, same convention as tb_ledgers)
+  -- selected as period columns, e.g. [0,1,2] for Q1.
+  month_indices     JSONB NOT NULL DEFAULT '[]',
+  show_percent      BOOLEAN DEFAULT TRUE,
+  created_by        UUID REFERENCES users(id),
+  created_at        TIMESTAMPTZ DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ DEFAULT NOW(),
+  last_run_at       TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_report_templates_company     ON report_templates(company_id);
+CREATE INDEX IF NOT EXISTS idx_report_lines_template        ON report_lines(template_id);
+CREATE INDEX IF NOT EXISTS idx_report_lines_parent          ON report_lines(parent_line_id);
+CREATE INDEX IF NOT EXISTS idx_report_line_ledgers_line     ON report_line_ledgers(line_id);
+CREATE INDEX IF NOT EXISTS idx_report_saved_reports_company ON report_saved_reports(company_id, template_id);
+
 -- ─────────────────────────────────────────────
 --  LEDGER MASTER (company-specific + global pre-seeded)
 -- ─────────────────────────────────────────────
@@ -332,6 +410,51 @@ CREATE TABLE IF NOT EXISTS sync_logs (
 );
 
 -- ─────────────────────────────────────────────
+--  ZOHO CONTACTS (real customer & vendor MASTER records — name, email,
+--  phone, GSTIN/PAN, payment terms, live outstanding balance, address).
+--  Distinct in kind from tb_customer_revenue/tb_vendor_expense (which are
+--  period-transactional: one row per customer/vendor PER UPLOAD, replaced
+--  wholesale on every sync, same lifecycle as tb_ledgers) — a contact
+--  record isn't tied to a financial year or an upload at all, it's live
+--  reference data that just gets kept in sync. So this table is UPSERTED
+--  in place (ON CONFLICT (company_id, zoho_contact_id) DO UPDATE) instead
+--  of versioned per upload — the right storage shape follows from the real
+--  data's own lifecycle, not copy-pasted from the nearest existing table.
+--  Populated by lib/services/zoho.ts::syncZohoContacts(), called
+--  alongside (but independently/non-fatally of) the main TB sync.
+-- ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS zoho_contacts (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id            UUID REFERENCES companies(id) ON DELETE CASCADE,
+  zoho_contact_id       VARCHAR(100) NOT NULL,
+  contact_type          VARCHAR(10) NOT NULL CHECK (contact_type IN ('customer','vendor')),
+  contact_name          VARCHAR(300) NOT NULL,
+  company_name          VARCHAR(300),
+  email                 VARCHAR(255),
+  phone                 VARCHAR(50),
+  mobile                VARCHAR(50),
+  gst_no                VARCHAR(30),
+  pan_no                VARCHAR(20),
+  gst_treatment         VARCHAR(50),
+  currency_code         CHAR(3),
+  payment_terms_label   VARCHAR(100),
+  status                VARCHAR(20),
+  -- Zoho's own live running balances for this contact — real, not derived
+  -- from our synced ledgers (which only cover one financial year at a
+  -- time); *_bcy = base-currency equivalent, used for any company-wide
+  -- ranking so a foreign-currency contact isn't silently mis-summed.
+  outstanding_receivable_amount     NUMERIC(18,2) DEFAULT 0,
+  outstanding_receivable_amount_bcy NUMERIC(18,2) DEFAULT 0,
+  outstanding_payable_amount        NUMERIC(18,2) DEFAULT 0,
+  outstanding_payable_amount_bcy    NUMERIC(18,2) DEFAULT 0,
+  billing_address       JSONB,
+  zoho_created_at       TIMESTAMPTZ,
+  zoho_last_modified_at TIMESTAMPTZ,
+  synced_at             TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(company_id, zoho_contact_id)
+);
+
+-- ─────────────────────────────────────────────
 --  AUDIT TRAIL
 -- ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS audit_trail (
@@ -357,7 +480,6 @@ CREATE TABLE IF NOT EXISTS audit_trail (
 CREATE INDEX IF NOT EXISTS idx_users_email         ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_company       ON users(company_id);
 CREATE INDEX IF NOT EXISTS idx_tb_uploads_company  ON tb_uploads(company_id, financial_year_id);
-CREATE INDEX IF NOT EXISTS idx_tb_uploads_current  ON tb_uploads(company_id, financial_year_id, is_current);
 CREATE INDEX IF NOT EXISTS idx_tb_ledgers_upload   ON tb_ledgers(upload_id);
 CREATE INDEX IF NOT EXISTS idx_tb_ledgers_company  ON tb_ledgers(company_id, financial_year_id);
 CREATE INDEX IF NOT EXISTS idx_tb_ledgers_note     ON tb_ledgers(note_no);
@@ -371,6 +493,47 @@ CREATE INDEX IF NOT EXISTS idx_audit_user          ON audit_trail(user_id, creat
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens      ON refresh_tokens(token) WHERE revoked_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_fy_company          ON financial_years(company_id);
 CREATE INDEX IF NOT EXISTS idx_rt_user             ON refresh_tokens(user_id);
+
+-- Every real read in this app filters tb_uploads on is_current=TRUE (see
+-- loadLedgers() and every query modeled on it) — but is_current is FALSE
+-- for the vast majority of rows almost all the time: confirmed on the live
+-- database, 22 of 28 tb_uploads rows (79%) are superseded, since a new row
+-- is written on every sync (this company's Zoho auto-sync runs every 15
+-- min) and the old one is flipped to is_current=FALSE, never deleted. A
+-- plain composite index still has to carry all that dead weight; a partial
+-- index only ever indexes the ~1-per-(company,FY) row every real query
+-- actually wants, and stays that size no matter how many syncs accumulate
+-- over the company's lifetime. Replaces the old non-partial
+-- idx_tb_uploads_current, which this makes redundant.
+DROP INDEX IF EXISTS idx_tb_uploads_current;
+CREATE INDEX IF NOT EXISTS idx_tb_uploads_current_partial
+  ON tb_uploads(company_id, financial_year_id) WHERE is_current = TRUE;
+
+-- NOTE: a company_id+financial_year_id+ledger_name index was considered
+-- here (ledgers are matched by NAME wherever an identity needs to survive
+-- a re-sync — Report Builder's report_line_ledgers, zoho.ts's customer/
+-- vendor revenue-cost maps) and deliberately NOT added: grepping this
+-- codebase for `WHERE ledger_name =` turns up zero real queries — every
+-- name match (Report Builder included) happens in application code against
+-- ledgers already fully loaded by loadLedgers()'s existing company_id+
+-- financial_year_id query, never as its own SQL filter. An index with no
+-- query to serve is dead weight (storage + slower writes, no read ever
+-- benefits) dressed up as diligence — the discipline this schema already
+-- follows elsewhere (idx_tb_ledgers_treasury is a partial index specifically
+-- because that WHERE clause is real) applies here too, just in the other
+-- direction: don't add the index either, when the query doesn't exist.
+
+-- sync_logs had no index at all beyond its primary key. It DOES have a real
+-- backing query — GET /api/v1/zoho/logs already selects exactly this shape
+-- (company_id, ORDER BY started_at DESC) — that endpoint just had no index
+-- to use and, it turns out, no frontend caller either (the UploadTab Zoho
+-- panel never called it); wired up alongside this index so the data this
+-- table has been accumulating this whole time is actually surfaced, not
+-- just queryable in theory.
+CREATE INDEX IF NOT EXISTS idx_sync_logs_company ON sync_logs(company_id, started_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_zoho_contacts_company_type ON zoho_contacts(company_id, contact_type);
+CREATE INDEX IF NOT EXISTS idx_zoho_contacts_name         ON zoho_contacts(company_id, contact_name);
 
 -- ─────────────────────────────────────────────
 --  TRIGGERS — updated_at auto-update

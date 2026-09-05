@@ -22,6 +22,16 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   }
 
   const results: { company_id: string; status: string; error?: string }[] = [];
+  // sync_frequency gates *which* companies are due, not just whether cron
+  // applies to them at all — this previously only excluded 'manual', so a
+  // company configured for 'daily' (or 'hourly') sync was being re-synced on
+  // every single cron tick regardless of how recently it last succeeded,
+  // firing far more often than the CFO actually configured. Gated on
+  // last_synced_at (set only on a *successful* completion — see
+  // syncFromZoho) rather than updated_at (bumped on every attempt including
+  // failures): a company stuck failing is retried on every cron tick until
+  // it recovers, but a healthy one is left alone between its own configured
+  // intervals. NULL last_synced_at (never yet synced) always qualifies.
   const { rows } = await query<{ company_id: string; fy_id: string }>(
     `SELECT zc.company_id, fy.id AS fy_id
      FROM zoho_config zc
@@ -30,6 +40,12 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
        AND zc.sync_frequency != 'manual'
        AND fy.is_locked=FALSE
        AND fy.end_date >= NOW()-INTERVAL '1 year'
+       AND (
+         zc.last_synced_at IS NULL
+         OR (zc.sync_frequency='15min' AND zc.last_synced_at <= NOW() - INTERVAL '15 minutes')
+         OR (zc.sync_frequency='hourly' AND zc.last_synced_at <= NOW() - INTERVAL '1 hour')
+         OR (zc.sync_frequency='daily' AND zc.last_synced_at <= NOW() - INTERVAL '1 day')
+       )
      ORDER BY fy.start_date DESC`
   );
   for (const row of rows) {

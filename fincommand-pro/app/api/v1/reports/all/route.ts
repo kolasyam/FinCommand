@@ -2,12 +2,14 @@ import type { NextRequest } from 'next/server';
 import { authenticate } from '@/lib/auth/permissions';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import { getFY, getPreviousFY, getNextFY, loadLedgers, loadCustomerRevenue, loadVendorExpense, loadCustomerCost, parsePeriodParams } from '@/lib/db/queries/reports';
+import { loadZohoContacts, type ZohoContactRow } from '@/lib/db/queries/zoho-contacts';
 import { query } from '@/lib/db/neon';
 import {
   computeMIS, computeBS, computePL, computeNotes,
   computeTreasury, computeCashFlow, computeRatios, resolvePeriod,
   computeTopCustomers, computeVendorExpense, computeCustomerMargin,
   type AggregatedNote, type MISResult, type TbLedgerRow, type CustomerRevenueInput, type VendorExpenseInput, type TreasuryResult,
+  type VendorExpense, type CustomerMarginResult, type ContactInfo,
 } from '@/lib/financial/tb-engine';
 import { mergeCyLedgers, mergeCyCustomerRevenue, mergeCyVendorExpense } from '@/lib/financial/cy-merge';
 import { getCachedReport, setCachedReport } from '@/lib/cache/report-cache';
@@ -151,8 +153,21 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     ),
   ]);
   const top_customers = computeTopCustomers(computeCustomerRev, computeLedgers, params, mis.totals.rev);
-  const vendor_expense = computeVendorExpense(computeVendorExp, params);
-  const customer_margin = computeCustomerMargin(computeCustomerRev, computeCustomerCost, params);
+  const rawVendorExpense = computeVendorExpense(computeVendorExp, params);
+  const rawCustomerMargin = computeCustomerMargin(computeCustomerRev, computeCustomerCost, params);
+
+  // Real Zoho contact directory (customer AND vendor master data — email,
+  // phone, GSTIN, live outstanding balance) — joined in here by name onto
+  // the already-computed vendor spend / customer margin, rather than
+  // threaded through computeVendorExpense()/computeCustomerMargin()
+  // themselves, so those stay pure functions with no DB dependency (same
+  // reasoning as every other compute* function in tb-engine.ts). A vendor/
+  // customer with no matching contact record (Excel-uploaded TB, or a name
+  // that doesn't exactly match Zoho's contact directory) just keeps
+  // `contact` undefined — never a fabricated placeholder.
+  const zohoContacts = await loadZohoContacts(user.company_id);
+  const vendor_expense = attachVendorContacts(rawVendorExpense, zohoContacts);
+  const customer_margin = attachCustomerContacts(rawCustomerMargin, zohoContacts);
   // Source Currency (the currency the Trial Balance ledgers were actually
   // recorded in) — real, per-company (auto-detected from the connected
   // Zoho org where available; see fetchAndStoreZohoOrgCurrency()), never
@@ -191,3 +206,33 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   setCachedReport(cacheKey, responseData);
   return json(responseData);
 });
+
+function toContactInfo(c: ZohoContactRow, balanceField: 'outstanding_payable_amount_bcy' | 'outstanding_receivable_amount_bcy'): ContactInfo {
+  return {
+    email: c.email,
+    phone: c.phone || c.mobile,
+    gstNo: c.gst_no,
+    outstandingBalance: parseFloat(String(c[balanceField])) || 0,
+  };
+}
+
+function attachVendorContacts(vendors: VendorExpense[], contacts: ZohoContactRow[]): VendorExpense[] {
+  if (contacts.length === 0) return vendors;
+  const byName = new Map(contacts.filter((c) => c.contact_type === 'vendor').map((c) => [c.contact_name, c]));
+  return vendors.map((v) => {
+    const c = byName.get(v.vendor);
+    return c ? { ...v, contact: toContactInfo(c, 'outstanding_payable_amount_bcy') } : v;
+  });
+}
+
+function attachCustomerContacts(result: CustomerMarginResult, contacts: ZohoContactRow[]): CustomerMarginResult {
+  if (contacts.length === 0) return result;
+  const byName = new Map(contacts.filter((c) => c.contact_type === 'customer').map((c) => [c.contact_name, c]));
+  return {
+    ...result,
+    entries: result.entries.map((e) => {
+      const c = byName.get(e.customer);
+      return c ? { ...e, contact: toContactInfo(c, 'outstanding_receivable_amount_bcy') } : e;
+    }),
+  };
+}

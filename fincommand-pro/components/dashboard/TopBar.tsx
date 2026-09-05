@@ -15,9 +15,11 @@ interface Props {
   onDownloadAllXlsx: () => void;
   onDownloadAllPdf: () => void;
   onOpenAddFy?: () => void;
+  /** Opens the sidebar's mobile slide-over drawer — see SidebarNav.tsx and the .sidebar-toggle-btn/.sidebar rules in globals.css (button only renders below the 1024px breakpoint; hidden on desktop, where the sidebar is already visible in-line). */
+  onToggleSidebar?: () => void;
 }
 
-export function TopBar({ onNavigate, onOpenLogin, onDownloadAllXlsx, onDownloadAllPdf, onOpenAddFy }: Props) {
+export function TopBar({ onNavigate, onOpenLogin, onDownloadAllXlsx, onDownloadAllPdf, onOpenAddFy, onToggleSidebar }: Props) {
   const {
     dataMode, user, fyList, currentFyId, selectFy, logout, yearType, displayUnit, setDisplayUnit,
     sourceCurrency, presentationCurrency, setPresentationCurrency, fxRate, fxAsOf, fxLoading, fxError,
@@ -63,18 +65,23 @@ export function TopBar({ onNavigate, onOpenLogin, onDownloadAllXlsx, onDownloadA
 
   return (
     <div className="topbar">
-      <div>
-        <div
-          className="logo"
-          role="button" tabIndex={0}
-          onClick={() => router.push('/')}
-          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') router.push('/'); }}
-          style={{ cursor: 'pointer', display: 'inline-block' }}
-          title="Go to FinCommand Pro home"
-        >
-          FinCommand Pro <span>IND AS · Schedule III</span>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        {onToggleSidebar && (
+          <button className="sidebar-toggle-btn" onClick={onToggleSidebar} aria-label="Toggle navigation menu">☰</button>
+        )}
+        <div>
+          <div
+            className="logo"
+            role="button" tabIndex={0}
+            onClick={() => router.push('/')}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') router.push('/'); }}
+            style={{ cursor: 'pointer', display: 'inline-block' }}
+            title="Go to FinCommand Pro home"
+          >
+            FinCommand Pro <span>IND AS · Schedule III</span>
+          </div>
+          <div className="co-info">{coInfo}</div>
         </div>
-        <div className="co-info">{coInfo}</div>
       </div>
       <div className="tbar-right">
         {user?.role === 'admin' && (
