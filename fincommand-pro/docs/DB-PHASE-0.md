@@ -147,7 +147,7 @@ A senior review of the live database found that the rules protecting the financi
 
 ### 3.5 Housekeeping
 - Login deletes refresh-token rows that have been expired or revoked for 30+ days. It's fire-and-forget, and a failure is logged.
-- `db/scripts/retention-report.ts` is **read-only**. It lists superseded batches older than N days in unlocked years, with their size. Today (90 days) there are none; everything is from Aug–Sep 2026.
+- `db/scripts/retention-report.ts` was **read-only**. It listed superseded batches older than N days in unlocked years, with their size. Today (90 days) there are none; everything is from Aug–Sep 2026. *(Replaced in Phase 1.6 by `db/scripts/retention.ts --dry-run`, which prints the exact list; see `DB-PHASE-1.md`.)*
 
 ### 3.6 Zoho sync — why its trial balances didn't balance, and a failing scheduler (found 2026-09-19)
 

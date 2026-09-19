@@ -2,6 +2,7 @@ import type { PoolClient } from 'pg';
 import { query } from '@/lib/db/neon';
 import { ApiError } from '@/lib/auth/permissions';
 import type { DataSource } from '@/lib/financial/tb-validation';
+import { tbWriteLockKey } from '@/lib/db/tb-write-lock';
 
 /**
  * tb_uploads columns safe to send to the browser, for a table aliased `t`.
@@ -35,7 +36,7 @@ export interface WritableYear {
  */
 export async function lockTrialBalanceWrite(client: PoolClient, companyId: string, fyId: string): Promise<WritableYear> {
   await client.query(`SET LOCAL lock_timeout = '15s'`);
-  await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [`tb:${companyId}:${fyId}`]);
+  await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [tbWriteLockKey(companyId, fyId)]);
   const { rows } = await client.query<WritableYear>(
     `SELECT id, label, is_locked, data_source FROM financial_years WHERE id=$1 AND company_id=$2 FOR UPDATE`,
     [fyId, companyId]
