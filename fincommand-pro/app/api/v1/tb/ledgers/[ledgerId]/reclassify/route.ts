@@ -10,7 +10,7 @@ import { lockTrialBalanceWrite, type WritableYear } from '@/lib/db/queries/tb-ba
 export const runtime = 'nodejs';
 
 interface LedgerRow {
-  id: string; upload_id: string; financial_year_id: string; is_current: boolean;
+  id: string; upload_id: string; financial_year_id: string; is_current: boolean; account_id: string;
   ledger_code: string | null; ledger_name: string;
   note_no: number | null; note_name: string | null; section: string | null; treasury_type: string | null; normal_bal: string | null;
 }
@@ -54,7 +54,7 @@ export const PATCH = withErrorHandling(async (req: NextRequest, { params }: { pa
 
   const result = await withTransaction(async (client) => {
     const { rows: existingRows } = await client.query<LedgerRow>(
-      `SELECT l.id, l.upload_id, l.financial_year_id, u.is_current, l.ledger_code, l.ledger_name,
+      `SELECT l.id, l.upload_id, l.financial_year_id, u.is_current, l.account_id, l.ledger_code, l.ledger_name,
               l.note_no, l.note_name, l.section, l.treasury_type, l.normal_bal
        FROM tb_ledgers l JOIN tb_uploads u ON u.id = l.upload_id
        WHERE l.id=$1 AND l.company_id=$2`,
@@ -69,13 +69,14 @@ export const PATCH = withErrorHandling(async (req: NextRequest, { params }: { pa
       throw new ApiError(400, 'Ledger is already classified under that note');
     }
 
-    // Every year whose current batch has this ledger (by code), locked in a
-    // fixed order so two concurrent requests can't deadlock each other.
+    // Every year whose current batch has this same account (its stable id,
+    // migration 0005 — so Excel ledgers without a code are covered too),
+    // locked in a fixed order so two concurrent requests can't deadlock.
     const { rows: yearRows } = await client.query<{ financial_year_id: string }>(
       `SELECT DISTINCT l.financial_year_id
        FROM tb_ledgers l JOIN tb_uploads u ON u.id = l.upload_id AND u.is_current = TRUE
-       WHERE l.company_id = $1 AND (l.id = $2 OR ($3::varchar IS NOT NULL AND l.ledger_code = $3))`,
-      [user.company_id, ledger.id, ledger.ledger_code]
+       WHERE l.company_id = $1 AND l.account_id = $2`,
+      [user.company_id, ledger.account_id]
     );
     const yearIds = [...new Set([ledger.financial_year_id, ...yearRows.map(r => r.financial_year_id)])].sort();
     const years: WritableYear[] = [];
@@ -100,17 +101,17 @@ export const PATCH = withErrorHandling(async (req: NextRequest, { params }: { pa
       ? ledger.treasury_type
       : target.treasuryType;
 
-    // The dragged row, plus the same ledger (by code) in the other unlocked
-    // years' current data — keeps the correction consistent across years.
+    // The same account in every unlocked year's current data (the dragged
+    // row included) — keeps the correction consistent across years.
     const { rows: updated } = await client.query<{ upload_id: string }>(
       `UPDATE tb_ledgers l SET note_no=$1, note_name=$2, section=$3, treasury_type=$4
        FROM tb_uploads u
        WHERE u.id = l.upload_id AND u.is_current = TRUE
          AND l.company_id = $5 AND l.financial_year_id = ANY($6::uuid[])
-         AND (l.id = $7 OR ($8::varchar IS NOT NULL AND l.ledger_code = $8))
+         AND l.account_id = $7
        RETURNING l.upload_id`,
       [target.note_no, target.note_name, target.section, targetTreasuryType,
-       user.company_id, writableYearIds, ledger.id, ledger.ledger_code]
+       user.company_id, writableYearIds, ledger.account_id]
     );
     const uploadIds = [...new Set(updated.map(r => r.upload_id))];
     // Part of the report cache key — other server instances stop serving the old numbers.

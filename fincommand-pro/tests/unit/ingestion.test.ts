@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import { ingestTrialBalance, toAmountRows, type IngestInput, type NormalizedLedger } from '@/lib/ingestion/trial-balance';
+import { ingestTrialBalance, toAmountRows, stripVolatileMetadata, type IngestInput, type NormalizedLedger } from '@/lib/ingestion/trial-balance';
 import { contentHash } from '@/lib/ingestion/content-hash';
 
 interface CurrentBatch { fileSha?: string | null; contentSha?: string | null; storedRows?: Record<string, unknown>[] }
@@ -19,6 +19,7 @@ function fakeDb(opts: { year?: { is_locked?: boolean; data_source?: 'zoho' | 'ex
         return { rows: c ? [{ id: 'current-batch', currency: 'INR', file_sha256: c.fileSha ?? null, content_sha256: c.contentSha ?? null }] : [], rowCount: c ? 1 : 0 };
       }
       if (/SELECT \* FROM tb_ledgers WHERE upload_id/.test(sql)) return { rows: opts.current?.storedRows ?? [], rowCount: 0 };
+      if (/INSERT INTO raw_payloads/.test(sql)) return { rows: [{ id: `payload-${(params?.[2] as string).length}` }], rowCount: 1 };
       return { rows: [], rowCount: 0 };
     },
   } as unknown as PoolClient;
@@ -28,7 +29,7 @@ function fakeDb(opts: { year?: { is_locked?: boolean; data_source?: 'zoho' | 'ex
 }
 
 const ledger = (name: string, code: string | null, op: [number, number], apr: [number, number] = [0, 0]): NormalizedLedger => ({
-  sourceKey: code ?? `name:${name.toLowerCase()}`, code, name,
+  code, name,
   note_no: 26, note_name: 'Other Expenses', section: 'exp', treasury_type: null, normal_bal: 'Dr',
   op_dr: op[0], op_cr: op[1],
   months: Array.from({ length: 12 }, (_, i) => (i === 0 ? { dr: apr[0], cr: apr[1] } : { dr: 0, cr: 0 })),
@@ -159,6 +160,36 @@ describe('ingestTrialBalance — the one write path for every source', () => {
     expect(db.statements()).toContain('ROLLBACK TO SAVEPOINT tb_vendor_expense_sp');
     expect(db.statements().some((q) => /UPDATE financial_years SET data_source/.test(q))).toBe(true);
     warn.mockRestore();
+  });
+
+  test('raw responses are stored through the de-duplicated store and linked by label — never on the batch row', async () => {
+    const db = fakeDb();
+    await ingestTrialBalance(input({
+      source: 'zoho',
+      batch: {
+        currency: 'INR', mappedCount: 3, hasMonthlyCols: true,
+        rawPayloads: [
+          { label: 'P&L Apr', periodFrom: '2025-04-01', periodTo: '2025-04-30', fetchedAt: null, payload: { profit_and_loss: [] } },
+          { label: 'BS Opening', periodFrom: '2025-03-31', periodTo: '2025-03-31', fetchedAt: null, payload: { balance_sheet: [] } },
+        ],
+      },
+    }), db.deps);
+    const upserts = db.log.filter((l) => /INSERT INTO raw_payloads/.test(l.sql));
+    const links = db.log.filter((l) => /INSERT INTO upload_raw_payloads/.test(l.sql));
+    expect(upserts).toHaveLength(2);
+    expect(upserts[0].sql).toMatch(/ON CONFLICT \(company_id, sha256\) DO UPDATE SET last_seen_at = NOW\(\)/);
+    expect(links.map((l) => l.params![1])).toEqual(['P&L Apr', 'BS Opening']);
+    expect(db.statements().find((q) => /INSERT INTO tb_uploads/.test(q))).not.toMatch(/raw_zoho_months/);
+  });
+
+  test("Zoho's per-request access timestamp is dropped before storing, so identical months de-duplicate", () => {
+    const a = { code: 0, balance_sheet: [{ total: 5 }], page_context: { report_name: 'Balance Sheet', last_accessed_time_formatted: '19/09/2026 10:00' } };
+    const b = { ...a, page_context: { ...a.page_context, last_accessed_time_formatted: '19/09/2026 16:00' } };
+    expect(JSON.stringify(stripVolatileMetadata(a))).toBe(JSON.stringify(stripVolatileMetadata(b)));
+    expect(stripVolatileMetadata(a)).toEqual({ code: 0, balance_sheet: [{ total: 5 }], page_context: { report_name: 'Balance Sheet' } });
+    // Figures are never touched.
+    expect(JSON.stringify(stripVolatileMetadata({ ...a, balance_sheet: [{ total: 6 }] }))).not.toBe(JSON.stringify(stripVolatileMetadata(a)));
+    expect(stripVolatileMetadata([1, 2])).toEqual([1, 2]);
   });
 
   test('an unbalanced trial balance is still written — and its difference recorded', async () => {

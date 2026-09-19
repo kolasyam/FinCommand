@@ -566,7 +566,10 @@ async function runZohoSync(
     customerRevenue: Array.from(customerRevMap.values()).map((c) => ({ externalId: c.customer_id || null, name: c.name, m: c.m })),
     vendorExpense: Array.from(vendorExpenseMap.values()).map((v) => ({ externalId: v.vendor_id ?? null, name: v.name, m: v.m })),
     customerCost: Array.from(customerCostMap.values()).map((c) => ({ externalId: c.customer_id ?? null, name: c.name, m: c.m })),
-    batch: { currency: baseCurrency, mappedCount: mapped, hasMonthlyCols: true, rawZohoMonths },
+    batch: {
+      currency: baseCurrency, mappedCount: mapped, hasMonthlyCols: true,
+      rawPayloads: rawZohoMonths.map((r) => ({ label: r.month, periodFrom: r.from_date, periodTo: r.to_date, fetchedAt: r.fetched_at, payload: r.raw_response })),
+    },
     inTransaction: async (client) => {
       for (const lm of autoMappings) {
         await client.query(

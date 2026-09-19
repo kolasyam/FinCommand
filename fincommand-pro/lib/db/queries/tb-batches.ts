@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import { query } from '@/lib/db/neon';
 import { ApiError } from '@/lib/auth/permissions';
 import type { DataSource } from '@/lib/financial/tb-validation';
 
@@ -50,6 +51,29 @@ export function assertYearUnlocked(fy: WritableYear): void {
 /** Records which source now owns the year's data ("first source owns the year"). */
 export async function setYearDataSource(client: PoolClient, fyId: string, source: DataSource): Promise<void> {
   await client.query(`UPDATE financial_years SET data_source=$2 WHERE id=$1`, [fyId, source]);
+}
+
+/**
+ * The raw source responses a batch was built from, by label ('P&L Apr',
+ * 'BS Opening', …) — for audit and re-processing. Reads the de-duplicated
+ * store (migration 0004); batches written before it fall back to their old
+ * raw_zoho_months column until that is cleared.
+ */
+export async function loadBatchRawPayloads(companyId: string, uploadId: string): Promise<{ label: string; payload: unknown }[]> {
+  const { rows } = await query<{ label: string; payload: unknown }>(
+    `SELECT l.label, p.payload
+     FROM upload_raw_payloads l
+     JOIN raw_payloads p ON p.id = l.raw_payload_id
+     JOIN tb_uploads u ON u.id = l.upload_id
+     WHERE l.upload_id = $1 AND u.company_id = $2
+     ORDER BY l.label`,
+    [uploadId, companyId]
+  );
+  if (rows.length) return rows;
+  const { rows: [legacy] } = await query<{ raw: { month: string; raw_response: unknown }[] | null }>(
+    `SELECT raw_zoho_months AS raw FROM tb_uploads WHERE id = $1 AND company_id = $2`, [uploadId, companyId]
+  );
+  return (legacy?.raw ?? []).map((e) => ({ label: e.month, payload: e.raw_response }));
 }
 
 export function sourceName(s: DataSource): string {

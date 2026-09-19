@@ -22,9 +22,13 @@ import { contentHash, hashableFromStoredLedger, hashableFromStoredEntity, type H
  * Before this, the Excel route and zoho.ts each did these steps their own way.
  */
 
+/**
+ * One mapped ledger, ready to store. Its stable account identity is not set
+ * here: the database assigns it on insert (ledger_account_key() + trigger,
+ * migration 0005) — Zoho account id, else code, else name — so it is defined
+ * once for every writer.
+ */
 export interface NormalizedLedger {
-  /** Stable identity of the account within its source: Zoho account id; Excel code, else the name. */
-  sourceKey: string;
   code: string | null;
   name: string;
   note_no: number | null;
@@ -44,6 +48,9 @@ export interface NormalizedLedger {
 
 /** One customer's or vendor's 12 monthly amounts (Zoho only today). */
 export interface EntityMonthlyRow { externalId: string | null; name: string; m: number[] }
+
+/** One raw response from the source, e.g. Zoho's 'P&L Apr' report. */
+export interface RawPayload { label: string; periodFrom: string | null; periodTo: string | null; fetchedAt: string | null; payload: unknown }
 
 export interface IngestInput {
   companyId: string;
@@ -65,7 +72,8 @@ export interface IngestInput {
     unmatched?: string[];
     coveragePct?: number | null;
     hasMonthlyCols: boolean;
-    rawZohoMonths?: unknown[] | null;
+    /** The raw source responses this batch was built from (stored once each, see storeRawPayloads). */
+    rawPayloads?: RawPayload[];
   };
   /** Also make this the company's default currency for the next upload (Excel's currency picker). */
   companyDefaultCurrency?: string | null;
@@ -176,6 +184,46 @@ async function insertEntityRows(
   }
 }
 
+/**
+ * Raw responses are stored once per company (DB Phase 1.3, migration 0004):
+ * Postgres fingerprints the canonical JSONB text, an identical response
+ * already on file is reused (only its last_seen_at moves), and the batch
+ * links to it under its own label. Most months don't change between syncs,
+ * so most responses are stored exactly once.
+ */
+/**
+ * Drops response metadata that changes on every request but says nothing
+ * about the figures — today Zoho's page_context.*accessed_time* stamps
+ * (found on the 1,195 migrated entries: they were the only difference
+ * between otherwise identical months, so nothing de-duplicated). When the
+ * response was fetched is kept on the link row (fetched_at) instead.
+ */
+export function stripVolatileMetadata(payload: unknown): unknown {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+  const p = payload as Record<string, unknown>;
+  const ctx = p.page_context;
+  if (!ctx || typeof ctx !== 'object' || Array.isArray(ctx)) return payload;
+  const kept = Object.fromEntries(Object.entries(ctx as Record<string, unknown>).filter(([k]) => !/accessed_time/i.test(k)));
+  return { ...p, page_context: kept };
+}
+
+async function storeRawPayloads(client: PoolClient, key: { uploadId: string; companyId: string; source: DataSource }, payloads: RawPayload[]) {
+  for (const p of payloads) {
+    const { rows: [stored] } = await client.query<{ id: string }>(
+      `INSERT INTO raw_payloads (company_id, source, sha256, payload)
+       SELECT $1, $2, encode(sha256(convert_to(x.p::text, 'UTF8')), 'hex'), x.p FROM (SELECT $3::jsonb AS p) x
+       ON CONFLICT (company_id, sha256) DO UPDATE SET last_seen_at = NOW()
+       RETURNING id`,
+      [key.companyId, key.source, JSON.stringify(stripVolatileMetadata(p.payload))]
+    );
+    await client.query(
+      `INSERT INTO upload_raw_payloads (upload_id, label, period_from, period_to, fetched_at, raw_payload_id)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [key.uploadId, p.label, p.periodFrom, p.periodTo, p.fetchedAt, stored.id]
+    );
+  }
+}
+
 /** Injectable for unit tests (a fake client); production always uses the real pool. */
 export interface IngestDeps {
   transaction: <T>(fn: (client: PoolClient) => Promise<T>) => Promise<T>;
@@ -258,17 +306,17 @@ export async function ingestTrialBalance(input: IngestInput, deps: IngestDeps = 
       `INSERT INTO tb_uploads
          (id, company_id, financial_year_id, uploaded_by, source, filename, file_size_kb,
           ledger_count, mapped_count, unmatched_count, unmatched_ledgers, coverage_pct, has_monthly_cols,
-          status, is_current, raw_zoho_months,
+          status, is_current,
           currency, file_sha256, total_dr, total_cr, balance_diff, is_balanced, validation, data_changed_at, content_sha256)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'complete',TRUE,$14::jsonb,
-               $15,$16,$17,$18,$19,$20,$21,NOW(),$22)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'complete',TRUE,
+               $14,$15,$16,$17,$18,$19,$20,NOW(),$21)`,
       [uploadId, companyId, fyId, input.uploadedBy, source, batch.filename ?? null, batch.fileSizeKb ?? null,
        input.ledgers.length, batch.mappedCount, unmatched.length, JSON.stringify(unmatched.slice(0, 50)),
        batch.coveragePct ?? null, batch.hasMonthlyCols,
-       batch.rawZohoMonths ? JSON.stringify(batch.rawZohoMonths) : null,
        batch.currency, batch.fileSha256 ?? null, summary.total_dr, summary.total_cr, summary.balance_diff,
        summary.is_balanced, JSON.stringify(summary.validation), incomingHash]
     );
+    if (batch.rawPayloads?.length) await storeRawPayloads(client, { uploadId, companyId, source }, batch.rawPayloads);
 
     await insertRows(client, 'tb_ledgers', LEDGER_COLUMNS, input.ledgers, (l) => [
       uploadId, companyId, fyId, l.code, l.name,

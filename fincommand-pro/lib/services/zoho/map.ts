@@ -64,8 +64,8 @@ export function mapZohoLedgers(
     if (lm && lm.note_no && lm.section) mapped++;
 
     return {
-      // Zoho's own account id is stable across renames; the brought-forward line has only its code.
-      sourceKey: row.zoho_account_id || row.code || `name:${nameKey}`,
+      // The stable account (Zoho account id, else code) is assigned by the
+      // database on insert — see ledger_account_key(), migration 0005.
       code: row.code,
       name: row.name,
       note_no: lm?.note_no || null,

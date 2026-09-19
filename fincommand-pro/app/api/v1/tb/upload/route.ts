@@ -248,7 +248,6 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     uploadedBy: user.id,
     options: { confirmReplace },
     ledgers: rows.map((row): NormalizedLedger => ({
-      sourceKey: row.code ? row.code : `name:${row.name.trim().toLowerCase()}`,
       code: row.code || null,
       name: row.name,
       note_no: row.note_no, note_name: row.note_name, section: row.section,

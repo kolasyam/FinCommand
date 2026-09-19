@@ -59,10 +59,18 @@ export async function loadAllLines(companyId: string): Promise<Map<string, Repor
   return map;
 }
 
+/**
+ * A link that resolved to a stable account (migration 0005) reads back as
+ * that account's CURRENT name, so renaming the account in Zoho doesn't break
+ * the report line; unresolved (legacy/ambiguous) links keep their saved name.
+ */
+const LINKED_NAME = `COALESCE(la.name, rll.ledger_name) AS ledger_name`;
+
 export async function loadLineLedgerMap(templateId: string): Promise<LineLedgerMap> {
   const { rows } = await query<{ line_id: string; ledger_name: string }>(
-    `SELECT rll.line_id, rll.ledger_name FROM report_line_ledgers rll
+    `SELECT rll.line_id, ${LINKED_NAME} FROM report_line_ledgers rll
      JOIN report_lines rl ON rl.id = rll.line_id
+     LEFT JOIN ledger_accounts la ON la.id = rll.account_id
      WHERE rl.template_id=$1`, [templateId]
   );
   const map: LineLedgerMap = {};
@@ -75,9 +83,10 @@ export async function loadLineLedgerMap(templateId: string): Promise<LineLedgerM
 /** Same as loadLineLedgerMap but for every template in a company at once — mirrors loadAllLines. */
 export async function loadAllLineLedgerMaps(companyId: string): Promise<LineLedgerMap> {
   const { rows } = await query<{ line_id: string; ledger_name: string }>(
-    `SELECT rll.line_id, rll.ledger_name FROM report_line_ledgers rll
+    `SELECT rll.line_id, ${LINKED_NAME} FROM report_line_ledgers rll
      JOIN report_lines rl ON rl.id = rll.line_id
      JOIN report_templates rt ON rt.id = rl.template_id
+     LEFT JOIN ledger_accounts la ON la.id = rll.account_id
      WHERE rt.company_id=$1`, [companyId]
   );
   const map: LineLedgerMap = {};
@@ -148,16 +157,17 @@ export async function cloneTemplate(
     );
     await client.query(lineInsert.sql, lineInsert.params);
 
-    const { rows: sourceMap } = await client.query<{ line_id: string; ledger_name: string }>(
-      `SELECT rll.line_id, rll.ledger_name FROM report_line_ledgers rll
+    const { rows: sourceMap } = await client.query<{ line_id: string; ledger_name: string; account_id: string | null }>(
+      `SELECT rll.line_id, rll.ledger_name, rll.account_id FROM report_line_ledgers rll
        WHERE rll.line_id = ANY($1)`, [sourceLines.map((l) => l.id)]
     );
     if (sourceMap.length > 0) {
+      // The account link is copied as-is, so a clone follows the same accounts.
       const mapRows = sourceMap
-        .map((m) => [idMap.get(m.line_id), m.ledger_name])
-        .filter((row): row is [string, string] => Boolean(row[0]));
+        .map((m) => [idMap.get(m.line_id), m.ledger_name, m.account_id])
+        .filter((row) => Boolean(row[0]));
       if (mapRows.length > 0) {
-        const mapInsert = buildMultiRowInsert('report_line_ledgers', ['line_id', 'ledger_name'], mapRows);
+        const mapInsert = buildMultiRowInsert('report_line_ledgers', ['line_id', 'ledger_name', 'account_id'], mapRows);
         await client.query(mapInsert.sql, mapInsert.params);
       }
     }
