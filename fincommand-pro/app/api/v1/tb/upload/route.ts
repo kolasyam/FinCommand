@@ -1,29 +1,19 @@
 import type { NextRequest } from 'next/server';
 import { createHash } from 'crypto';
 import * as XLSX from 'xlsx';
-import { v4 as uuid } from 'uuid';
-import { ApiError, authenticate, requireRole, ROLE_SETS } from '@/lib/auth/permissions';
+import { authenticate, requireRole, ROLE_SETS } from '@/lib/auth/permissions';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
-import { query, withTransaction } from '@/lib/db/neon';
+import { query } from '@/lib/db/neon';
 import { logAudit } from '@/lib/audit/audit';
 import { invalidateReportCache } from '@/lib/cache/report-cache';
 import { isCurrencyCode } from '@/lib/services/currency';
-import {
-  summarizeTrialBalance, describeImbalance, decideSourceOwnership, findDuplicateLedgers, type TbAmountRow,
-} from '@/lib/financial/tb-validation';
-import { lockTrialBalanceWrite, assertYearUnlocked, setYearDataSource, sourceName } from '@/lib/db/queries/tb-batches';
+import { describeImbalance } from '@/lib/financial/tb-validation';
+import { ingestTrialBalance, type NormalizedLedger } from '@/lib/ingestion/trial-balance';
 
 export const runtime = 'nodejs';
 
 const FY_MONTHS = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
 const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE_MB || '50') * 1024 * 1024;
-// 36 bind parameters per ledger row → 18,000 per statement, well under Postgres' 65,535 limit.
-const INSERT_CHUNK_ROWS = 500;
-const LEDGER_COLUMNS = [
-  'upload_id', 'company_id', 'financial_year_id', 'ledger_code', 'ledger_name',
-  'note_no', 'note_name', 'section', 'treasury_type', 'normal_bal', 'op_dr', 'op_cr',
-  ...Array.from({ length: 12 }, (_, i) => [`m${i + 1}_dr`, `m${i + 1}_cr`]).flat(),
-];
 
 interface LedgerMasterRow {
   ledger_code: string | null; ledger_name: string; note_no: number | null;
@@ -80,7 +70,6 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   if (!fyRows.length) return json({ error: 'Financial year not found' }, { status: 404 });
   if (fyRows[0].is_locked) return json({ error: 'This financial year is locked (post-audit)', code: 'YEAR_LOCKED' }, { status: 403 });
 
-  const uploadId = uuid();
   const buffer = Buffer.from(await file.arrayBuffer());
   const fileSha256 = createHash('sha256').update(buffer).digest('hex');
 
@@ -242,107 +231,44 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
 
   const coverage = rows.length > 0 ? Math.round(mapped / rows.length * 100) : 0;
 
-  // The same ledger twice would be summed twice into every report (and is
-  // refused by the database's one-ledger-per-batch rule anyway) — name it.
-  const duplicates = findDuplicateLedgers(rows);
-  if (duplicates.length) {
-    return json({
-      error: `These ledgers appear more than once in the file: ${duplicates.slice(0, 10).join(', ')}${duplicates.length > 10 ? ` and ${duplicates.length - 10} more` : ''}. Remove the extra rows and upload again.`,
-      code: 'DUPLICATE_LEDGERS',
-      duplicates,
-    }, { status: 422 });
+  // The batch keeps its own currency: the uploader's choice, else the company default.
+  let batchCurrency = currency;
+  if (!batchCurrency) {
+    const { rows: [co] } = await query<{ currency: string | null }>(`SELECT currency FROM companies WHERE id=$1`, [user.company_id]);
+    batchCurrency = (co?.currency || 'INR').toUpperCase();
   }
 
-  // Warn-and-record: stored on the batch and shown to the uploader, never blocks the upload.
-  const summary = summarizeTrialBalance(rows as unknown as TbAmountRow[]);
-  const balanceWarning = describeImbalance(summary, FY_MONTHS);
-
-  let replacedSource: string | null = null;
-  await withTransaction(async (client) => {
-    // One writer per company + year from here to COMMIT; the year's lock and
-    // owner are re-read under that lock (the check above was only a fast fail).
-    const fy = await lockTrialBalanceWrite(client, user.company_id, financial_year_id);
-    assertYearUnlocked(fy);
-
-    const decision = decideSourceOwnership(fy.data_source, 'excel', { confirmReplace });
-    if (decision === 'needs_confirm') {
-      throw new ApiError(
-        409,
-        `${fy.label}'s data currently comes from ${sourceName(fy.data_source!)}. Replace it with this Excel file? ` +
-        `Scheduled Zoho syncs will then skip this year.`,
-        'SOURCE_OWNED',
-        { owner: fy.data_source },
-      );
-    }
-    if (fy.data_source && fy.data_source !== 'excel') replacedSource = fy.data_source;
-
-    const { rows: currentRows } = await client.query<{ file_sha256: string | null }>(
-      `SELECT file_sha256 FROM tb_uploads WHERE company_id=$1 AND financial_year_id=$2 AND is_current=TRUE`,
-      [user.company_id, financial_year_id]
-    );
-    if (currentRows[0]?.file_sha256 === fileSha256) {
-      throw new ApiError(409, `This exact file is already the current Trial Balance for ${fy.label} — nothing changed.`, 'DUPLICATE_FILE');
-    }
-
-    // companies.currency is now only the default offered for the next
-    // upload; the batch keeps its own currency below, so changing it never
-    // re-labels figures that were loaded in another currency.
-    if (currency) {
-      await client.query(
-        `UPDATE companies SET currency=$1, updated_at=NOW() WHERE id=$2`,
-        [currency, user.company_id]
-      );
-    }
-    const { rows: [co] } = await client.query<{ currency: string | null }>(
-      `SELECT currency FROM companies WHERE id=$1`, [user.company_id]
-    );
-    const batchCurrency = (currency || co?.currency || 'INR').toUpperCase();
-
-    await client.query(
-      `UPDATE tb_uploads SET is_current=FALSE, status='superseded'
-       WHERE company_id=$1 AND financial_year_id=$2 AND is_current=TRUE`,
-      [user.company_id, financial_year_id]
-    );
-
-    await client.query(
-      `INSERT INTO tb_uploads
-         (id, company_id, financial_year_id, uploaded_by, source, filename,
-          file_size_kb, ledger_count, mapped_count, unmatched_count,
-          unmatched_ledgers, coverage_pct, has_monthly_cols, status, is_current,
-          currency, file_sha256, total_dr, total_cr, balance_diff, is_balanced, validation, data_changed_at)
-       VALUES ($1,$2,$3,$4,'excel',$5,$6,$7,$8,$9,$10,$11,$12,'complete',TRUE,
-               $13,$14,$15,$16,$17,$18,$19,NOW())`,
-      [uploadId, user.company_id, financial_year_id, user.id,
-       file.name, Math.round(file.size / 1024),
-       rows.length, mapped, unmatched.length, JSON.stringify(unmatched.slice(0, 50)),
-       coverage, hasMonthlyCols,
-       batchCurrency, fileSha256, summary.total_dr, summary.total_cr, summary.balance_diff,
-       summary.is_balanced, JSON.stringify(summary.validation)]
-    );
-
-    for (let i = 0; i < rows.length; i += INSERT_CHUNK_ROWS) {
-      const chunk = rows.slice(i, i + INSERT_CHUNK_ROWS);
-      const params: unknown[] = [];
-      const tuples = chunk.map((row) => {
-        const values = [
-          uploadId, user.company_id, financial_year_id,
-          row.code || null, row.name,
-          row.note_no, row.note_name, row.section, row.treasury_type, row.normal_bal,
-          row.op_dr, row.op_cr,
-          ...Array.from({ length: 12 }, (_, m) => [row[`m${m + 1}_dr`], row[`m${m + 1}_cr`]]).flat(),
-        ];
-        const base = params.length;
-        params.push(...values);
-        return `(${values.map((_, j) => `$${base + j + 1}`).join(',')})`;
-      });
-      await client.query(
-        `INSERT INTO tb_ledgers (${LEDGER_COLUMNS.join(', ')}) VALUES ${tuples.join(', ')}`,
-        params
-      );
-    }
-
-    await setYearDataSource(client, financial_year_id, 'excel');
+  // Everything below the parse/map step is the shared ingestion pipeline
+  // (lib/ingestion/trial-balance.ts): duplicate check, debit/credit summary,
+  // one-writer lock, year lock, source ownership, same-file check, write.
+  const { uploadId, summary, replacedSource } = await ingestTrialBalance({
+    companyId: user.company_id,
+    fyId: financial_year_id,
+    source: 'excel',
+    uploadedBy: user.id,
+    options: { confirmReplace },
+    ledgers: rows.map((row): NormalizedLedger => ({
+      sourceKey: row.code ? row.code : `name:${row.name.trim().toLowerCase()}`,
+      code: row.code || null,
+      name: row.name,
+      note_no: row.note_no, note_name: row.note_name, section: row.section,
+      treasury_type: row.treasury_type, normal_bal: row.normal_bal,
+      op_dr: row.op_dr, op_cr: row.op_cr,
+      months: Array.from({ length: 12 }, (_, m) => ({ dr: row[`m${m + 1}_dr`] as number, cr: row[`m${m + 1}_cr`] as number })),
+    })),
+    batch: {
+      currency: batchCurrency,
+      filename: file.name,
+      fileSizeKb: Math.round(file.size / 1024),
+      fileSha256,
+      mappedCount: mapped,
+      unmatched,
+      coveragePct: coverage,
+      hasMonthlyCols,
+    },
+    companyDefaultCurrency: currency,
   });
+  const balanceWarning = describeImbalance(summary, FY_MONTHS);
 
   invalidateReportCache(user.company_id);
   logAudit(req, user, 'TB_UPLOAD', 'tb_upload', uploadId, {

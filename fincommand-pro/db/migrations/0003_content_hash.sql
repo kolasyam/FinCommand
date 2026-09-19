@@ -1,0 +1,12 @@
+-- 0003 — content fingerprint on every trial-balance batch (DB Phase 1.2).
+--
+-- 23 of 29 observed Zoho syncs wrote a complete new copy of the year with
+-- exactly the same figures. The ingestion pipeline now fingerprints the
+-- normalised content (every ledger's mapping and amounts in paise, plus the
+-- customer/vendor rows and the currency — lib/ingestion/content-hash.ts) and
+-- writes nothing when it matches the current batch.
+--
+-- Non-destructive: one new nullable column. Existing batches get their
+-- fingerprint computed from their own rows the first time they are compared
+-- (no SQL backfill — the hash is defined in TypeScript, in one place).
+ALTER TABLE tb_uploads ADD COLUMN IF NOT EXISTS content_sha256 VARCHAR(64);

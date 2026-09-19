@@ -20,6 +20,9 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   // not mark anything: this route used to set 'error' for every throw,
   // overwriting the status of the sync that was genuinely running.
   const result = await syncFromZoho(user.company_id, fy_id, user.id, { confirmReplace: body.confirm_replace === true });
+  if (result.unchanged) {
+    return json({ message: 'Zoho Books is up to date — nothing changed since the last sync', ...result });
+  }
   invalidateReportCache(user.company_id);
   return json({ message: 'Zoho Books sync complete', ...result });
 });
