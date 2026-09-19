@@ -1,5 +1,5 @@
 import { query } from '@/lib/db/neon';
-import type { TbLedgerRow } from '@/lib/financial/tb-engine';
+import { withPeriodSurplus, type TbLedgerRow } from '@/lib/financial/tb-engine';
 import { mergeCyLedgers } from '@/lib/financial/cy-merge';
 import type { PeriodParams, PeriodType, YearType, Period } from '@/lib/financial/tb-engine';
 import type { ReportDataVersion } from '@/lib/cache/report-cache';
@@ -28,6 +28,20 @@ export async function loadLedgers(companyId: string, fyId: string): Promise<TbLe
   );
   return rows;
 }
+
+/**
+ * Ledgers for the FINANCIAL STATEMENTS: the booked rows plus, for a genuine
+ * pre-closing trial balance, the derived "Surplus — profit for the period"
+ * equity row (tb-engine.ts::withPeriodSurplus) that makes the Balance Sheet
+ * tally. Report routes use this; custom metrics, Report Builder and the raw
+ * ledger APIs keep using loadLedgers() and never see a derived row.
+ */
+export async function loadStatementLedgers(companyId: string, fyId: string): Promise<TbLedgerRow[]> {
+  return withPeriodSurplus(await loadLedgers(companyId, fyId));
+}
+
+/** Drops derived rows — what custom metrics compute from when handed statement ledgers. */
+export const bookedRowsOnly = (rows: TbLedgerRow[]): TbLedgerRow[] => rows.filter((r) => !r.is_system);
 
 export interface CustomerRevenueRow {
   id: string;

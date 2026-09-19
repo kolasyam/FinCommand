@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server';
 import { authenticate } from '@/lib/auth/permissions';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import {
-  getFY, getPreviousFY, getNextFY, loadLedgers, loadCustomerRevenue, loadVendorExpense, loadCustomerCost, parsePeriodParams,
+  getFY, getPreviousFY, getNextFY, loadStatementLedgers, bookedRowsOnly, loadCustomerRevenue, loadVendorExpense, loadCustomerCost, parsePeriodParams,
   loadReportDataVersion, loadBatchCurrency,
 } from '@/lib/db/queries/reports';
 import { loadZohoContacts, type ZohoContactRow } from '@/lib/db/queries/zoho-contacts';
@@ -48,7 +48,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   // Excel uploads) concurrently
   const [fy, ledgers, customerRevRows, vendorExpenseRows, customerCostRows] = await Promise.all([
     getFY(user.company_id, fyId),
-    loadLedgers(user.company_id, fyId),
+    loadStatementLedgers(user.company_id, fyId),
     loadCustomerRevenue(user.company_id, fyId),
     loadVendorExpense(user.company_id, fyId),
     loadCustomerCost(user.company_id, fyId),
@@ -98,7 +98,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     if (nextFy) {
       cyNextFy = nextFy;
       const [nextFyLedgers, nextFyCustomerRev, nextFyVendorExp, nextFyCustomerCost] = await Promise.all([
-        loadLedgers(user.company_id, nextFy.id),
+        loadStatementLedgers(user.company_id, nextFy.id),
         loadCustomerRevenue(user.company_id, nextFy.id),
         loadVendorExpense(user.company_id, nextFy.id),
         loadCustomerCost(user.company_id, nextFy.id),
@@ -109,7 +109,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
       computeCustomerCost = mergeCyCustomerRevenue(customerCostRows, nextFyCustomerCost);
     } else if (prevFy) {
       const [prevLedgers, prevCustomerRev, prevVendorExp, prevCustomerCost] = await Promise.all([
-        loadLedgers(user.company_id, prevFy.id),
+        loadStatementLedgers(user.company_id, prevFy.id),
         loadCustomerRevenue(user.company_id, prevFy.id),
         loadVendorExpense(user.company_id, prevFy.id),
         loadCustomerCost(user.company_id, prevFy.id),
@@ -129,7 +129,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   } else {
     const prevFy = await getPreviousFY(user.company_id, fy);
     if (prevFy) {
-      const prevLedgers = await loadLedgers(user.company_id, prevFy.id);
+      const prevLedgers = await loadStatementLedgers(user.company_id, prevFy.id);
       if (prevLedgers.length) {
         prev_cashflow = computeCashFlow(prevLedgers, params);
         prev_bs = computeBS(prevLedgers, params);
@@ -219,8 +219,8 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   );
   const custom_metric_values: Record<string, CustomMetricValue> = {};
   for (const def of ledgerDefs) {
-    const current = computeLedgerMetric(computeLedgers, def.ledgerSpec, params);
-    const prior = prevLedgersForMetrics ? computeLedgerMetric(prevLedgersForMetrics, def.ledgerSpec, params) : null;
+    const current = computeLedgerMetric(bookedRowsOnly(computeLedgers), def.ledgerSpec, params); // books only, never the derived surplus row
+    const prior = prevLedgersForMetrics ? computeLedgerMetric(bookedRowsOnly(prevLedgersForMetrics), def.ledgerSpec, params) : null;
     custom_metric_values[def.key] = {
       value: current.value,
       // A prior year in which no ledger matched has no honest comparative.
@@ -283,7 +283,7 @@ function buildPriorPeriod(
 ): PriorPeriodBundle {
   const values: Record<string, CustomMetricValue> = {};
   for (const def of ledgerDefs) {
-    const r = computeLedgerMetric(ledgers, def.ledgerSpec, params);
+    const r = computeLedgerMetric(bookedRowsOnly(ledgers), def.ledgerSpec, params);
     values[def.key] = { value: r.matchedCount > 0 ? r.value : null, previous: null, trend: [], breakdown: [], matchedCount: r.matchedCount };
   }
   return {

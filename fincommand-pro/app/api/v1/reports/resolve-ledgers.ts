@@ -3,7 +3,7 @@
  * In CY mode (year_type=CY), merges prevFY + nextFY ledgers via mergeCyLedgers().
  * In FY mode, returns the ledgers as-is.
  */
-import { getFY, getNextFY, loadLedgers } from '@/lib/db/queries/reports';
+import { getFY, getNextFY, loadStatementLedgers } from '@/lib/db/queries/reports';
 import { mergeCyLedgers } from '@/lib/financial/cy-merge';
 import type { TbLedgerRow } from '@/lib/financial/tb-engine';
 import type { FinancialYearRow } from '@/lib/db/queries/reports';
@@ -27,7 +27,7 @@ export async function resolveReportLedgers(
   const fy = await getFY(companyId, fyId);
   if (!fy) return { error: json({ error: 'Financial year not found' }, { status: 404 }) };
 
-  const ledgers = await loadLedgers(companyId, fyId);
+  const ledgers = await loadStatementLedgers(companyId, fyId);
   if (!ledgers.length) return { error: json({ error: 'No Trial Balance data found.' }, { status: 404 }) };
 
   if (yearType !== 'CY') {
@@ -36,7 +36,7 @@ export async function resolveReportLedgers(
 
   // CY mode: stitch Jan–Mar from prevFY (ledgers) + Apr–Dec from nextFY
   const nextFy = await getNextFY(companyId, fy);
-  const nextFyLedgers = nextFy ? await loadLedgers(companyId, nextFy.id) : [];
+  const nextFyLedgers = nextFy ? await loadStatementLedgers(companyId, nextFy.id) : [];
   const merged = mergeCyLedgers(ledgers, nextFyLedgers);
 
   return { data: { fy, ledgers: merged, cyNextFy: nextFy ?? null } };

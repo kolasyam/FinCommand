@@ -1,10 +1,13 @@
 import {
-  computeMIS, computeBS, computePL, computeNotes, computeTreasury, computeCashFlow, computeRatios, resolvePeriod,
+  computeMIS, computeBS, withPeriodSurplus, computePL, computeNotes, computeTreasury, computeCashFlow, computeRatios, resolvePeriod,
   customerStatusFromPct, vendorStatusFromPct,
   type PeriodParams, type TbLedgerRow, type TopCustomer, type VendorExpense, type CustomerMarginResult,
 } from '@/lib/financial/tb-engine';
 import { mergeCyLedgers } from '@/lib/financial/cy-merge';
 import { buildSampleLedgers, SAMPLE_FY_META, SAMPLE_FY_ORDER, SAMPLE_TOP_CUSTOMERS, SAMPLE_VENDOR_EXPENSE, SAMPLE_CUSTOMER_DIRECT_COST, type SampleFyKey } from '@/lib/financial/sample-data';
+
+/** Same rule as the API's statement ledgers (tb-engine.ts::withPeriodSurplus) — a no-op for the built-in sample, which isn't a Dr = Cr trial balance. */
+const sampleStatementLedgers = (key: SampleFyKey) => withPeriodSurplus(buildSampleLedgers(key));
 import type { ReportBundle, ThreeYearBundle, ThreeYearEntry } from './types';
 
 /**
@@ -30,13 +33,13 @@ export function computeLocalReportBundle(fyKey: SampleFyKey, params: PeriodParam
     const prevIdx = SAMPLE_FY_ORDER.indexOf(fyKey);
     const nextKey: SampleFyKey | null = prevIdx > 0 ? SAMPLE_FY_ORDER[prevIdx - 1] : null;
 
-    const prevLedgers = buildSampleLedgers(fyKey);
-    const nextLedgers: TbLedgerRow[] = nextKey ? buildSampleLedgers(nextKey) : [];
+    const prevLedgers = sampleStatementLedgers(fyKey);
+    const nextLedgers: TbLedgerRow[] = nextKey ? sampleStatementLedgers(nextKey) : [];
     computeLedgers = mergeCyLedgers(prevLedgers, nextLedgers);
 
     if (nextKey) cyNextFy = SAMPLE_FY_META[nextKey];
   } else {
-    computeLedgers = buildSampleLedgers(fyKey);
+    computeLedgers = sampleStatementLedgers(fyKey);
   }
 
   // Previous FY for cash-flow comparison (FY mode only, mirrors API route behaviour)
@@ -54,7 +57,7 @@ export function computeLocalReportBundle(fyKey: SampleFyKey, params: PeriodParam
   let prev_financial_year = null;
 
   if (prevKey) {
-    const prevLedgers = buildSampleLedgers(prevKey);
+    const prevLedgers = sampleStatementLedgers(prevKey);
     prev_cashflow = computeCashFlow(prevLedgers, params);
     prev_bs = computeBS(prevLedgers, params);
     prev_pl = computePL(prevLedgers, params);
@@ -150,7 +153,7 @@ export function computeLocalThreeYear(): ThreeYearBundle {
   const orderedOldToNew = [...SAMPLE_FY_ORDER].reverse(); // FY23, FY24, FY25
 
   const results: ThreeYearEntry[] = orderedOldToNew.map((key) => {
-    const ledgers = buildSampleLedgers(key);
+    const ledgers = sampleStatementLedgers(key);
     const mis = computeMIS(ledgers, params);
     const pl = computePL(ledgers, params);
     const treasury = computeTreasury(ledgers, params);

@@ -37,6 +37,8 @@
  * — see computeRatios()'s own doc comment.
  */
 
+import { summarizeTrialBalance, type TbAmountRow } from './tb-validation';
+
 export type Section = 'anc' | 'ac' | 'eq' | 'lnc' | 'lc' | 'inc' | 'exp';
 export type TreasuryType = 'cash' | 'bank_ca' | 'bank_sb' | 'fd' | 'mf';
 export type NormalBal = 'Dr' | 'Cr';
@@ -63,6 +65,8 @@ export interface TbLedgerRow {
   m7_dr?: Num; m7_cr?: Num; m8_dr?: Num; m8_cr?: Num;
   m9_dr?: Num; m9_cr?: Num; m10_dr?: Num; m10_cr?: Num;
   m11_dr?: Num; m11_cr?: Num; m12_dr?: Num; m12_cr?: Num;
+  /** A row the engine derived rather than one from the books (see withPeriodSurplus). */
+  is_system?: boolean;
   [key: string]: unknown;
 }
 
@@ -454,6 +458,57 @@ export function computeBS(ledgers: TbLedgerRow[], periodParams: PeriodParams): B
   };
 }
 
+export const PERIOD_SURPLUS_CODE = 'SYS-PL-SURPLUS';
+export const PERIOD_SURPLUS_NAME = 'Surplus — profit for the period (as booked)';
+
+/**
+ * Schedule III: the period's profit sits in Other Equity ("Surplus in the
+ * Statement of Profit and Loss"). A pre-closing trial balance keeps that
+ * profit in its income/expense accounts, so computeBS() — which sums ledger
+ * balances — was short by exactly the profit and every such Balance Sheet
+ * showed "Out of Balance" (DB Phase 1.5, approved 2026-09-19).
+ *
+ * This appends ONE derived row: Note 2 Other Equity, normal balance Cr,
+ * opening 0, each month's movement = that month's booked result (income Cr −
+ * expense Dr of the P&L rows; the engine's *modelled* tax is not in the books
+ * and is not included — hence "as booked"). Because it is an ordinary row,
+ * every existing formula balances for any period view, and in CY mode
+ * mergeCyLedgers() carries it across the FY boundary like any equity account.
+ *
+ * Only for a genuine pre-closing trial balance — opening and every month
+ * Dr = Cr within ₹1. A ledger set that isn't (the built-in sample data,
+ * whose equity already includes profit, or a broken upload) is returned
+ * unchanged, so its real difference stays visible instead of being masked.
+ */
+export function withPeriodSurplus(ledgers: TbLedgerRow[]): TbLedgerRow[] {
+  if (!ledgers.length || ledgers.some((r) => r.is_system)) return ledgers;
+  if (!summarizeTrialBalance(ledgers as TbAmountRow[]).is_balanced) return ledgers;
+
+  const plRows = ledgers.filter((r) => r.section === 'inc' || r.section === 'exp');
+  const monthly = Array.from({ length: 12 }, (_, mi) =>
+    plRows.reduce((sum, r) => sum + n(r[`m${mi + 1}_cr` as keyof TbLedgerRow] as Num) - n(r[`m${mi + 1}_dr` as keyof TbLedgerRow] as Num), 0));
+  if (monthly.every((v) => Math.abs(v) < 0.005)) return ledgers;
+
+  const surplus: TbLedgerRow = {
+    ledger_code: PERIOD_SURPLUS_CODE,
+    ledger_name: PERIOD_SURPLUS_NAME,
+    note_no: 2,
+    note_name: 'Other Equity',
+    section: 'eq',
+    treasury_type: null,
+    normal_bal: 'Cr',
+    op_dr: 0,
+    op_cr: 0,
+    is_system: true,
+  };
+  monthly.forEach((profit, mi) => {
+    const rounded = Math.round(profit * 100) / 100;
+    surplus[`m${mi + 1}_dr`] = Math.max(0, -rounded);
+    surplus[`m${mi + 1}_cr`] = Math.max(0, rounded);
+  });
+  return [...ledgers, surplus];
+}
+
 export interface PLResult {
   revenue: number; other_income: number; total_income: number;
   cos: number; employee_benefits: number; finance_costs: number;
@@ -775,8 +830,11 @@ export function computeCashFlow(ledgers: TbLedgerRow[], periodParams: PeriodPara
   // Premium, and Retained Earnings *if* the books have actually posted a
   // movement into it) are what genuinely change with a capital raise or
   // dividend — use that directly.
-  const eqEnd = sumValues(groupBsNotesAt(ledgers, ['eq'], bsLastIdx));
-  const eqStart = sumValues(groupBsNotesAt(ledgers, ['eq'], startIdx));
+  // The derived period-surplus row (withPeriodSurplus) is the P&L itself —
+  // already counted via PBT at the top — so it is not a financing movement.
+  const bookedEquity = ledgers.filter((r) => !r.is_system);
+  const eqEnd = sumValues(groupBsNotesAt(bookedEquity, ['eq'], bsLastIdx));
+  const eqStart = sumValues(groupBsNotesAt(bookedEquity, ['eq'], startIdx));
   const equityMovement = eqEnd - eqStart;
 
   const financeCostsPaid = -finAmt;

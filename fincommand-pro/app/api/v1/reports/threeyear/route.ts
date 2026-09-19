@@ -3,7 +3,7 @@ import { authenticate } from '@/lib/auth/permissions';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import { isIn } from '@/lib/validations/common';
 import { query } from '@/lib/db/neon';
-import { loadLedgers } from '@/lib/db/queries/reports';
+import { loadStatementLedgers } from '@/lib/db/queries/reports';
 import {
   computeMIS, computePL, computeTreasury, computeRatios, computeCashFlow, computeBS,
   type YearType,
@@ -83,7 +83,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   const results: YearResult[] = [];
 
   for (const fy of fys) {
-    const ledgers = await loadLedgers(user.company_id, fy.id);
+    const ledgers = await loadStatementLedgers(user.company_id, fy.id);
     if (!ledgers.length) {
       results.push({ financial_year: fy, no_data: true });
       continue;
