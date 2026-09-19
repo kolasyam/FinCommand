@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { authenticate } from '@/lib/auth/permissions';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import { query } from '@/lib/db/neon';
+import { TB_UPLOAD_PUBLIC_COLUMNS } from '@/lib/db/queries/tb-batches';
 
 export const runtime = 'nodejs';
 
@@ -10,7 +11,7 @@ export const GET = withErrorHandling(async (req: NextRequest, { params }: { para
   const { fyId } = await params;
 
   const { rows } = await query(
-    `SELECT t.*, fy.label AS fy_label
+    `SELECT ${TB_UPLOAD_PUBLIC_COLUMNS}, fy.label AS fy_label
      FROM tb_uploads t JOIN financial_years fy ON fy.id=t.financial_year_id
      WHERE t.company_id=$1 AND t.financial_year_id=$2 AND t.is_current=TRUE
      LIMIT 1`,

@@ -1,7 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { authenticate, requireRole, ROLE_SETS } from '@/lib/auth/permissions';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
-import { query } from '@/lib/db/neon';
 import { syncFromZoho } from '@/lib/services/zoho';
 import { invalidateReportCache } from '@/lib/cache/report-cache';
 
@@ -15,15 +14,12 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   const fy_id = body.fy_id as string | undefined;
   if (!fy_id) return json({ error: 'fy_id required' }, { status: 400 });
 
-  try {
-    const result = await syncFromZoho(user.company_id, fy_id, user.id);
-    invalidateReportCache(user.company_id);
-    return json({ message: 'Zoho Books sync complete', ...result });
-  } catch (err) {
-    await query(
-      `UPDATE zoho_config SET last_sync_status='error',last_sync_error=$1 WHERE company_id=$2`,
-      [(err as Error).message, user.company_id]
-    ).catch(() => {});
-    throw err;
-  }
+  // syncFromZoho() records its own failures on zoho_config/sync_logs — but
+  // only once it has actually started. A rejection (year locked, year owned
+  // by an Excel upload → SOURCE_OWNED, another sync already running) must
+  // not mark anything: this route used to set 'error' for every throw,
+  // overwriting the status of the sync that was genuinely running.
+  const result = await syncFromZoho(user.company_id, fy_id, user.id, { confirmReplace: body.confirm_replace === true });
+  invalidateReportCache(user.company_id);
+  return json({ message: 'Zoho Books sync complete', ...result });
 });

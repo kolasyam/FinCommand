@@ -68,6 +68,14 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     ),
   ]);
 
+  // Housekeeping: refresh-token rows were never deleted, only revoked or left
+  // to expire. Anything dead for 30+ days is dropped. Fire-and-forget — it
+  // must never slow down or fail a login — but a failure is logged.
+  query(
+    `DELETE FROM refresh_tokens
+     WHERE expires_at < NOW() - INTERVAL '30 days' OR revoked_at < NOW() - INTERVAL '30 days'`
+  ).catch((err: Error) => console.error('[auth/login] refresh-token cleanup failed:', err.message));
+
   return json({
     access_token: accessToken,
     refresh_token: refreshToken,

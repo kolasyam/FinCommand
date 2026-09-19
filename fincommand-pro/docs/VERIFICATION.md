@@ -15,16 +15,15 @@ Must pass with **0 errors**. This repo uses `npm run typecheck` as the equivalen
 ```bash
 npm test
 ```
-Must pass all suites. **Verified 2026-09-17** (see `CUSTOM-METRICS-UPGRADE.md`, `QA-AUDIT-LATENCY-FIX.md`):
+Must pass all suites. **Verified 2026-09-19** (after DB Phase 0, see `DB-PHASE-0.md`):
 ```
-Test Suites: 7 passed, 7 total
-Tests:       249 passed, 249 total
-Time:        ~5s
+Test Suites: 17 passed, 17 total
+Tests:       434 passed, 434 total
 ```
-Suites: `note-catalog.test.ts`, `report-builder-engine.test.ts`, `custom-metric-engine.test.ts`, `dashboard-builder-engine.test.ts`, `tab-customization-audit.test.ts`, `tb-engine.test.ts`, `format.test.ts`.
+Phase 0 added `migrate-core`, `tb-validation`, `security` (token encryption + OAuth state), `report-cache-key` and `zoho-assembly`.
 
 > [!NOTE]
-> If a future run shows a different suite/test count than 7/249, that's a signal the codebase has moved on since this doc was written — update this section rather than treating the old numbers as ground truth.
+> If a future run shows a different suite/test count than 17/434, that's a signal the codebase has moved on since this doc was written — update this section rather than treating the old numbers as ground truth.
 
 ## Step 3 — Root diagnostic script protocol (DB / financial-calculation changes only)
 
@@ -32,14 +31,33 @@ For any change touching the database or a computed financial figure:
 
 1. Write a throwaway root-level `_diag*.ts` (or `.mjs`) script — this repo has an established convention of these (31 pre-existing `_diag*.ts`/`.mjs` files at the project root from prior work, verified count as of this audit).
 2. Use a dedicated `new Pool(...)` from `pg` with `dotenv/config`, and **relative imports** (`./lib/...`) for pure computation functions.
-3. **Do not** use `@/lib/db/neon.ts`'s shared `query()` for a script that must exit naturally — it has a non-`unref()`'d keep-alive `setInterval` that prevents the Node process from exiting. If the script must exercise app query-layer functions that do use `neon.ts`, call `process.exit()` explicitly at the end instead.
+3. If the script exercises app query-layer functions that use `@/lib/db/neon.ts`, call `pool.end()` (exported from `neon.ts`) at the end so the process exits. (The old 3-minute keep-alive `setInterval` that kept such scripts alive was removed in DB Phase 0.)
+   - **Read-only checks:** wrap them in `BEGIN READ ONLY … ROLLBACK`. **Never** use `SET SESSION …` (e.g. `SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY`): `DB_HOST` is Neon's transaction-mode pooler, where a session setting stays on a shared server connection and can leak onto other clients' requests, including production writes.
 4. Run it with `npx tsx _diagN_description.ts` against the real seeded company — **Acme Technologies Ltd**, user `cfo@acmetech.in`. `db/seed.ts` looks this company up by name and either reuses or creates it, so its `id` is **not a fixed constant** — resolve it at the top of your script with `SELECT id FROM companies WHERE name='Acme Technologies Ltd'` rather than hardcoding a UUID from a previous session, which may point at a different (or no-longer-existing) database.
 5. **Delete the script afterward.** These are throwaway verification artifacts, not permanent fixtures.
 
 > [!NOTE]
-> Why this step exists: a real pre-existing bug (`ledger_master` missing a `UNIQUE(company_id, ledger_code)` constraint that `db/init.ts`'s `ON CONFLICT` silently depended on) was only caught this way — `tsc`/`build` passing does not prove runtime correctness against real data. Live-DB scripts also catch schema-migration-not-yet-applied issues (a new column referenced in code but not yet run against the real DB via `db:init` or a direct `schema.sql` apply).
+> Why this step exists: a real pre-existing bug (`ledger_master` missing a `UNIQUE(company_id, ledger_code)` constraint that `db/init.ts`'s `ON CONFLICT` silently depended on) was only caught this way — `tsc`/`build` passing does not prove runtime correctness against real data. (That constraint now exists — migration `0002_ledger_master_dedupe.sql` — and `db:init` works again.) Live-DB scripts also catch schema-migration-not-yet-applied issues (a new column referenced in code but not yet applied to the real DB).
 
-**Applying a schema migration to the real DB**: `db/schema.sql` is idempotent (`CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, `DROP INDEX IF EXISTS` + recreate) — safe to re-run directly via a one-off `pool.query(fs.readFileSync('db/schema.sql','utf8'))`. Don't run the full `npm run db:init` for this; its `ledger_master` reseed step has a pre-existing, unrelated bug that always fails and exits 1, obscuring whether the schema portion actually succeeded.
+**Changing the schema (since DB Phase 0, 2026-09-19)**: `db/schema.sql` is a **frozen baseline** — don't add to it. Every schema change is a new numbered file in `db/migrations/` (`NNNN_snake_case.sql`), applied once, in order, each in its own transaction, recorded in `schema_migrations` with a checksum (an edited, already-applied file is refused).
+
+```bash
+npm run db:migrate:status:branch             # applied / pending on the Neon test branch (BRANCH_DATABASE_URL)
+npm run db:migrate:branch                    # 1. apply on the branch
+npx tsx _diag_…ts --target=branch            # 2. prove it there (constraints + before/after parity)
+npm run db:migrate:main                      # 3. only then production
+```
+
+> [!CAUTION]
+> Use the named scripts above, or call `npx tsx db/migrate.ts --target=…` directly. **Don't** pass flags through `npm run … -- --flag`: Windows PowerShell's npm shim drops the `--`, so the flags never arrive.
+>
+> On 2026-09-19 that sent a "branch, dry run" command to production (see `DB-PHASE-0.md` §5.1). `--target` now has no default, so a lost flag fails instead of reaching main.
+>
+> Always read a `--status` / `--dry-run` output **before** running the apply command, never chained in the same step.
+
+Test every migration on a Neon branch first. A migration that changes or deletes existing data needs the owner's explicit approval, and it must back up whatever it removes (see `0002`, which keeps the removed rows in `ledger_master_dedupe_backup`).
+
+**Deploy order:** apply migrations to main *before* deploying code that uses them. The old code keeps working on the new schema; the new code does not work on the old schema.
 
 ## Step 4 — Live visual check
 

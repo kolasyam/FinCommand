@@ -2,6 +2,10 @@
 --  FinCommand Pro — PostgreSQL Schema (Neon-compatible)
 --  IND AS · Schedule III · CFO/CEO Financial Dashboard
 --  Ported verbatim from backend/db/schema.sql — no changes.
+--
+--  FROZEN BASELINE (2026-09-19). Do not add schema changes here any more:
+--  put them in a new numbered file in db/migrations/ and run
+--  `npm run db:migrate` (db:init runs this file, then the migrations).
 -- ═══════════════════════════════════════════════════════════
 
 -- Enable UUID extension
@@ -419,7 +423,8 @@ CREATE TABLE IF NOT EXISTS dashboard_widgets (
 CREATE INDEX IF NOT EXISTS idx_dashboard_widgets_layout ON dashboard_widgets(layout_id);
 
 -- Adds 'metric_table', 'period_summary', 'yoy_variance', 'financial_health', 'top_customers', 'profit_bridge', 'cash_bridge', 'note_index',
--- and (2026-09-18) 'hbar_chart', 'ratio_card', 'kpi_group' widget types. KEEP IN SYNC with lib/db/neon.ts's startup copy of this constraint.
+-- and (2026-09-18) 'hbar_chart', 'ratio_card', 'kpi_group' widget types. A new widget type now needs a
+-- migration in db/migrations (lib/db/neon.ts no longer re-applies this constraint at startup).
 ALTER TABLE dashboard_widgets DROP CONSTRAINT IF EXISTS dashboard_widgets_widget_type_check;
 ALTER TABLE dashboard_widgets ADD CONSTRAINT dashboard_widgets_widget_type_check
   CHECK (widget_type IN
@@ -741,9 +746,10 @@ CREATE INDEX IF NOT EXISTS idx_rt_user             ON refresh_tokens(user_id);
 -- actually wants, and stays that size no matter how many syncs accumulate
 -- over the company's lifetime. Replaces the old non-partial
 -- idx_tb_uploads_current, which this makes redundant.
+-- Since migration 0001 that partial index is UNIQUE (uq_tb_uploads_one_current,
+-- at most one current batch per company + year) and lives in db/migrations —
+-- not re-created here, so re-running this file doesn't add a duplicate index.
 DROP INDEX IF EXISTS idx_tb_uploads_current;
-CREATE INDEX IF NOT EXISTS idx_tb_uploads_current_partial
-  ON tb_uploads(company_id, financial_year_id) WHERE is_current = TRUE;
 
 -- NOTE: a company_id+financial_year_id+ledger_name index was considered
 -- here (ledgers are matched by NAME wherever an identity needs to survive

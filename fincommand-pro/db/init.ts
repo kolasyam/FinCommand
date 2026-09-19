@@ -3,6 +3,7 @@ import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
 import { Pool } from 'pg';
+import { runMigrations } from './migrate-runner';
 
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
@@ -165,7 +166,8 @@ async function init() {
       await client.query(`
         DROP TABLE IF EXISTS audit_trail, sync_logs, zoho_config,
           ledger_master, tb_ledgers, tb_uploads, financial_years,
-          refresh_tokens, users, companies CASCADE;
+          refresh_tokens, users, companies,
+          schema_migrations, ledger_master_dedupe_backup CASCADE;
         DROP FUNCTION IF EXISTS update_updated_at CASCADE;
       `);
       console.log('✅ Schema dropped');
@@ -188,6 +190,12 @@ async function init() {
       UPDATE tb_ledgers SET note_no=18, note_name='Short-Term Provisions', section='lc' WHERE ledger_code IN ('5041','5042');
     `);
 
+    // schema.sql is the frozen baseline; everything after it lives in
+    // db/migrations (see db/migrate.ts). The seed below relies on 0002's
+    // unique index for its ON CONFLICT target.
+    const applied = await runMigrations(client, { onApply: (m) => console.log(`→ migration ${m.filename}`) });
+    console.log(`✅ Migrations up to date (${applied.length} applied now)`);
+
     console.log(`⏳ Seeding ${LEDGER_MASTER_SEED.length} ledger mappings...`);
     for (const row of LEDGER_MASTER_SEED) {
       await client.query(
@@ -195,7 +203,7 @@ async function init() {
           (company_id, ledger_code, ledger_name, note_no, note_name,
            section, treasury_type, normal_bal, is_global)
          VALUES (NULL,$1,$2,$3,$4,$5,$6,$7,TRUE)
-         ON CONFLICT (company_id, ledger_code) DO UPDATE SET
+         ON CONFLICT (company_id, ledger_code) WHERE ledger_code IS NOT NULL DO UPDATE SET
            note_no = EXCLUDED.note_no,
            note_name = EXCLUDED.note_name,
            section = EXCLUDED.section,

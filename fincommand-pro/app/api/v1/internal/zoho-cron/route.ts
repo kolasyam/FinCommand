@@ -14,14 +14,23 @@ export const runtime = 'nodejs';
  * For local/traditional hosting where a long-lived process is available,
  * an external scheduler (cron, systemd timer) can hit this same endpoint on
  * the ZOHO_SYNC_CRON schedule instead of relying on Vercel Cron.
+ *
+ * Fails closed in production: with no CRON_SECRET configured this route
+ * used to be open to anyone, letting any caller trigger syncs for every
+ * company. Vercel Cron sends `Authorization: Bearer $CRON_SECRET` itself.
  */
 export const GET = withErrorHandling(async (req: NextRequest) => {
   const secret = req.headers.get('authorization');
-  if (process.env.CRON_SECRET && secret !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!process.env.CRON_SECRET) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[zoho-cron] CRON_SECRET is not set — refusing to run.');
+      return json({ error: 'Cron is not configured' }, { status: 503 });
+    }
+  } else if (secret !== `Bearer ${process.env.CRON_SECRET}`) {
     return json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const results: { company_id: string; status: string; error?: string }[] = [];
+  const results: { company_id: string; status: string; error?: string; skipped?: string }[] = [];
   // sync_frequency gates *which* companies are due, not just whether cron
   // applies to them at all — this previously only excluded 'manual', so a
   // company configured for 'daily' (or 'hourly') sync was being re-synced on
@@ -39,6 +48,9 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
      WHERE zc.is_active=TRUE AND zc.org_id IS NOT NULL
        AND zc.sync_frequency != 'manual'
        AND fy.is_locked=FALSE
+       -- "First source owns the year": never touch a year loaded from Excel
+       -- (syncFromZoho's scheduled mode also skips one, if it changes mid-run).
+       AND (fy.data_source IS NULL OR fy.data_source = 'zoho')
        AND fy.end_date >= NOW()-INTERVAL '1 year'
        AND (
          zc.last_synced_at IS NULL
@@ -50,8 +62,8 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   );
   for (const row of rows) {
     try {
-      await syncFromZoho(row.company_id, row.fy_id, null);
-      results.push({ company_id: row.company_id, status: 'ok' });
+      const r = await syncFromZoho(row.company_id, row.fy_id, null, { scheduled: true });
+      results.push(r.skipped ? { company_id: row.company_id, status: 'skipped', skipped: r.skipped } : { company_id: row.company_id, status: 'ok' });
     } catch (e) {
       results.push({ company_id: row.company_id, status: 'error', error: (e as Error).message });
     }

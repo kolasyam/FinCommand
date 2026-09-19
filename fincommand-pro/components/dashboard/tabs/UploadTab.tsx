@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { useDashboard } from '@/lib/dashboard/DashboardContext';
 import { useToast } from '@/lib/dashboard/ToastContext';
-import { apiFetch, getToken, getRefreshToken } from '@/lib/dashboard/api-client';
+import { apiFetch, getToken, getRefreshToken, ApiClientError } from '@/lib/dashboard/api-client';
 import { CURRENCY_META, SUPPORTED_CURRENCIES, isCurrencyCode, type CurrencyCode } from '@/lib/services/currency';
 
 const FY_MONTHS = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
@@ -11,7 +11,37 @@ interface UploadResult {
   upload_id: string; ledger_count: number; mapped_count: number;
   unmatched_count: number; coverage_pct: number; message: string;
   unmatched_sample: string[];
+  /** Debit = credit check — the upload is saved either way ("warn and record"). */
+  is_balanced?: boolean;
+  balance_warning?: string | null;
 }
+
+interface SyncResponse { message: string; ledgers_synced: number; balance_diff?: number; is_balanced?: boolean }
+
+/** The API refused because the year's data belongs to the other source; ask before replacing it. */
+const isSourceOwned = (e: unknown): e is ApiClientError => e instanceof ApiClientError && e.code === 'SOURCE_OWNED';
+
+/**
+ * Manual Zoho sync. A year loaded from Excel is only switched to Zoho after
+ * the user confirms it ("first source owns the year").
+ */
+async function requestZohoSync(fyId: string): Promise<SyncResponse | null> {
+  const send = (confirmReplace: boolean) => apiFetch<SyncResponse>('/zoho/sync', {
+    method: 'POST',
+    body: JSON.stringify({ fy_id: fyId, ...(confirmReplace ? { confirm_replace: true } : {}) }),
+  });
+  try {
+    return await send(false);
+  } catch (e) {
+    if (!isSourceOwned(e)) throw e;
+    if (!confirm(e.message)) return null;
+    return send(true);
+  }
+}
+
+const syncToast = (d: SyncResponse) =>
+  `✓ ${d.message} (${d.ledgers_synced} ledgers mapped)` +
+  (d.is_balanced === false ? ` — ⚠ debits and credits differ by ₹${(d.balance_diff ?? 0).toLocaleString('en-IN')}` : '');
 
 export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogin: () => void; onNavigate: (tab: string) => void; onOpenAddFy: () => void }) {
   const { dataMode, currentFyId, fyList, uploadComplete } = useDashboard();
@@ -130,12 +160,13 @@ export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogi
                 toast('✓ Zoho Books connected! Syncing Trial Balance...');
                 setZohoSyncing(true);
                 try {
-                  const data = await apiFetch<{ message: string; ledgers_synced: number }>('/zoho/sync', {
-                    method: 'POST',
-                    body: JSON.stringify({ fy_id: currentFyId }),
-                  });
-                  toast(`✓ ${data.message} (${data.ledgers_synced} ledgers mapped)`);
-                  uploadComplete();
+                  const data = await requestZohoSync(currentFyId);
+                  if (data) {
+                    toast(syncToast(data));
+                    uploadComplete();
+                  } else {
+                    toast('Sync cancelled — this year keeps its Excel data.');
+                  }
                 } catch (e) {
                   toast(`Sync Error: ${(e as Error).message}`);
                 } finally {
@@ -240,11 +271,9 @@ export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogi
     if (!currentFyId) { toast('Please select a Financial Year first'); return; }
     setZohoSyncing(true);
     try {
-      const data = await apiFetch<{ message: string; ledgers_synced: number }>('/zoho/sync', {
-        method: 'POST',
-        body: JSON.stringify({ fy_id: currentFyId }),
-      });
-      toast(`✓ ${data.message} (${data.ledgers_synced} ledgers mapped)`);
+      const data = await requestZohoSync(currentFyId);
+      if (!data) { toast('Sync cancelled — this year keeps its Excel data.'); return; }
+      toast(syncToast(data));
       uploadComplete();
       loadZohoStatus();
       if (syncHistoryOpen) refreshSyncHistory(); else setSyncHistory(null); // re-fetch if visible, else just invalidate for next open
@@ -326,21 +355,30 @@ export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogi
 
     setBusy(true);
     setError(null);
-    try {
+    const send = (confirmReplace: boolean) => {
       const formData = new FormData();
       formData.append('trial_balance', file);
       formData.append('financial_year_id', currentFyId);
       formData.append('currency', tbCurrency);
-
-      const data = await apiFetch<UploadResult>('/tb/upload', {
-        method: 'POST',
-        body: formData,
-      });
+      if (confirmReplace) formData.append('confirm_replace', '1');
+      return apiFetch<UploadResult>('/tb/upload', { method: 'POST', body: formData });
+    };
+    try {
+      let data: UploadResult;
+      try {
+        data = await send(false);
+      } catch (e) {
+        // The year's data comes from Zoho Books — replace it only if the user says so.
+        if (!isSourceOwned(e)) throw e;
+        if (!confirm(e.message)) { setError('Upload cancelled — this year keeps its Zoho Books data.'); return; }
+        data = await send(true);
+      }
 
       setResult(data);
-      toast(data.message);
+      toast(data.balance_warning ? `${data.message} ⚠ Debits and credits don't match.` : data.message);
       uploadComplete();
     } catch (e) {
+      // DUPLICATE_FILE, DUPLICATE_LEDGERS, YEAR_LOCKED and BUSY all carry a plain-language message.
       setError((e as Error).message);
     } finally {
       setBusy(false);
@@ -536,6 +574,9 @@ export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogi
               </button>
             )}
 
+            {result?.balance_warning && (
+              <div className="warn-bar" style={{ marginTop: 8 }}>⚠ {result.balance_warning}</div>
+            )}
             {result && (
               <div className="success-bar" style={{ marginTop: 8 }}>
                 {result.message}

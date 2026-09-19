@@ -46,9 +46,15 @@ export function clearSession(): void {
 
 export class ApiClientError extends Error {
   status?: number;
-  constructor(message: string, status?: number) {
+  /** Machine-readable reason from the API (e.g. 'SOURCE_OWNED', 'DUPLICATE_FILE'). */
+  code?: string;
+  /** The full JSON error body, for extra fields such as `duplicates`. */
+  body?: Record<string, unknown>;
+  constructor(message: string, status?: number, code?: string, body?: Record<string, unknown>) {
     super(message);
     this.status = status;
+    this.code = code;
+    this.body = body;
   }
 }
 
@@ -108,7 +114,7 @@ export async function apiFetch<T = unknown>(path: string, opts: RequestInit = {}
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new ApiClientError(err.error || `HTTP ${res.status}`, res.status);
+    throw new ApiClientError(err.error || `HTTP ${res.status}`, res.status, typeof err.code === 'string' ? err.code : undefined, err);
   }
   return res.json();
 }

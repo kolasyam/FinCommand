@@ -1,7 +1,10 @@
 import type { NextRequest } from 'next/server';
 import { authenticate } from '@/lib/auth/permissions';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
-import { getFY, getPreviousFY, getNextFY, loadLedgers, loadCustomerRevenue, loadVendorExpense, loadCustomerCost, parsePeriodParams } from '@/lib/db/queries/reports';
+import {
+  getFY, getPreviousFY, getNextFY, loadLedgers, loadCustomerRevenue, loadVendorExpense, loadCustomerCost, parsePeriodParams,
+  loadReportDataVersion, loadBatchCurrency,
+} from '@/lib/db/queries/reports';
 import { loadZohoContacts, type ZohoContactRow } from '@/lib/db/queries/zoho-contacts';
 import { query } from '@/lib/db/neon';
 import {
@@ -12,7 +15,7 @@ import {
   type VendorExpense, type CustomerMarginResult, type ContactInfo, type RatiosResult,
 } from '@/lib/financial/tb-engine';
 import { mergeCyLedgers, mergeCyCustomerRevenue, mergeCyVendorExpense } from '@/lib/financial/cy-merge';
-import { getCachedReport, setCachedReport } from '@/lib/cache/report-cache';
+import { getCachedReport, setCachedReport, buildReportCacheKey, hashReportDataVersion } from '@/lib/cache/report-cache';
 import { loadCustomMetricDefinitions } from '@/lib/db/queries/custom-metrics';
 import { computeLedgerMetric, priorPeriodOf, type PeriodParams, type LedgerMetricSpec } from '@/lib/financial/tb-engine';
 import type { CustomMetricDefinition } from '@/lib/financial/custom-metric-engine';
@@ -28,7 +31,10 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
 
   const params = parsePeriodParams(searchParams);
   const nocache = searchParams.get('nocache') === 'true' || searchParams.get('refresh') === 'true';
-  const cacheKey = `${user.company_id}:${fyId}:${params.periodType}:${params.period || 'all'}:${params.yearType}`;
+  // The data version makes a bundle cached by any server instance unusable
+  // the moment its inputs change (see lib/cache/report-cache.ts).
+  const dataVersion = hashReportDataVersion(await loadReportDataVersion(user.company_id));
+  const cacheKey = buildReportCacheKey(user.company_id, fyId, params, dataVersion);
 
   if (!nocache) {
     const cached = getCachedReport<Record<string, unknown>>(cacheKey);
@@ -147,7 +153,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   // only joined onto vendor_expense/customer_margin below by name), so
   // sequencing it after this Promise.all was a pure, unnecessary extra
   // network round trip on every single report load.
-  const [bs, pl, notes, treasury, cashflow, ratios, companyRows, auditRows, zohoContacts, customMetricDefs] = await Promise.all([
+  const [bs, pl, notes, treasury, cashflow, ratios, companyRows, auditRows, zohoContacts, customMetricDefs, batchCurrency] = await Promise.all([
     computeBS(computeLedgers, params),
     computePL(computeLedgers, params),
     computeNotes(computeLedgers, params),
@@ -185,6 +191,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
       console.error('[reports/all] custom metric definitions unavailable:', err.message);
       return [];
     }),
+    loadBatchCurrency(user.company_id, fyId),
   ]);
   const top_customers = computeTopCustomers(computeCustomerRev, computeLedgers, params, mis.totals.rev);
   const rawVendorExpense = computeVendorExpense(computeVendorExp, params);
@@ -197,8 +204,10 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   // Zoho org where available; see fetchAndStoreZohoOrgCurrency()), never
   // assumed. `presentation_currency` is the company's saved default only;
   // DashboardContext still lets a signed-in user override it for their own
-  // session, same as the Unit Selector.
-  const source_currency = (companyRows.rows[0]?.currency || 'INR').toUpperCase();
+  // session, same as the Unit Selector. Taken from the year's own batch
+  // first: companies.currency is only the default for the NEXT upload, so
+  // changing it must not re-label figures already loaded in another currency.
+  const source_currency = (batchCurrency || companyRows.rows[0]?.currency || 'INR').toUpperCase();
   const default_presentation_currency = companyRows.rows[0]?.presentation_currency?.toUpperCase() || null;
   const audit_summary = {
     total_events: parseInt(auditRows.rows[0]?.count || '0', 10),

@@ -18,9 +18,15 @@ export interface AuthUser {
 /** Thrown by route handlers on auth/authorization failure; caught by withErrorHandling(). */
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** Machine-readable reason (e.g. 'SOURCE_OWNED'), returned as `code` so the UI can offer the right follow-up. */
+  code?: string;
+  /** Extra fields merged into the JSON error body. */
+  extra?: Record<string, unknown>;
+  constructor(status: number, message: string, code?: string, extra?: Record<string, unknown>) {
     super(message);
     this.status = status;
+    this.code = code;
+    this.extra = extra;
   }
 }
 

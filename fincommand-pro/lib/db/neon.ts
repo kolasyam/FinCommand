@@ -62,7 +62,9 @@ function buildPool(): Pool {
     min: parseInt(process.env.DB_POOL_MIN || '2'),
     max: parseInt(process.env.DB_POOL_MAX || '10'),
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 15000,
+    // Same cold-start allowance as the DATABASE_URL branch above — Neon is
+    // allowed to scale to zero now that there's no keep-alive ping.
+    connectionTimeoutMillis: 30000,
     statement_timeout: STATEMENT_TIMEOUT_MS,
     query_timeout: STATEMENT_TIMEOUT_MS,
     idle_in_transaction_session_timeout: IDLE_IN_TRANSACTION_TIMEOUT_MS,
@@ -84,41 +86,12 @@ pool.on('error', (err) => {
   console.error('PostgreSQL pool error:', err.message);
 });
 
-// Keep-alive ping to prevent Neon serverless compute cold-start latency (runs every 3 minutes)
-declare global {
-  // eslint-disable-next-line no-var
-  var __fcKeepAlivePing: NodeJS.Timeout | undefined;
-}
-// Migration guard: ensure PostgreSQL constraint allows every widget_type the
-// app can actually save. This list had drifted out of sync with the
-// authoritative one in db/schema.sql (missing 'top_customers') — since this
-// query runs on every pool creation (i.e. after every dev-server restart, or
-// every cold serverless start), it silently re-applied the incomplete
-// constraint AFTER schema.sql's correct one, so saving any layout containing
-// the default Overview tab's Top Customers widget (OVERVIEW_DEFAULT_WIDGETS'
-// 'ov-top-customers') always failed with "violates check constraint
-// dashboard_widgets_widget_type_check" — confirmed via a real Save attempt.
-// Kept in sync with db/schema.sql's own CHECK constraint list. 'profit_bridge'
-// (the P&L customizable zone's fixed-content waterfall widget), 'cash_bridge'
-// (the Cash Flow customizable zone's equivalent), and 'note_index' (the Notes
-// to Accounts customizable zone's contents-page table) were each added here
-// at the same time as their own default-layout.ts/schema.sql entries
-// specifically to not repeat the 'top_customers' miss this comment documents
-// above.
-pool.query(`
-  ALTER TABLE dashboard_widgets DROP CONSTRAINT IF EXISTS dashboard_widgets_widget_type_check;
-  ALTER TABLE dashboard_widgets ADD CONSTRAINT dashboard_widgets_widget_type_check
-    CHECK (widget_type IN
-      ('stat_card','stat_card_sparkline','line_chart','bar_chart',
-       'donut_chart','gauge','data_table','text_block','metric_table','period_summary','yoy_variance','financial_health','top_customers','profit_bridge','cash_bridge','note_index',
-       'hbar_chart','ratio_card','kpi_group'));
-`).catch(() => {});
-
-if (!global.__fcKeepAlivePing) {
-  global.__fcKeepAlivePing = setInterval(() => {
-    pool.query('SELECT 1').catch(() => {});
-  }, 3 * 60 * 1000);
-}
+// Schema changes are never made from here. There used to be a startup
+// ALTER TABLE for dashboard_widgets' widget_type CHECK (it drifted out of
+// sync with schema.sql once and broke layout saves) and a 3-minute
+// `SELECT 1` keep-alive that stopped Neon from ever scaling to zero. Both are
+// gone: schema lives in db/migrations (`npm run db:migrate`), and the 30s
+// connectionTimeoutMillis above absorbs a Neon cold start.
 
 export function query<T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]) {
   return pool.query<T>(text, params);

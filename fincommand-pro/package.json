@@ -15,6 +15,10 @@
     "db:init": "tsx db/init.ts",
     "db:seed": "tsx db/seed.ts",
     "db:reset": "tsx db/init.ts --reset && tsx db/seed.ts",
+    "db:migrate:branch": "tsx db/migrate.ts --target=branch",
+    "db:migrate:main": "tsx db/migrate.ts --target=main",
+    "db:migrate:status": "tsx db/migrate.ts --target=main --status",
+    "db:migrate:status:branch": "tsx db/migrate.ts --target=branch --status",
     "test": "jest"
   },
   "dependencies": {

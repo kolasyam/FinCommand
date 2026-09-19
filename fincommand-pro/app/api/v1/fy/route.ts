@@ -38,7 +38,11 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     );
     return json(rows[0], { status: 201 });
   } catch (err) {
-    if ((err as { code?: string }).code === '23505') return json({ error: 'Financial year already exists' }, { status: 409 });
+    const code = (err as { code?: string }).code;
+    if (code === '23505') return json({ error: 'Financial year already exists' }, { status: 409 });
+    // Database rules since migration 0001: real date range, no overlap with another year.
+    if (code === '23P01') return json({ error: `${label} overlaps the dates of an existing financial year` }, { status: 409 });
+    if (code === '23514') return json({ error: 'The start date must be before the end date' }, { status: 400 });
     throw err;
   }
 });

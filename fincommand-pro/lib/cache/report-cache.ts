@@ -2,7 +2,15 @@
  * In-memory Server Cache for computed Report Bundles.
  * Serves report data instantly (< 5ms) for repeated queries, tab switches,
  * and user dashboard re-loads until a new Trial Balance is uploaded.
+ *
+ * The cache is per server instance, so invalidateReportCache() only clears
+ * the instance that handled the write. Every key therefore also carries a
+ * data version (see buildReportCacheKey / loadReportDataVersion): when the
+ * underlying data changes anywhere, the key changes everywhere, and a stale
+ * bundle can no longer be served for up to 15 minutes by another instance.
  */
+import { createHash } from 'crypto';
+import type { PeriodParams } from '@/lib/financial/tb-engine';
 
 interface CacheEntry {
   data: unknown;
@@ -11,6 +19,32 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>();
 const DEFAULT_TTL_MS = 15 * 60 * 1000; // 15 minutes TTL
+
+/** Everything a report bundle is computed from, besides the request itself. */
+export interface ReportDataVersion {
+  /** Current batch ids + data_changed_at for every year of the company (CY views and comparatives read other years). */
+  batches: string | null;
+  /** Year ids, dates, labels and lock flags — adding a year changes CY merges and comparatives. */
+  years: string | null;
+  /** companies.updated_at — source/presentation currency. */
+  company: string | null;
+  /** Custom metric definitions: latest updated_at + count (a delete lowers the count). */
+  metrics: string | null;
+  /** Latest Zoho contact sync — contact details are joined into vendor/customer tables. */
+  contacts: string | null;
+}
+
+export function hashReportDataVersion(v: ReportDataVersion): string {
+  return createHash('sha256')
+    .update(JSON.stringify([v.batches, v.years, v.company, v.metrics, v.contacts]))
+    .digest('hex')
+    .slice(0, 16);
+}
+
+/** `${companyId}:` stays the prefix, so invalidateReportCache(companyId) still clears every version. */
+export function buildReportCacheKey(companyId: string, fyId: string, params: PeriodParams, dataVersion: string): string {
+  return `${companyId}:${fyId}:${params.periodType || 'annual'}:${params.period || 'all'}:${params.yearType || 'FY'}:${dataVersion}`;
+}
 
 export function getCachedReport<T>(key: string): T | null {
   if (process.env.NODE_ENV === 'development') {
@@ -26,7 +60,13 @@ export function getCachedReport<T>(key: string): T | null {
 }
 
 export function setCachedReport(key: string, data: unknown, ttlMs = DEFAULT_TTL_MS): void {
-  cache.set(key, { data, expiresAt: Date.now() + ttlMs });
+  // Keys for an old data version are never looked up again, so expired
+  // entries are swept here rather than only on a lookup of the same key.
+  const now = Date.now();
+  for (const [k, entry] of cache) {
+    if (now > entry.expiresAt) cache.delete(k);
+  }
+  cache.set(key, { data, expiresAt: now + ttlMs });
 }
 
 export function invalidateReportCache(companyId?: string): void {

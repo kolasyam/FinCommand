@@ -1,17 +1,29 @@
 import type { NextRequest } from 'next/server';
+import { createHash } from 'crypto';
 import * as XLSX from 'xlsx';
 import { v4 as uuid } from 'uuid';
-import { authenticate, requireRole, ROLE_SETS } from '@/lib/auth/permissions';
+import { ApiError, authenticate, requireRole, ROLE_SETS } from '@/lib/auth/permissions';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import { query, withTransaction } from '@/lib/db/neon';
 import { logAudit } from '@/lib/audit/audit';
 import { invalidateReportCache } from '@/lib/cache/report-cache';
 import { isCurrencyCode } from '@/lib/services/currency';
+import {
+  summarizeTrialBalance, describeImbalance, decideSourceOwnership, findDuplicateLedgers, type TbAmountRow,
+} from '@/lib/financial/tb-validation';
+import { lockTrialBalanceWrite, assertYearUnlocked, setYearDataSource, sourceName } from '@/lib/db/queries/tb-batches';
 
 export const runtime = 'nodejs';
 
 const FY_MONTHS = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
 const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE_MB || '50') * 1024 * 1024;
+// 36 bind parameters per ledger row → 18,000 per statement, well under Postgres' 65,535 limit.
+const INSERT_CHUNK_ROWS = 500;
+const LEDGER_COLUMNS = [
+  'upload_id', 'company_id', 'financial_year_id', 'ledger_code', 'ledger_name',
+  'note_no', 'note_name', 'section', 'treasury_type', 'normal_bal', 'op_dr', 'op_cr',
+  ...Array.from({ length: 12 }, (_, i) => [`m${i + 1}_dr`, `m${i + 1}_cr`]).flat(),
+];
 
 interface LedgerMasterRow {
   ledger_code: string | null; ledger_name: string; note_no: number | null;
@@ -46,6 +58,9 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   const currency = typeof currencyRaw === 'string' && isCurrencyCode(currencyRaw.toUpperCase())
     ? currencyRaw.toUpperCase()
     : null;
+  // Set by the UI only after the user confirmed replacing a year whose data
+  // currently comes from Zoho Books (the SOURCE_OWNED 409 below).
+  const confirmReplace = formData.get('confirm_replace') === '1';
 
   if (!file || !(file instanceof File)) return json({ error: 'No file uploaded' }, { status: 400 });
   if (typeof financial_year_id !== 'string' || !financial_year_id) {
@@ -63,10 +78,11 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     [financial_year_id, user.company_id]
   );
   if (!fyRows.length) return json({ error: 'Financial year not found' }, { status: 404 });
-  if (fyRows[0].is_locked) return json({ error: 'This financial year is locked (post-audit)' }, { status: 403 });
+  if (fyRows[0].is_locked) return json({ error: 'This financial year is locked (post-audit)', code: 'YEAR_LOCKED' }, { status: 403 });
 
   const uploadId = uuid();
   const buffer = Buffer.from(await file.arrayBuffer());
+  const fileSha256 = createHash('sha256').update(buffer).digest('hex');
 
   let wb: XLSX.WorkBook;
   try {
@@ -134,10 +150,14 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   }));
   const hasMonthlyCols = monthCols.every(mc => mc.dr >= 0 && mc.cr >= 0);
 
+  // Global rows first, company rows last: the maps below keep the LAST row
+  // per key, so the company's own mapping (e.g. a reclassification) wins over
+  // the pre-seeded global one. It was NULLS LAST, so the global row always
+  // won and reclassifications never stuck for Excel uploads.
   const { rows: lmRows } = await query<LedgerMasterRow>(
     `SELECT * FROM ledger_master
      WHERE (company_id=$1 OR company_id IS NULL) AND is_active=TRUE
-     ORDER BY company_id NULLS LAST`,
+     ORDER BY company_id NULLS FIRST, ledger_code, id`,
     [user.company_id]
   );
   const lmByCode = new Map(lmRows.map(r => [r.ledger_code, r]));
@@ -222,13 +242,61 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
 
   const coverage = rows.length > 0 ? Math.round(mapped / rows.length * 100) : 0;
 
+  // The same ledger twice would be summed twice into every report (and is
+  // refused by the database's one-ledger-per-batch rule anyway) — name it.
+  const duplicates = findDuplicateLedgers(rows);
+  if (duplicates.length) {
+    return json({
+      error: `These ledgers appear more than once in the file: ${duplicates.slice(0, 10).join(', ')}${duplicates.length > 10 ? ` and ${duplicates.length - 10} more` : ''}. Remove the extra rows and upload again.`,
+      code: 'DUPLICATE_LEDGERS',
+      duplicates,
+    }, { status: 422 });
+  }
+
+  // Warn-and-record: stored on the batch and shown to the uploader, never blocks the upload.
+  const summary = summarizeTrialBalance(rows as unknown as TbAmountRow[]);
+  const balanceWarning = describeImbalance(summary, FY_MONTHS);
+
+  let replacedSource: string | null = null;
   await withTransaction(async (client) => {
+    // One writer per company + year from here to COMMIT; the year's lock and
+    // owner are re-read under that lock (the check above was only a fast fail).
+    const fy = await lockTrialBalanceWrite(client, user.company_id, financial_year_id);
+    assertYearUnlocked(fy);
+
+    const decision = decideSourceOwnership(fy.data_source, 'excel', { confirmReplace });
+    if (decision === 'needs_confirm') {
+      throw new ApiError(
+        409,
+        `${fy.label}'s data currently comes from ${sourceName(fy.data_source!)}. Replace it with this Excel file? ` +
+        `Scheduled Zoho syncs will then skip this year.`,
+        'SOURCE_OWNED',
+        { owner: fy.data_source },
+      );
+    }
+    if (fy.data_source && fy.data_source !== 'excel') replacedSource = fy.data_source;
+
+    const { rows: currentRows } = await client.query<{ file_sha256: string | null }>(
+      `SELECT file_sha256 FROM tb_uploads WHERE company_id=$1 AND financial_year_id=$2 AND is_current=TRUE`,
+      [user.company_id, financial_year_id]
+    );
+    if (currentRows[0]?.file_sha256 === fileSha256) {
+      throw new ApiError(409, `This exact file is already the current Trial Balance for ${fy.label} — nothing changed.`, 'DUPLICATE_FILE');
+    }
+
+    // companies.currency is now only the default offered for the next
+    // upload; the batch keeps its own currency below, so changing it never
+    // re-labels figures that were loaded in another currency.
     if (currency) {
       await client.query(
         `UPDATE companies SET currency=$1, updated_at=NOW() WHERE id=$2`,
         [currency, user.company_id]
       );
     }
+    const { rows: [co] } = await client.query<{ currency: string | null }>(
+      `SELECT currency FROM companies WHERE id=$1`, [user.company_id]
+    );
+    const batchCurrency = (currency || co?.currency || 'INR').toUpperCase();
 
     await client.query(
       `UPDATE tb_uploads SET is_current=FALSE, status='superseded'
@@ -240,41 +308,50 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       `INSERT INTO tb_uploads
          (id, company_id, financial_year_id, uploaded_by, source, filename,
           file_size_kb, ledger_count, mapped_count, unmatched_count,
-          unmatched_ledgers, coverage_pct, has_monthly_cols, status, is_current)
-       VALUES ($1,$2,$3,$4,'excel',$5,$6,$7,$8,$9,$10,$11,$12,'complete',TRUE)`,
+          unmatched_ledgers, coverage_pct, has_monthly_cols, status, is_current,
+          currency, file_sha256, total_dr, total_cr, balance_diff, is_balanced, validation, data_changed_at)
+       VALUES ($1,$2,$3,$4,'excel',$5,$6,$7,$8,$9,$10,$11,$12,'complete',TRUE,
+               $13,$14,$15,$16,$17,$18,$19,NOW())`,
       [uploadId, user.company_id, financial_year_id, user.id,
        file.name, Math.round(file.size / 1024),
        rows.length, mapped, unmatched.length, JSON.stringify(unmatched.slice(0, 50)),
-       coverage, hasMonthlyCols]
+       coverage, hasMonthlyCols,
+       batchCurrency, fileSha256, summary.total_dr, summary.total_cr, summary.balance_diff,
+       summary.is_balanced, JSON.stringify(summary.validation)]
     );
 
-    for (const row of rows) {
+    for (let i = 0; i < rows.length; i += INSERT_CHUNK_ROWS) {
+      const chunk = rows.slice(i, i + INSERT_CHUNK_ROWS);
+      const params: unknown[] = [];
+      const tuples = chunk.map((row) => {
+        const values = [
+          uploadId, user.company_id, financial_year_id,
+          row.code || null, row.name,
+          row.note_no, row.note_name, row.section, row.treasury_type, row.normal_bal,
+          row.op_dr, row.op_cr,
+          ...Array.from({ length: 12 }, (_, m) => [row[`m${m + 1}_dr`], row[`m${m + 1}_cr`]]).flat(),
+        ];
+        const base = params.length;
+        params.push(...values);
+        return `(${values.map((_, j) => `$${base + j + 1}`).join(',')})`;
+      });
       await client.query(
-        `INSERT INTO tb_ledgers
-          (upload_id, company_id, financial_year_id, ledger_code, ledger_name,
-           note_no, note_name, section, treasury_type, normal_bal,
-           op_dr, op_cr,
-           m1_dr,m1_cr, m2_dr,m2_cr, m3_dr,m3_cr, m4_dr,m4_cr,
-           m5_dr,m5_cr, m6_dr,m6_cr, m7_dr,m7_cr, m8_dr,m8_cr,
-           m9_dr,m9_cr, m10_dr,m10_cr, m11_dr,m11_cr, m12_dr,m12_cr)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
-                $13,$14,$15,$16,$17,$18,$19,$20,
-                $21,$22,$23,$24,$25,$26,$27,$28,
-                $29,$30,$31,$32,$33,$34,$35,$36)`,
-        [uploadId, user.company_id, financial_year_id,
-         row.code || null, row.name,
-         row.note_no, row.note_name, row.section, row.treasury_type, row.normal_bal,
-         row.op_dr, row.op_cr,
-         row.m1_dr, row.m1_cr, row.m2_dr, row.m2_cr, row.m3_dr, row.m3_cr,
-         row.m4_dr, row.m4_cr, row.m5_dr, row.m5_cr, row.m6_dr, row.m6_cr,
-         row.m7_dr, row.m7_cr, row.m8_dr, row.m8_cr, row.m9_dr, row.m9_cr,
-         row.m10_dr, row.m10_cr, row.m11_dr, row.m11_cr, row.m12_dr, row.m12_cr]
+        `INSERT INTO tb_ledgers (${LEDGER_COLUMNS.join(', ')}) VALUES ${tuples.join(', ')}`,
+        params
       );
     }
+
+    await setYearDataSource(client, financial_year_id, 'excel');
   });
 
   invalidateReportCache(user.company_id);
-  logAudit(req, user, 'TB_UPLOAD', 'tb_upload', uploadId);
+  logAudit(req, user, 'TB_UPLOAD', 'tb_upload', uploadId, {
+    filename: file.name,
+    ledger_count: rows.length,
+    is_balanced: summary.is_balanced,
+    balance_diff: summary.balance_diff,
+    ...(replacedSource ? { replaced_source: replacedSource } : {}),
+  });
 
   return json({
     upload_id: uploadId,
@@ -284,6 +361,10 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     coverage_pct: coverage,
     has_monthly_cols: hasMonthlyCols,
     unmatched_sample: unmatched.slice(0, 10),
+    is_balanced: summary.is_balanced,
+    balance_diff: summary.balance_diff,
+    validation: summary.validation,
+    balance_warning: balanceWarning,
     message: `Trial Balance uploaded. ${rows.length} ledgers processed, ${mapped} mapped (${coverage}% coverage).`,
   }, { status: 201 });
 });

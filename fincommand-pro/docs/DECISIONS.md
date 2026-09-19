@@ -87,3 +87,16 @@ The tree-only, no-`eval()` rule below is unchanged. Ledger metrics (`definition_
 2. **Warn level and comparison live on the metric definition, not the widget**, so a metric reads the same colour and the same change figure on every tab and in every export. There is one judgement function, `thresholdStatus()`.
 3. **The previous-period bundle is built only when some metric asks for it**, because it costs a second pass of every statement (about 180 KB here). An unavailable previous period is null, never estimated.
 4. **Exports never compute a figure.** They format the same resolved metrics the grid rendered (`buildLayoutExportModel()`). The heavy libraries (pptxgenjs, html-to-image) are loaded only when someone exports.
+
+## 10. Database Phase 0 — safety before redesign
+
+**Decision** (2026-09-19, by the owner; implementation log in `DB-PHASE-0.md`). No redesign in this phase and no report number changes. Before/after parity is the proof.
+
+1. **Versioned SQL migrations with a small built-in runner** (`db/migrate.ts`, no new dependency). `schema.sql` is frozen. Every change is a numbered file, tried on a Neon branch first. The app never changes schema at runtime any more (the `neon.ts` startup `ALTER TABLE` is gone).
+2. **Debit = credit: warn and record, never block.** Rejecting a real company's unbalanced books would stop them seeing anything. Storing the difference per batch and showing it is more useful. See `CONSTRAINTS.md`.
+3. **First source owns the year.** Excel and Zoho used to overwrite each other's data for the same year silently, every 15 minutes. Now the first to load a year owns it. A person must confirm a switch, and the scheduler never switches.
+4. **`ledger_master` duplicates: newest wins, the rest are backed up.** One mapping per company + ledger code: active first, then latest updated. The 731 removed copies stay in `ledger_master_dedupe_backup`. Uniqueness is by code, not name: "Amortisation — Intangibles" is genuinely two ledgers (1023 and 7032).
+5. **Zoho tokens encrypted; a missing key is a hard error.** AES-256-GCM with `TOKEN_ENCRYPTION_KEY`. There's no silent plain-text fallback for new writes. Old plain-text values are still readable until they're re-encrypted.
+6. **Signed OAuth state, not a bare company id.** The Zoho callback can't authenticate the user, so the state it trusts must come from our own authenticated auth-url route and must be recent.
+7. **The report cache key includes a data version.** The cache is per server instance. Without the version, one instance could serve another's stale numbers for 15 minutes after an upload.
+8. **The Zoho opening-balance imbalance is a separate change**, made right after this phase, because it is the one fix that is *meant* to change numbers.

@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { authenticate } from '@/lib/auth/permissions';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import { query } from '@/lib/db/neon';
+import { TB_UPLOAD_PUBLIC_COLUMNS } from '@/lib/db/queries/tb-batches';
 
 export const runtime = 'nodejs';
 
@@ -19,10 +20,11 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   }
 
   const { rows } = await query(
-    `SELECT t.*, fy.label AS fy_label, u.name AS uploaded_by_name
+    // LEFT JOIN: scheduled Zoho syncs have no uploaded_by and were hidden.
+    `SELECT ${TB_UPLOAD_PUBLIC_COLUMNS}, fy.label AS fy_label, u.name AS uploaded_by_name
      FROM tb_uploads t
      JOIN financial_years fy ON fy.id = t.financial_year_id
-     JOIN users u ON u.id = t.uploaded_by
+     LEFT JOIN users u ON u.id = t.uploaded_by
      WHERE t.company_id = $1
      ORDER BY t.uploaded_at DESC LIMIT 50`,
     [user.company_id]

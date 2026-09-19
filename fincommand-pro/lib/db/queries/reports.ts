@@ -2,18 +2,27 @@ import { query } from '@/lib/db/neon';
 import type { TbLedgerRow } from '@/lib/financial/tb-engine';
 import { mergeCyLedgers } from '@/lib/financial/cy-merge';
 import type { PeriodParams, PeriodType, YearType, Period } from '@/lib/financial/tb-engine';
+import type { ReportDataVersion } from '@/lib/cache/report-cache';
 
 export interface FinancialYearRow {
   id: string; company_id: string; label: string; short_label: string;
   start_date: string; end_date: string; year_type: string; is_locked: boolean;
 }
 
+/**
+ * The one current batch for a company + FY (migration 0001's unique index
+ * guarantees at most one). Every loader below reads by this batch id rather
+ * than joining tb_uploads and filtering is_current — same rows, but it
+ * can't mix two batches, and it goes straight to idx_tb_*_upload.
+ * company_id is still filtered on the outer query too, for tenancy.
+ */
+const CURRENT_BATCH = `(SELECT id FROM tb_uploads WHERE company_id = $1 AND financial_year_id = $2 AND is_current = TRUE)`;
+
 /** Loads current-upload ledgers for a company+FY — mirrors reports.js loadLedgers(). */
 export async function loadLedgers(companyId: string, fyId: string): Promise<TbLedgerRow[]> {
   const { rows } = await query<TbLedgerRow>(
     `SELECT l.* FROM tb_ledgers l
-     JOIN tb_uploads u ON u.id = l.upload_id
-     WHERE l.company_id = $1 AND l.financial_year_id = $2 AND u.is_current = TRUE
+     WHERE l.upload_id = ${CURRENT_BATCH} AND l.company_id = $1
      ORDER BY l.ledger_name`,
     [companyId, fyId]
   );
@@ -43,8 +52,7 @@ export async function loadCustomerRevenue(companyId: string, fyId: string): Prom
       `SELECT c.id, c.customer_name, c.zoho_customer_id,
               c.m1,c.m2,c.m3,c.m4,c.m5,c.m6,c.m7,c.m8,c.m9,c.m10,c.m11,c.m12
        FROM tb_customer_revenue c
-       JOIN tb_uploads u ON u.id = c.upload_id
-       WHERE c.company_id = $1 AND c.financial_year_id = $2 AND u.is_current = TRUE
+       WHERE c.upload_id = ${CURRENT_BATCH} AND c.company_id = $1
        ORDER BY c.customer_name`,
       [companyId, fyId]
     );
@@ -76,8 +84,7 @@ export async function loadVendorExpense(companyId: string, fyId: string): Promis
       `SELECT v.id, v.vendor_name, v.zoho_vendor_id,
               v.m1,v.m2,v.m3,v.m4,v.m5,v.m6,v.m7,v.m8,v.m9,v.m10,v.m11,v.m12
        FROM tb_vendor_expense v
-       JOIN tb_uploads u ON u.id = v.upload_id
-       WHERE v.company_id = $1 AND v.financial_year_id = $2 AND u.is_current = TRUE
+       WHERE v.upload_id = ${CURRENT_BATCH} AND v.company_id = $1
        ORDER BY v.vendor_name`,
       [companyId, fyId]
     );
@@ -110,8 +117,7 @@ export async function loadCustomerCost(companyId: string, fyId: string): Promise
       `SELECT c.id, c.customer_name, c.zoho_customer_id,
               c.m1,c.m2,c.m3,c.m4,c.m5,c.m6,c.m7,c.m8,c.m9,c.m10,c.m11,c.m12
        FROM tb_customer_cost c
-       JOIN tb_uploads u ON u.id = c.upload_id
-       WHERE c.company_id = $1 AND c.financial_year_id = $2 AND u.is_current = TRUE
+       WHERE c.upload_id = ${CURRENT_BATCH} AND c.company_id = $1
        ORDER BY c.customer_name`,
       [companyId, fyId]
     );
@@ -120,6 +126,32 @@ export async function loadCustomerCost(companyId: string, fyId: string): Promise
     if ((err as Error).message?.includes('does not exist')) return [];
     throw err;
   }
+}
+
+/** One round trip for everything the report cache key must change with — see lib/cache/report-cache.ts. */
+export async function loadReportDataVersion(companyId: string): Promise<ReportDataVersion> {
+  const { rows } = await query<ReportDataVersion>(
+    `SELECT
+       (SELECT string_agg(id::text || '@' || COALESCE(data_changed_at::text, ''), ',' ORDER BY id)
+          FROM tb_uploads WHERE company_id = $1 AND is_current = TRUE) AS batches,
+       (SELECT string_agg(id::text || ':' || start_date || ':' || end_date || ':' || label || ':' || is_locked, ',' ORDER BY start_date)
+          FROM financial_years WHERE company_id = $1) AS years,
+       (SELECT updated_at::text FROM companies WHERE id = $1) AS company,
+       (SELECT COALESCE(max(updated_at)::text, '') || '#' || count(*)
+          FROM custom_metric_definitions WHERE company_id = $1) AS metrics,
+       (SELECT max(synced_at)::text FROM zoho_contacts WHERE company_id = $1) AS contacts`,
+    [companyId]
+  );
+  return rows[0];
+}
+
+/** Source currency of the year's current batch (null when the batch predates the column). */
+export async function loadBatchCurrency(companyId: string, fyId: string): Promise<string | null> {
+  const { rows } = await query<{ currency: string | null }>(
+    `SELECT currency FROM tb_uploads WHERE company_id = $1 AND financial_year_id = $2 AND is_current = TRUE`,
+    [companyId, fyId]
+  );
+  return rows[0]?.currency ?? null;
 }
 
 /** Verifies FY access — mirrors reports.js getFY(). */

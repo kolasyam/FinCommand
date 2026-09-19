@@ -91,7 +91,7 @@ The picker and inspector offer a metric only where it can really fill the widget
 
 - `WIDGET_MAX_SERIES` is enforced server-side for these three types (400 with a clear message). The inspector trims series when the widget type changes.
 - A new ratio card takes its title from both metrics ("A ÷ B").
-- The DB `widget_type` CHECK is updated in **both** `db/schema.sql` and `lib/db/neon.ts`, which re-applies that constraint at pool start and must stay in sync.
+- The DB `widget_type` CHECK was updated in **both** `db/schema.sql` and `lib/db/neon.ts` at the time. *(Since DB Phase 0, `neon.ts` no longer re-applies it at pool start — a new widget type now needs a migration in `db/migrations/`.)*
 
 ### 2.5 PowerPoint, CSV and PNG exports
 A single **Export ▾** menu replaces the separate PDF/Excel buttons: PDF, PowerPoint, Excel, CSV, Image.

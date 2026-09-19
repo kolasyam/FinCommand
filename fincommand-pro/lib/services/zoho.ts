@@ -4,6 +4,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { query, withTransaction } from '@/lib/db/neon';
 import { invalidateReportCache } from '@/lib/cache/report-cache';
+import { ApiError } from '@/lib/auth/permissions';
+import { summarizeTrialBalance, decideSourceOwnership, type DataSource } from '@/lib/financial/tb-validation';
+import { lockTrialBalanceWrite, assertYearUnlocked, setYearDataSource, sourceName } from '@/lib/db/queries/tb-batches';
+import { encryptToken, decryptToken } from '@/lib/security/token-crypto';
 
 export const ZOHO_ACCOUNTS: Record<string, string> = {
   IN: 'https://accounts.zoho.in',
@@ -18,19 +22,21 @@ export const ZOHO_API: Record<string, string> = {
   AU: 'https://www.zohoapis.com.au/books/v3',
 };
 
-const FY_MONTHS_DR = [
-  { name: 'Apr', from_suffix: '04-01', to_suffix: '04-30' },
-  { name: 'May', from_suffix: '05-01', to_suffix: '05-31' },
-  { name: 'Jun', from_suffix: '06-01', to_suffix: '06-30' },
-  { name: 'Jul', from_suffix: '07-01', to_suffix: '07-31' },
-  { name: 'Aug', from_suffix: '08-01', to_suffix: '08-31' },
-  { name: 'Sep', from_suffix: '09-01', to_suffix: '09-30' },
-  { name: 'Oct', from_suffix: '10-01', to_suffix: '10-31' },
-  { name: 'Nov', from_suffix: '11-01', to_suffix: '11-30' },
-  { name: 'Dec', from_suffix: '12-01', to_suffix: '12-31' },
-  { name: 'Jan', next_yr: true, from_suffix: '01-01', to_suffix: '01-31' },
-  { name: 'Feb', next_yr: true, from_suffix: '02-01', to_suffix: '02-28' },
-  { name: 'Mar', next_yr: true, from_suffix: '03-01', to_suffix: '03-31' },
+// Month ends are computed (monthEndISO), not listed — a fixed '02-28' lost
+// every 29 February transaction in a leap year.
+const FY_MONTHS_DR: { name: string; from_suffix: string; next_yr?: boolean }[] = [
+  { name: 'Apr', from_suffix: '04-01' },
+  { name: 'May', from_suffix: '05-01' },
+  { name: 'Jun', from_suffix: '06-01' },
+  { name: 'Jul', from_suffix: '07-01' },
+  { name: 'Aug', from_suffix: '08-01' },
+  { name: 'Sep', from_suffix: '09-01' },
+  { name: 'Oct', from_suffix: '10-01' },
+  { name: 'Nov', from_suffix: '11-01' },
+  { name: 'Dec', from_suffix: '12-01' },
+  { name: 'Jan', next_yr: true, from_suffix: '01-01' },
+  { name: 'Feb', next_yr: true, from_suffix: '02-01' },
+  { name: 'Mar', next_yr: true, from_suffix: '03-01' },
 ];
 
 const ZOHO_TYPE_MAP: Record<string, { note_no: number; note_name: string; section: string; normal_bal: string; treasury_type?: string }> = {
@@ -232,6 +238,15 @@ interface ZohoConfigRow {
   data_center: string;
 }
 
+/**
+ * zoho_config stores both tokens encrypted (lib/security/token-crypto.ts).
+ * Every read of the row goes through this, so the rest of this file only
+ * ever sees plain tokens in memory — never in the database.
+ */
+function decryptZohoConfig<T extends { access_token: string | null; refresh_token: string | null }>(row: T): T {
+  return { ...row, access_token: decryptToken(row.access_token), refresh_token: decryptToken(row.refresh_token) };
+}
+
 /** Extracts a useful message from a Zoho API error — ported verbatim. */
 export function zohoErrorMessage(err: unknown): string {
   const axErr = err as AxiosError<{ message?: string; code?: number }>;
@@ -390,7 +405,19 @@ async function refreshZohoToken(config: ZohoConfigRow): Promise<string> {
 
   const { access_token, expires_in } = res.data;
   const expiry = new Date(Date.now() + (expires_in - 60) * 1000);
-  await query(`UPDATE zoho_config SET access_token=$1, token_expiry=$2 WHERE company_id=$3`, [access_token, expiry, config.company_id]);
+  await query(
+    `UPDATE zoho_config SET access_token=$1, token_expiry=$2 WHERE company_id=$3`,
+    [encryptToken(access_token), expiry, config.company_id]
+  );
+  // Update the caller's in-memory config too. syncFromZoho() hands one config
+  // object to every callZoho() (configOverride); it used to keep the OLD
+  // expiry, so every later request batch saw an "expired" token and refreshed
+  // again, about 10 grants in under a minute. Zoho allows ~10 per 10 minutes,
+  // so scheduled syncs (which always start with an expired token) failed, and
+  // two refused refreshes then marked the connection dead. Manual syncs, run
+  // with a fresh token, never hit it: that was the observed pattern.
+  config.access_token = access_token;
+  config.token_expiry = expiry.toISOString();
   return access_token;
 }
 
@@ -400,7 +427,7 @@ async function refreshZohoToken(config: ZohoConfigRow): Promise<string> {
  * (cron) syncs failed most of the time with "Apr: Invalid URL Passed (code
  * 5)" while manually-triggered syncs never did.
  *
- * syncFromZoho() fires up to 3 concurrent callZoho() calls per batch
+ * syncFromZoho() fires up to 5 concurrent callZoho() calls per batch
  * (Promise.all), and callZoho() independently reads zoho_config and checks
  * token_expiry on every call. A manual sync almost always starts with a
  * token that's fresh (the CFO just authenticated recently in the same
@@ -455,7 +482,7 @@ export async function callZoho<T>(
       [companyId]
     );
     if (!rows.length) throw new Error('Zoho Books not connected. Please authenticate first by clicking "Connect Zoho Books".');
-    cfg = rows[0];
+    cfg = decryptZohoConfig(rows[0]);
   }
 
   let token = new Date(cfg.token_expiry) <= new Date() ? await refreshZohoTokenSingleFlight(cfg) : cfg.access_token;
@@ -520,7 +547,7 @@ export async function callZoho<T>(
  */
 export async function fetchAndStoreZohoOrgCurrency(companyId: string, orgId: string): Promise<string | null> {
   try {
-    const { rows: cfgRows } = await query<ZohoConfigRow>(`SELECT * FROM zoho_config WHERE company_id=$1`, [companyId]);
+    const { rows: cfgRows } = await query<{ data_center: string }>(`SELECT data_center FROM zoho_config WHERE company_id=$1`, [companyId]);
     if (!cfgRows.length) return null;
     const apiBase = ZOHO_API[cfgRows[0].data_center] || ZOHO_API.IN;
 
@@ -541,30 +568,293 @@ export async function fetchAndStoreZohoOrgCurrency(companyId: string, orgId: str
   }
 }
 
+export interface ZohoLedgerAcc {
+  code: string; name: string; op_dr: number; op_cr: number;
+  m: { dr: number; cr: number }[];
+  // Zoho metadata — taken from the first snapshot this ledger appears in
+  zoho_account_id?: string;
+  zoho_account_type?: string;
+  depth: number;
+  is_child_present: boolean;
+}
+
+/** One fetched Zoho report: `key` is the FY month index 0–11 (unused for the opening snapshot). */
+export interface ZohoReportInput { key: number; error: string | null; rawResponse?: unknown }
+
+/**
+ * The equity line that carries profit earned before this financial year but
+ * not yet closed into any Zoho account. Zoho shows it on its Balance Sheet
+ * as "Current Year Earnings", a computed row WITHOUT an account_id, so the
+ * leaf extractor never sees it. Without this line the opening trial balance
+ * is short by exactly that amount: Dr ≠ Cr, and the Balance Sheet never
+ * balances. The name contains "Retained Earnings" so the classifier maps it
+ * to Note 2 Other Equity; it's a normal ledger, so it can be reclassified.
+ */
+export const ZOHO_EARNINGS_BF_NAME = 'Retained Earnings — brought forward (Zoho opening)';
+export const ZOHO_EARNINGS_BF_CODE = 'ZOHO-RE-BF';
+
+/** Maps a P&L leaf's enclosing group name to whether it's income vs. expense, and a precise ZOHO_TYPE_MAP-friendly broad type. */
+function plBroadType(categoryHint: string | undefined): { isIncome: boolean; broadType: string } {
+  const h = (categoryHint || '').toLowerCase();
+  if (h.includes('cost of goods')) return { isIncome: false, broadType: 'cost_of_goods_sold' };
+  if (h.includes('non operating income')) return { isIncome: true, broadType: 'other_income' };
+  if (h.includes('income')) return { isIncome: true, broadType: 'income' };
+  return { isIncome: false, broadType: 'expense' };
+}
+
+/**
+ * Builds trial-balance rows from Zoho's monthly P&L reports and Balance Sheet
+ * snapshots. Pure (no DB, no network), so it's unit-tested and can be replayed
+ * against the raw responses stored in tb_uploads.raw_zoho_months.
+ *
+ * - P&L (income/expense): each month's `total` already IS the movement.
+ * - Balance Sheet (assets/liabilities/equity): each snapshot is a cumulative
+ *   balance; the opening is the snapshot on the day before the FY starts, and
+ *   each month's movement is the difference between consecutive snapshots.
+ * - Earnings brought forward: see ZOHO_EARNINGS_BF_NAME. Its value is the
+ *   opening snapshot's leaf Assets − (Liabilities + Equity), i.e. the only
+ *   amount that makes the opening balance — nothing is estimated.
+ */
+export function assembleZohoLedgers(input: {
+  pl: ZohoReportInput[]; openingBs?: ZohoReportInput; monthBs: ZohoReportInput[];
+}): { ledgerMap: Record<string, ZohoLedgerAcc>; errors: string[]; earningsBroughtForward: number } {
+  const errors: string[] = [];
+  const ledgerMap: Record<string, ZohoLedgerAcc> = {};
+  const metaByLedger = new Map<string, { code: string; account_id?: string; account_type?: string; depth: number; is_child_present: boolean }>();
+
+  function ensureMeta(name: string, leaf: ZohoReportLeaf, broadType: string) {
+    if (metaByLedger.has(name)) return;
+    metaByLedger.set(name, {
+      code: leaf.account_code || leaf.account_id || '',
+      account_id: leaf.account_id,
+      account_type: classifyHint(leaf.category_hint, broadType),
+      depth: leaf.depth,
+      is_child_present: leaf.is_child_present,
+    });
+  }
+  function ensureLedger(name: string): ZohoLedgerAcc {
+    if (!ledgerMap[name]) {
+      ledgerMap[name] = { code: '', name, op_dr: 0, op_cr: 0, m: Array.from({ length: 12 }, () => ({ dr: 0, cr: 0 })), depth: 0, is_child_present: false };
+    }
+    return ledgerMap[name];
+  }
+
+  // ── P&L (Income/Expense): each month's `total` is already the movement ──
+  input.pl.forEach((res) => {
+    if (res.error) { errors.push(res.error); return; }
+    const topArray = (res.rawResponse as { profit_and_loss?: unknown } | null)?.profit_and_loss;
+    extractZohoReportLeaves(topArray).forEach((leaf) => {
+      const name = leaf.account_name;
+      if (!name) return;
+      const { isIncome, broadType } = plBroadType(leaf.category_hint);
+      ensureMeta(name, leaf, broadType);
+      const row = ensureLedger(name);
+      const prev = row.m[res.key];
+      row.m[res.key] = isIncome
+        ? { dr: prev.dr + Math.max(0, -leaf.total), cr: prev.cr + Math.max(0, leaf.total) }
+        : { dr: prev.dr + Math.max(0, leaf.total), cr: prev.cr + Math.max(0, -leaf.total) };
+    });
+  });
+
+  // ── Balance Sheet (Assets/Liabilities/Equity): cumulative snapshots, differenced ──
+  // Signed net per ledger, per snapshot index (0 = Opening, 1..12 = month-end),
+  // positive = matches the leaf's structural side (Dr for Assets, Cr for
+  // Liabilities & Equities). A ledger absent from a given snapshot is
+  // treated as net-zero as of that date — Zoho's own report already omits
+  // zero-balance rows, so this matches its convention rather than
+  // approximating it.
+  const cumByLedger = new Map<string, { isAssetSide: boolean; net: number[] }>();
+
+  function recordBsSnapshot(snapIdx: number, leaves: ZohoReportLeaf[], isAssetSide: boolean) {
+    leaves.forEach((leaf) => {
+      const name = leaf.account_name;
+      if (!name) return;
+      if (!cumByLedger.has(name)) cumByLedger.set(name, { isAssetSide, net: Array(13).fill(0) });
+      ensureMeta(name, leaf, isAssetSide ? 'asset' : 'liability');
+      cumByLedger.get(name)!.net[snapIdx] = leaf.total;
+    });
+  }
+
+  function recordBsResult(snapIdx: number, res: ZohoReportInput | undefined): boolean {
+    if (!res || res.error) return false;
+    // The response's top-level array has one half per side (Assets, then
+    // Liabilities & Equities) — detect by name rather than position, and
+    // walk each half separately so the correct structural side is recorded.
+    const topArray = (res.rawResponse as { balance_sheet?: unknown } | null)?.balance_sheet;
+    if (!Array.isArray(topArray)) return false;
+    (topArray as Record<string, unknown>[]).forEach((half) => {
+      if (!half) return;
+      const isAssetSide = String(half.name || '').toLowerCase().includes('asset');
+      recordBsSnapshot(snapIdx, extractZohoReportLeaves([half]), isAssetSide);
+    });
+    return true;
+  }
+
+  const haveOpening = recordBsResult(0, input.openingBs);
+  input.monthBs.forEach((res) => {
+    if (res.error) { errors.push(res.error); return; }
+    recordBsResult(res.key + 1, res);
+  });
+
+  let openingGap = 0; // leaf Assets − leaf (Liabilities + Equity), at the opening date
+  cumByLedger.forEach((entry, name) => {
+    const row = ensureLedger(name);
+    const { isAssetSide, net } = entry;
+    const openNet = net[0];
+    openingGap += isAssetSide ? openNet : -openNet;
+    row.op_dr = isAssetSide ? Math.max(0, openNet) : Math.max(0, -openNet);
+    row.op_cr = isAssetSide ? Math.max(0, -openNet) : Math.max(0, openNet);
+    for (let mi = 0; mi < 12; mi++) {
+      const movement = net[mi + 1] - net[mi];
+      row.m[mi] = {
+        dr: isAssetSide ? Math.max(0, movement) : Math.max(0, -movement),
+        cr: isAssetSide ? Math.max(0, -movement) : Math.max(0, movement),
+      };
+    }
+  });
+
+  // Earnings brought forward — only with a real opening snapshot (without
+  // one, every opening is 0 and there is nothing to balance).
+  const earningsBroughtForward = haveOpening ? Math.round(openingGap * 100) / 100 : 0;
+  if (earningsBroughtForward !== 0) {
+    const row = ensureLedger(ZOHO_EARNINGS_BF_NAME);
+    row.op_cr = Math.max(0, earningsBroughtForward);  // profit brought forward = credit
+    row.op_dr = Math.max(0, -earningsBroughtForward); // accumulated loss = debit
+    metaByLedger.set(ZOHO_EARNINGS_BF_NAME, {
+      code: ZOHO_EARNINGS_BF_CODE, account_type: 'retained_earnings', depth: 0, is_child_present: false,
+    });
+  }
+
+  // Fill in metadata (code, zoho_account_id, zoho_account_type, depth, is_child_present) now every ledger name is known.
+  metaByLedger.forEach((meta, name) => {
+    const row = ledgerMap[name];
+    if (!row) return;
+    row.code = meta.code;
+    row.zoho_account_id = meta.account_id;
+    row.zoho_account_type = meta.account_type;
+    row.depth = meta.depth;
+    row.is_child_present = meta.is_child_present;
+  });
+
+  return { ledgerMap, errors, earningsBroughtForward };
+}
+
+/** Last calendar day of a month (1–12), as YYYY-MM-DD — handles leap-year February. */
+export function monthEndISO(year: number, month: number): string {
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return `${year}-${String(month).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
+}
+
+/** Day before a YYYY-MM-DD date, computed in UTC so no local timezone can shift it. */
+export function dayBeforeISO(isoDate: string): string {
+  const [y, m, d] = isoDate.slice(0, 10).split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
+}
+
 export interface SyncResult {
   ledgers_synced: number;
   mapped: number;
-  upload_id: string;
+  upload_id: string | null;
   duration_ms: number;
   warning: string | null;
+  /** Set when a scheduled sync left the year alone because Excel owns it. */
+  skipped?: string;
+  /** Debit = credit check on the new batch (warn only). */
+  is_balanced?: boolean;
+  balance_diff?: number;
 }
 
-/** Core Zoho → tb_ledgers sync — ported verbatim from routes/zoho.js syncFromZoho(). */
-export async function syncFromZoho(companyId: string, fyId: string, triggeredBy: string | null = null): Promise<SyncResult> {
+export interface SyncOptions {
+  /** The user confirmed replacing a year whose data came from an Excel upload. */
+  confirmReplace?: boolean;
+  /** Called by the scheduler, not a person: never switches a year's source, skips instead. */
+  scheduled?: boolean;
+}
+
+/**
+ * Core Zoho → tb_ledgers sync — ported from routes/zoho.js syncFromZoho().
+ *
+ * Once this run has claimed the company's "running" slot, any failure marks
+ * both zoho_config and its sync_logs row as 'error' (previously a failure
+ * inside the DB transaction left both stuck on 'running'). A rejection before
+ * the claim — year locked, year owned by Excel, another sync in progress —
+ * changes neither, so it can't clobber the status of the sync that IS running.
+ */
+export async function syncFromZoho(
+  companyId: string, fyId: string, triggeredBy: string | null = null, options: SyncOptions = {},
+): Promise<SyncResult> {
   const logId = uuid();
+  const state = { claimed: false };
+  try {
+    return await runZohoSync(companyId, fyId, triggeredBy, options, logId, state);
+  } catch (err) {
+    if (state.claimed) {
+      const msg = (err as Error).message || 'Zoho sync failed';
+      await query(
+        `UPDATE zoho_config SET last_sync_status='error', last_sync_error=$1, updated_at=NOW()
+         WHERE company_id=$2 AND last_sync_status='running'`,
+        [msg, companyId]
+      ).catch((e: Error) => console.error('[zoho] could not record sync failure on zoho_config:', e.message));
+      await query(
+        `UPDATE sync_logs SET status='error', error_message=$1, completed_at=NOW() WHERE id=$2 AND status='running'`,
+        [msg, logId]
+      ).catch((e: Error) => console.error('[zoho] could not record sync failure on sync_logs:', e.message));
+    }
+    throw err;
+  }
+}
+
+async function runZohoSync(
+  companyId: string, fyId: string, triggeredBy: string | null, options: SyncOptions,
+  logId: string, state: { claimed: boolean },
+): Promise<SyncResult> {
   const start = Date.now();
 
-  const { rows: fyRows } = await query(`SELECT * FROM financial_years WHERE id=$1 AND company_id=$2`, [fyId, companyId]);
+  // Dates as 'YYYY-MM-DD' text, never a JS Date: pg turns a DATE into LOCAL
+  // midnight, so on a machine in India (UTC+5:30) 1 April became 31 March in
+  // UTC. The opening snapshot was then taken on 30 March instead of 31 March
+  // (every year-end entry missed; month 1 absorbed them), and bills were
+  // bucketed one month late with March's dropped.
+  const { rows: fyRows } = await query(
+    `SELECT id, label, is_locked, data_source, start_date::text AS start_date, end_date::text AS end_date
+     FROM financial_years WHERE id=$1 AND company_id=$2`,
+    [fyId, companyId]
+  );
   if (!fyRows.length) throw new Error('Financial year not found');
-  const fy = fyRows[0] as { start_date: string; label: string };
-  const startYear = new Date(fy.start_date).getFullYear();
+  const fy = fyRows[0] as { start_date: string; label: string; is_locked: boolean; data_source: DataSource | null };
+  const startYear = parseInt(fy.start_date.slice(0, 4), 10);
+
+  // Checked before claiming the "running" slot (and re-checked under the
+  // write lock inside the transaction below).
+  if (fy.is_locked) {
+    throw new ApiError(403, `${fy.label} is locked (post-audit) — it can't be re-synced.`, 'YEAR_LOCKED');
+  }
+  const ownership = decideSourceOwnership(fy.data_source, 'zoho', options);
+  if (ownership === 'skip') {
+    const reason = `${fy.label} is owned by ${sourceName(fy.data_source!)} — scheduled Zoho sync skipped it`;
+    await query(
+      `INSERT INTO sync_logs (id,company_id,source,financial_year,triggered_by,status,error_message,started_at,completed_at,duration_ms)
+       VALUES ($1,$2,'zoho',$3,$4,'skipped',$5,NOW(),NOW(),0)`,
+      [logId, companyId, fy.label, triggeredBy, reason]
+    );
+    return { ledgers_synced: 0, mapped: 0, upload_id: null, duration_ms: 0, warning: null, skipped: reason };
+  }
+  if (ownership === 'needs_confirm') {
+    throw new ApiError(
+      409,
+      `${fy.label}'s data currently comes from ${sourceName(fy.data_source!)}. Replace it with data from Zoho Books? ` +
+      `Scheduled syncs will then keep this year up to date from Zoho.`,
+      'SOURCE_OWNED',
+      { owner: fy.data_source },
+    );
+  }
 
   const { rows: coRows } = await query<{ currency: string }>(`SELECT currency FROM companies WHERE id=$1`, [companyId]);
   const baseCurrency = (coRows[0]?.currency || 'INR').toUpperCase();
 
   const { rows: cfgRows } = await query<ZohoConfigRow>(`SELECT * FROM zoho_config WHERE company_id=$1`, [companyId]);
   if (!cfgRows.length) throw new Error('Zoho Books not connected');
-  const cfg = cfgRows[0];
+  const cfg = decryptZohoConfig(cfgRows[0]);
   const orgId = cfg.org_id;
   if (!orgId) throw new Error('Zoho Organisation ID not set');
 
@@ -591,6 +881,7 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
     e.status = 409;
     throw e;
   }
+  state.claimed = true;
   await query(
     `INSERT INTO sync_logs (id,company_id,source,financial_year,triggered_by,status,started_at)
      VALUES ($1,$2,'zoho',$3,$4,'running',NOW())`,
@@ -648,7 +939,7 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
   //    month's movement is the difference between consecutive snapshots,
   //    with one extra "Opening" snapshot as of the day before the FY starts
   //    supplying real opening balances (previously always defaulted to 0).
-  //    Batched in groups of 3 to comply with Zoho API rate limits (Code 43).
+  //    Batched in groups of 5 (BATCH_SIZE below) to stay within Zoho's API rate limits (Code 43).
   interface ReportFetchResult {
     kind: 'pl' | 'bs' | 'cust' | 'bill' | 'exp';
     key: number; // pl/cust/bill/exp: 0-11 month index. bs: -1 = Opening, 0-11 = month-end index.
@@ -660,19 +951,14 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
     fetchedAt?: string;
   }
 
-  /** Day before `dateVal`, in UTC to avoid local-timezone day-shift. */
-  function dayBeforeISO(dateVal: string | Date): string {
-    const d = new Date(dateVal);
-    const utc = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-    utc.setUTCDate(utc.getUTCDate() - 1);
-    return utc.toISOString().slice(0, 10);
-  }
-
   const openingToDate = dayBeforeISO(fy.start_date);
 
+  /** Calendar year and last day of FY month `m` (e.g. Feb 2028 → 2028-02-29, not the old fixed 02-28). */
+  const fyMonthYear = (m: (typeof FY_MONTHS_DR)[number]) => (m.next_yr ? startYear + 1 : startYear);
+  const fyMonthEnd = (m: (typeof FY_MONTHS_DR)[number]) => monthEndISO(fyMonthYear(m), parseInt(m.from_suffix.slice(0, 2), 10));
+
   const lastMonth = FY_MONTHS_DR[FY_MONTHS_DR.length - 1];
-  const endYear = lastMonth.next_yr ? startYear + 1 : startYear;
-  const fyEndDate = `${endYear}-${lastMonth.to_suffix}`;
+  const fyEndDate = fyMonthEnd(lastMonth);
 
   function getFyMonthIndex(dateStr: string | null | undefined, fyStartDate: string): number {
     if (!dateStr) return -1;
@@ -736,18 +1022,15 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
   type FetchDef = { kind: 'pl' | 'bs' | 'cust'; key: number; label: string; from_date?: string; to_date: string };
   const fetchDefs: FetchDef[] = [
     { kind: 'bs', key: -1, label: 'Opening', to_date: openingToDate },
-    ...FY_MONTHS_DR.map((m, mi) => {
-      const yr = m.next_yr ? startYear + 1 : startYear;
-      return { kind: 'pl' as const, key: mi, label: m.name, from_date: `${yr}-${m.from_suffix}`, to_date: `${yr}-${m.to_suffix}` };
-    }),
-    ...FY_MONTHS_DR.map((m, mi) => {
-      const yr = m.next_yr ? startYear + 1 : startYear;
-      return { kind: 'bs' as const, key: mi, label: m.name, to_date: `${yr}-${m.to_suffix}` };
-    }),
-    ...FY_MONTHS_DR.map((m, mi) => {
-      const yr = m.next_yr ? startYear + 1 : startYear;
-      return { kind: 'cust' as const, key: mi, label: m.name, from_date: `${yr}-${m.from_suffix}`, to_date: `${yr}-${m.to_suffix}` };
-    }),
+    ...FY_MONTHS_DR.map((m, mi) => (
+      { kind: 'pl' as const, key: mi, label: m.name, from_date: `${fyMonthYear(m)}-${m.from_suffix}`, to_date: fyMonthEnd(m) }
+    )),
+    ...FY_MONTHS_DR.map((m, mi) => (
+      { kind: 'bs' as const, key: mi, label: m.name, to_date: fyMonthEnd(m) }
+    )),
+    ...FY_MONTHS_DR.map((m, mi) => (
+      { kind: 'cust' as const, key: mi, label: m.name, from_date: `${fyMonthYear(m)}-${m.from_suffix}`, to_date: fyMonthEnd(m) }
+    )),
   ];
 
   const fetchResults: ReportFetchResult[] = [];
@@ -970,134 +1253,21 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
     );
   }
 
-  interface LedgerAcc {
-    code: string; name: string; op_dr: number; op_cr: number;
-    m: { dr: number; cr: number }[];
-    // Zoho metadata — taken from the first snapshot this ledger appears in
-    zoho_account_id?: string;
-    zoho_account_type?: string;
-    depth: number;
-    is_child_present: boolean;
-  }
-  const ledgerMap: Record<string, LedgerAcc> = {};
-  const metaByLedger = new Map<string, { code: string; account_id?: string; account_type?: string; depth: number; is_child_present: boolean }>();
-
-  function ensureMeta(name: string, leaf: ZohoReportLeaf, broadType: string) {
-    if (metaByLedger.has(name)) return;
-    metaByLedger.set(name, {
-      code: leaf.account_code || leaf.account_id || '',
-      account_id: leaf.account_id,
-      account_type: classifyHint(leaf.category_hint, broadType),
-      depth: leaf.depth,
-      is_child_present: leaf.is_child_present,
-    });
-  }
-  function ensureLedger(name: string): LedgerAcc {
-    if (!ledgerMap[name]) {
-      ledgerMap[name] = { code: '', name, op_dr: 0, op_cr: 0, m: Array.from({ length: 12 }, () => ({ dr: 0, cr: 0 })), depth: 0, is_child_present: false };
-    }
-    return ledgerMap[name];
-  }
-
-  /** Maps a P&L leaf's enclosing group name to whether it's income vs. expense, and a precise ZOHO_TYPE_MAP-friendly broad type. */
-  function plBroadType(categoryHint: string | undefined): { isIncome: boolean; broadType: string } {
-    const h = (categoryHint || '').toLowerCase();
-    if (h.includes('cost of goods')) return { isIncome: false, broadType: 'cost_of_goods_sold' };
-    if (h.includes('non operating income')) return { isIncome: true, broadType: 'other_income' };
-    if (h.includes('income')) return { isIncome: true, broadType: 'income' };
-    return { isIncome: false, broadType: 'expense' };
-  }
-
-  // ── P&L (Income/Expense): each month's `total` is already the movement ──
-  plResults.forEach((res) => {
-    if (res.error) { monthErrors.push(res.error); return; }
-    const topArray = (res.rawResponse as { profit_and_loss?: unknown } | null)?.profit_and_loss;
-    extractZohoReportLeaves(topArray).forEach((leaf) => {
-      const name = leaf.account_name;
-      if (!name) return;
-      const { isIncome, broadType } = plBroadType(leaf.category_hint);
-      ensureMeta(name, leaf, broadType);
-      const row = ensureLedger(name);
-      const prev = row.m[res.key];
-      row.m[res.key] = isIncome
-        ? { dr: prev.dr + Math.max(0, -leaf.total), cr: prev.cr + Math.max(0, leaf.total) }
-        : { dr: prev.dr + Math.max(0, leaf.total), cr: prev.cr + Math.max(0, -leaf.total) };
-    });
+  const { ledgerMap, errors: assemblyErrors } = assembleZohoLedgers({
+    pl: plResults, openingBs: openingResult, monthBs: bsMonthResults,
   });
-
-  // ── Balance Sheet (Assets/Liabilities/Equity): cumulative snapshots, differenced ──
-  // Signed net per ledger, per snapshot index (0 = Opening, 1..12 = month-end),
-  // positive = matches the leaf's structural side (Dr for Assets, Cr for
-  // Liabilities & Equities). A ledger absent from a given snapshot is
-  // treated as net-zero as of that date — Zoho's own report already omits
-  // zero-balance rows, so this matches its convention rather than
-  // approximating it.
-  const cumByLedger = new Map<string, { isAssetSide: boolean; net: number[] }>();
-
-  function recordBsSnapshot(snapIdx: number, leaves: ZohoReportLeaf[], isAssetSide: boolean) {
-    leaves.forEach((leaf) => {
-      const name = leaf.account_name;
-      if (!name) return;
-      if (!cumByLedger.has(name)) cumByLedger.set(name, { isAssetSide, net: Array(13).fill(0) });
-      ensureMeta(name, leaf, isAssetSide ? 'asset' : 'liability');
-      cumByLedger.get(name)!.net[snapIdx] = leaf.total;
-    });
-  }
-
-  function recordBsResult(snapIdx: number, res: ReportFetchResult | undefined) {
-    if (!res || res.error) return;
-    // The response's top-level array has one half per side (Assets, then
-    // Liabilities & Equities) — detect by name rather than position, and
-    // walk each half separately so the correct structural side is recorded.
-    const topArray = (res.rawResponse as { balance_sheet?: unknown } | null)?.balance_sheet;
-    if (!Array.isArray(topArray)) return;
-    (topArray as Record<string, unknown>[]).forEach((half) => {
-      if (!half) return;
-      const isAssetSide = String(half.name || '').toLowerCase().includes('asset');
-      recordBsSnapshot(snapIdx, extractZohoReportLeaves([half]), isAssetSide);
-    });
-  }
-
-  recordBsResult(0, openingResult);
-  bsMonthResults.forEach((res) => {
-    if (res.error) { monthErrors.push(res.error); return; }
-    recordBsResult(res.key + 1, res);
-  });
-
-  cumByLedger.forEach((entry, name) => {
-    const row = ensureLedger(name);
-    const { isAssetSide, net } = entry;
-    const openNet = net[0];
-    row.op_dr = isAssetSide ? Math.max(0, openNet) : Math.max(0, -openNet);
-    row.op_cr = isAssetSide ? Math.max(0, -openNet) : Math.max(0, openNet);
-    for (let mi = 0; mi < 12; mi++) {
-      const movement = net[mi + 1] - net[mi];
-      row.m[mi] = {
-        dr: isAssetSide ? Math.max(0, movement) : Math.max(0, -movement),
-        cr: isAssetSide ? Math.max(0, -movement) : Math.max(0, movement),
-      };
-    }
-  });
-
-  // Fill in metadata (code, zoho_account_id, zoho_account_type, depth, is_child_present) now every ledger name is known.
-  metaByLedger.forEach((meta, name) => {
-    const row = ledgerMap[name];
-    if (!row) return;
-    row.code = meta.code;
-    row.zoho_account_id = meta.account_id;
-    row.zoho_account_type = meta.account_type;
-    row.depth = meta.depth;
-    row.is_child_present = meta.is_child_present;
-  });
+  monthErrors.push(...assemblyErrors);
 
   if (Object.keys(ledgerMap).length === 0) {
+    // syncFromZoho() records this on zoho_config and sync_logs.
     const reason = monthErrors[0] || coaError || 'Zoho returned no trial balance data for this period';
-    const err = new Error(`Zoho sync failed: ${reason}`);
-    await query(`UPDATE zoho_config SET last_sync_status='error',last_sync_error=$1,updated_at=NOW() WHERE company_id=$2`, [err.message, companyId]);
-    await query(`UPDATE sync_logs SET status='error',error_message=$1,completed_at=NOW() WHERE id=$2`, [err.message, logId]);
-    throw err;
+    throw new Error(`Zoho sync failed: ${reason}`);
   }
 
+  // Global rows first, company rows last — the maps below keep the LAST row
+  // per key, so the company's own mapping (e.g. a reclassification) wins.
+  // There was no ORDER BY at all, so which of a duplicated mapping won
+  // depended on physical row order.
   const { rows: lmRows } = await query<{
     ledger_code: string | null;
     ledger_name: string;
@@ -1107,7 +1277,8 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
     treasury_type: string | null;
     normal_bal: string;
   }>(
-    `SELECT * FROM ledger_master WHERE (company_id=$1 OR company_id IS NULL) AND is_active=TRUE`,
+    `SELECT * FROM ledger_master WHERE (company_id=$1 OR company_id IS NULL) AND is_active=TRUE
+     ORDER BY company_id NULLS FIRST, ledger_code, id`,
     [companyId]
   );
 
@@ -1119,8 +1290,22 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
   const tbRows = Object.values(ledgerMap);
   let mapped = 0;
   const uploadId = uuid();
+  // Warn-and-record debit = credit check, stored on the batch (never blocks the sync).
+  const summary = summarizeTrialBalance(tbRows.map((r) => {
+    const amounts: Record<string, number> = { op_dr: r.op_dr, op_cr: r.op_cr };
+    r.m.forEach((mv, i) => { amounts[`m${i + 1}_dr`] = mv.dr; amounts[`m${i + 1}_cr`] = mv.cr; });
+    return amounts;
+  }));
 
   await withTransaction(async (client) => {
+    // One writer per company + year until COMMIT; the year's lock and owner
+    // are re-read under that lock in case they changed while Zoho was fetched.
+    const lockedFy = await lockTrialBalanceWrite(client, companyId, fyId);
+    assertYearUnlocked(lockedFy);
+    if (decideSourceOwnership(lockedFy.data_source, 'zoho', options) !== 'allow') {
+      throw new ApiError(409, `${lockedFy.label}'s data source changed while syncing — please try again.`, 'SOURCE_OWNED', { owner: lockedFy.data_source });
+    }
+
     await client.query(
       `UPDATE tb_uploads SET is_current=FALSE, status='superseded'
        WHERE company_id=$1 AND financial_year_id=$2 AND is_current=TRUE`,
@@ -1154,32 +1339,21 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
       if (lm && lm.note_no && lm.section) mapped++;
     }
 
-    // Insert parent record into tb_uploads FIRST to satisfy Foreign Key constraint
-    await client.query('SAVEPOINT tb_uploads_sp');
-    try {
-      await client.query(
-        `INSERT INTO tb_uploads
-          (id,company_id,financial_year_id,uploaded_by,source,ledger_count,
-           mapped_count,has_monthly_cols,status,is_current,raw_zoho_months)
-         VALUES ($1,$2,$3,$4,'zoho',$5,$6,TRUE,'complete',TRUE,$7::jsonb)`,
-        [uploadId, companyId, fyId, triggeredBy, tbRows.length, mapped, JSON.stringify(rawZohoMonths)]
-      );
-      await client.query('RELEASE SAVEPOINT tb_uploads_sp');
-    } catch (insertErr) {
-      await client.query('ROLLBACK TO SAVEPOINT tb_uploads_sp').catch(() => {});
-      if ((insertErr as Error).message?.includes('raw_zoho_months')) {
-        console.warn('Falling back to tb_uploads insert without raw_zoho_months column...');
-        await client.query(
-          `INSERT INTO tb_uploads
-            (id,company_id,financial_year_id,uploaded_by,source,ledger_count,
-             mapped_count,has_monthly_cols,status,is_current)
-           VALUES ($1,$2,$3,$4,'zoho',$5,$6,TRUE,'complete',TRUE)`,
-          [uploadId, companyId, fyId, triggeredBy, tbRows.length, mapped]
-        );
-      } else {
-        throw insertErr;
-      }
-    }
+    // Insert parent record into tb_uploads FIRST to satisfy Foreign Key
+    // constraint. (The old "retry without raw_zoho_months" fallback is gone —
+    // db/migrations guarantees every column this insert names.)
+    await client.query(
+      `INSERT INTO tb_uploads
+        (id,company_id,financial_year_id,uploaded_by,source,ledger_count,
+         mapped_count,has_monthly_cols,status,is_current,raw_zoho_months,
+         currency,total_dr,total_cr,balance_diff,is_balanced,validation,data_changed_at)
+       VALUES ($1,$2,$3,$4,'zoho',$5,$6,TRUE,'complete',TRUE,$7::jsonb,
+               $8,$9,$10,$11,$12,$13,NOW())`,
+      [uploadId, companyId, fyId, triggeredBy, tbRows.length, mapped, JSON.stringify(rawZohoMonths),
+       baseCurrency, summary.total_dr, summary.total_cr, summary.balance_diff, summary.is_balanced,
+       JSON.stringify(summary.validation)]
+    );
+    await setYearDataSource(client, fyId, 'zoho');
 
     // Chunked batch insert into tb_ledgers (50 rows per batch query)
     const chunkSize = 50;
@@ -1210,13 +1384,18 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
               treasury_type: fallback.treasury_type || null,
               normal_bal: fallback.normal_bal,
             };
+            // Remembers the auto-classification so the next sync reuses it.
+            // ON CONFLICT DO NOTHING is effective since migration 0002 (it
+            // used to insert a duplicate every sync). No .catch(): inside a
+            // transaction a swallowed error still aborts it, and the sync
+            // then failed later with a misleading message.
             await client.query(
               `INSERT INTO ledger_master
                 (company_id, ledger_code, ledger_name, note_no, note_name, section, treasury_type, normal_bal, is_global)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, FALSE)
                ON CONFLICT DO NOTHING`,
               [companyId, lm.ledger_code, lm.ledger_name, lm.note_no, lm.note_name, sanitizeSection(lm.section) || 'ac', sanitizeTreasuryType(lm.treasury_type), lm.normal_bal]
-            ).catch(() => {});
+            );
           }
         }
 
@@ -1255,79 +1434,9 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
         VALUES ${valueClauses.join(', ')}
       `;
 
-      await client.query('SAVEPOINT tb_ledgers_sp');
-      try {
-        await client.query(batchInsertSql, queryParams);
-        await client.query('RELEASE SAVEPOINT tb_ledgers_sp');
-      } catch (insertLedgersErr) {
-        await client.query('ROLLBACK TO SAVEPOINT tb_ledgers_sp').catch(() => {});
-        if ((insertLedgersErr as Error).message?.match(/zoho_account_id|depth|is_child_present|zoho_account_type/)) {
-          console.warn('Falling back to tb_ledgers insert without extra zoho columns...');
-          // Build 36-col fallback SQL
-          let fParamIdx = 1;
-          const fValueClauses: string[] = [];
-          const fQueryParams: unknown[] = [];
-          for (const row of chunk) {
-            const nameKey = row.name.toLowerCase().trim();
-            const codeKey = row.code.trim();
-            const normKey = normalizeStr(row.name);
-            let lm = lmByName.get(nameKey) || (codeKey ? lmByCode.get(codeKey) : undefined) || lmByNorm.get(normKey);
-
-            if (!lm) {
-              const coaInfo = coaMap.get(nameKey);
-              const fallback = classifyZohoLedger(nameKey, row.zoho_account_type || coaInfo?.account_type || '');
-
-              if (fallback) {
-                lm = {
-                  ledger_code: row.code || coaInfo?.account_code || null,
-                  ledger_name: row.name,
-                  note_no: fallback.note_no,
-                  note_name: fallback.note_name,
-                  section: fallback.section,
-                  treasury_type: fallback.treasury_type || null,
-                  normal_bal: fallback.normal_bal,
-                };
-                await client.query(
-                  `INSERT INTO ledger_master
-                    (company_id, ledger_code, ledger_name, note_no, note_name, section, treasury_type, normal_bal, is_global)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, FALSE)
-                   ON CONFLICT DO NOTHING`,
-                  [companyId, lm.ledger_code, lm.ledger_name, lm.note_no, lm.note_name, sanitizeSection(lm.section) || 'ac', sanitizeTreasuryType(lm.treasury_type), lm.normal_bal]
-                ).catch(() => {});
-              }
-            }
-
-            const row36 = [
-              uploadId, companyId, fyId, row.code, row.name,
-              lm?.note_no || null, lm?.note_name || null, sanitizeSection(lm?.section),
-              sanitizeTreasuryType(lm?.treasury_type), lm?.normal_bal || 'Dr',
-              row.op_dr, row.op_cr,
-              row.m[0].dr, row.m[0].cr, row.m[1].dr, row.m[1].cr,
-              row.m[2].dr, row.m[2].cr, row.m[3].dr, row.m[3].cr,
-              row.m[4].dr, row.m[4].cr, row.m[5].dr, row.m[5].cr,
-              row.m[6].dr, row.m[6].cr, row.m[7].dr, row.m[7].cr,
-              row.m[8].dr, row.m[8].cr, row.m[9].dr, row.m[9].cr,
-              row.m[10].dr, row.m[10].cr, row.m[11].dr, row.m[11].cr,
-            ];
-            const ph = row36.map(() => `$${fParamIdx++}`);
-            fValueClauses.push(`(${ph.join(',')})`);
-            fQueryParams.push(...row36);
-          }
-          const fSql = `
-            INSERT INTO tb_ledgers
-              (upload_id,company_id,financial_year_id,ledger_code,ledger_name,
-               note_no,note_name,section,treasury_type,normal_bal,
-               op_dr,op_cr,
-               m1_dr,m1_cr,m2_dr,m2_cr,m3_dr,m3_cr,m4_dr,m4_cr,
-               m5_dr,m5_cr,m6_dr,m6_cr,m7_dr,m7_cr,m8_dr,m8_cr,
-               m9_dr,m9_cr,m10_dr,m10_cr,m11_dr,m11_cr,m12_dr,m12_cr)
-            VALUES ${fValueClauses.join(', ')}
-          `;
-          await client.query(fSql, fQueryParams);
-        } else {
-          throw insertLedgersErr;
-        }
-      }
+      // (The old "retry with 36 columns" fallback is gone — db/migrations
+      // guarantees the Zoho metadata columns exist.)
+      await client.query(batchInsertSql, queryParams);
     }
 
     // Insert real per-customer revenue (empty no-op if the Sales by Customer
@@ -1456,7 +1565,10 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
     console.warn('Zoho contacts sync failed (non-fatal):', (e as Error).message);
   }
 
-  return { ledgers_synced: tbRows.length, mapped, upload_id: uploadId, duration_ms: duration, warning: partialWarning };
+  return {
+    ledgers_synced: tbRows.length, mapped, upload_id: uploadId, duration_ms: duration, warning: partialWarning,
+    is_balanced: summary.is_balanced, balance_diff: summary.balance_diff,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1546,7 +1658,7 @@ export async function syncZohoContacts(companyId: string): Promise<ZohoContactSy
     `SELECT * FROM zoho_config WHERE company_id=$1 AND is_active=TRUE AND refresh_token IS NOT NULL`, [companyId]
   );
   if (!cfgRows.length) { errors.push('Zoho Books not connected'); return { synced: 0, customers: 0, vendors: 0, errors }; }
-  const cfg = cfgRows[0]!;
+  const cfg = decryptZohoConfig(cfgRows[0]!);
   const orgId = cfg.org_id;
   if (!orgId) { errors.push('Zoho Organisation ID not set'); return { synced: 0, customers: 0, vendors: 0, errors }; }
   const apiBase = ZOHO_API[cfg.data_center] || ZOHO_API.IN;

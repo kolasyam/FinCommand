@@ -110,6 +110,8 @@ async function seed() {
       );
 
       const uploadId = upload.id;
+      // "First source owns the year" (migration 0001): seeded data is an Excel load.
+      await client.query(`UPDATE financial_years SET data_source='excel' WHERE id=$1`, [fyRow.id]);
       for (const row of sampleRows) {
         await client.query(
           `INSERT INTO tb_ledgers

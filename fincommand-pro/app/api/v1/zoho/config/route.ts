@@ -13,6 +13,8 @@ export const PUT = withErrorHandling(async (req: NextRequest) => {
   const body = await req.json().catch(() => ({}));
   const { org_id, sync_frequency } = body;
 
+  // Explicit columns, never RETURNING * — that sent the Zoho access and
+  // refresh tokens back to the browser on every save.
   const { rows } = await query(
     `INSERT INTO zoho_config (company_id, org_id, sync_frequency, is_active)
      VALUES ($1, $2, COALESCE($3, 'daily'), TRUE)
@@ -21,7 +23,8 @@ export const PUT = withErrorHandling(async (req: NextRequest) => {
        sync_frequency = COALESCE(EXCLUDED.sync_frequency, zoho_config.sync_frequency),
        is_active = TRUE,
        updated_at = NOW()
-     RETURNING *`,
+     RETURNING company_id, org_id, data_center, sync_frequency, is_active,
+               last_synced_at, last_sync_status, last_sync_error, synced_ledgers, updated_at`,
     [user.company_id, org_id ?? null, sync_frequency ?? null]
   );
 

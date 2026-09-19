@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { authenticate } from '@/lib/auth/permissions';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import { query } from '@/lib/db/neon';
+import { TB_UPLOAD_PUBLIC_COLUMNS } from '@/lib/db/queries/tb-batches';
 
 export const runtime = 'nodejs';
 
@@ -9,7 +10,10 @@ export const GET = withErrorHandling(async (req: NextRequest, { params }: { para
   const user = await authenticate(req);
   const { uploadId } = await params;
 
-  const { rows: upload } = await query(`SELECT * FROM tb_uploads WHERE id=$1 AND company_id=$2`, [uploadId, user.company_id]);
+  const { rows: upload } = await query(
+    `SELECT ${TB_UPLOAD_PUBLIC_COLUMNS} FROM tb_uploads t WHERE t.id=$1 AND t.company_id=$2`,
+    [uploadId, user.company_id]
+  );
   if (!upload.length) return json({ error: 'Upload not found' }, { status: 404 });
 
   const { searchParams } = req.nextUrl;

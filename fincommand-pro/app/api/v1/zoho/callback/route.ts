@@ -3,6 +3,9 @@ import axios from 'axios';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import { query } from '@/lib/db/neon';
 import { ZOHO_ACCOUNTS } from '@/lib/services/zoho';
+import { verifyOAuthState } from '@/lib/security/oauth-state';
+import { encryptToken } from '@/lib/security/token-crypto';
+import { ROLE_SETS } from '@/lib/auth/permissions';
 
 export const runtime = 'nodejs';
 
@@ -21,7 +24,20 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
 
   if (!code) return json({ error: 'No code received from Zoho' }, { status: 400 });
 
-  const [companyId, dc] = state.split('|');
+  const fail = (msg: string) => NextResponse.redirect(`${baseUrl}/dashboard?tab=upload&zoho_error=${encodeURIComponent(msg)}`);
+
+  // Nothing is exchanged or stored unless the state was issued by our own
+  // auth-url route, for this company, within the last 10 minutes.
+  const verified = verifyOAuthState(state);
+  if (!verified.ok) return fail(verified.error);
+  const { companyId, dataCenter: dc, userId } = verified.value;
+  // …and the person who started it can still manage this company's Zoho connection.
+  const { rows: starter } = await query<{ role: string }>(
+    `SELECT role FROM users WHERE id=$1 AND company_id=$2 AND is_active=TRUE`, [userId, companyId]
+  );
+  if (!starter.length || !(ROLE_SETS.isCFO as string[]).includes(starter[0].role)) {
+    return fail('Your account can no longer connect Zoho Books for this company.');
+  }
   const base = ZOHO_ACCOUNTS[dc] || ZOHO_ACCOUNTS.IN;
 
   try {
@@ -53,6 +69,8 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     }
     const expiry = new Date(Date.now() + ((expires_in || 3600) - 60) * 1000);
 
+    // Tokens are stored encrypted (lib/security/token-crypto.ts); this throws
+    // — and the user sees the error — if TOKEN_ENCRYPTION_KEY is missing.
     await query(
       `INSERT INTO zoho_config
         (company_id, access_token, refresh_token, token_expiry, data_center, is_active, last_sync_status, last_sync_error)
@@ -60,7 +78,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
        ON CONFLICT (company_id) DO UPDATE SET
          access_token=$2, refresh_token=$3, token_expiry=$4,
          data_center=$5, is_active=TRUE, last_sync_status='never', last_sync_error=NULL, updated_at=NOW()`,
-      [companyId, access_token, refresh_token, expiry, dc]
+      [companyId, encryptToken(access_token), encryptToken(refresh_token), expiry, dc]
     );
 
     return NextResponse.redirect(`${baseUrl}/dashboard?tab=upload&zoho=connected`);
