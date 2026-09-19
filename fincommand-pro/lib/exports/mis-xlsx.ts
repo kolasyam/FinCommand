@@ -35,7 +35,7 @@ export function buildMisXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY
     { label: 'Depreciation & Amortisation', key: 'dep' },
     { label: 'Total Expenses', key: 'totExp', bold: true },
     { label: 'Profit Before Tax', key: 'pbt', bold: true },
-    { label: 'Tax (25%, estimated)', key: 'tax' },
+    { label: 'Tax (25% Current + 1% Deferred, estimated)', key: 'tax' },
     { label: 'Profit After Tax', key: 'pat', bold: true },
   ];
   const marginDefs: RowDef[] = [
@@ -61,7 +61,7 @@ export function buildMisXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY
       formats: [null, ...mis.columns.map(() => PCT_FMT), PCT_FMT],
     })),
     { cells: [] },
-    { cells: ['Tax is estimated at a flat 25% of Profit Before Tax in a profitable month — this Trial Balance carries no dedicated tax-provision ledger to derive a real cash-tax figure from — and nil in a loss-making month (PBT ≤ 0), per IND AS 12, since no company owes current tax on a loss. Every other line above is computed directly from real Trial Balance ledger movements for the period shown.'] },
+    { cells: ['Tax is estimated at a flat 25% Current + 1% Deferred of Profit Before Tax in a profitable month (the same current+deferred model the statutory P&L Account uses) — this Trial Balance carries no dedicated tax-provision ledger to derive a real cash-tax figure from — and nil in a loss-making month (PBT ≤ 0), per IND AS 12, since no company owes current tax on a loss. Every other line above is computed directly from real Trial Balance ledger movements for the period shown.'] },
   ];
   buildSheet(wb, 'MIS Report', stmt, [26, ...mis.columns.map(() => 11), 13]);
 

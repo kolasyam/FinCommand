@@ -2,10 +2,14 @@
 
 import { useState } from 'react';
 import { useDashboard } from '@/lib/dashboard/DashboardContext';
+import { Kpi } from '../Kpi';
 import { DownloadBar } from '../DownloadBar';
-import { fn, frRaw, pct, numTone, getFyLabel, getFyShortLabel, getUnitHeader, type DisplayUnit } from '@/lib/utils/format';
+import { fn, frRaw, pct, numTone, kpiTone, getFyLabel, getFyShortLabel, getUnitHeader, type DisplayUnit } from '@/lib/utils/format';
 import { getCurrencyMeta } from '@/lib/services/currency';
 import { ThreeYearBanner, ThreeYearHeader, ThreeYearRow } from '../ThreeYearFrame';
+import { WaterfallChart, type WaterfallStep } from '@/components/charts/WaterfallChart';
+import { CustomizableTabPanel } from './dashboard-builder/CustomizableTabPanel';
+import { PL_DEFAULT_WIDGETS } from '@/lib/dashboard-builder/default-layout';
 
 interface PlRowProps {
   label: string;
@@ -202,9 +206,83 @@ export function PLTab() {
   const compare = hasPrev && showComparison;
   const colSpan = compare ? 5 : 3;
 
+  const expensePct = pl.revenue > 0 ? (pl.total_expenses / pl.revenue) * 100 : null;
+  const pbtMargin = pl.revenue > 0 ? (pl.pbt / pl.revenue) * 100 : null;
+  const patMargin = pl.revenue > 0 ? (pl.pat / pl.revenue) * 100 : null;
+
+  // A fully connected bridge — every step is a real computePL() figure, and
+  // the running total lands exactly on PBT and then exactly on PAT with no
+  // gap. This goes one step further than the bespoke P&L PDF's own "Profit
+  // Bridge" chart (lib/exports/pl-pdf.ts), which omits Other Income and Tax
+  // and so visually jumps from "after Depreciation" straight to PAT — fine
+  // on paper next to the full statement table, but worth doing properly for
+  // a live, standalone chart. PBT is included as its own checkpoint bar
+  // (isTotal) specifically so Tax is deducted from the real PBT, not from
+  // whatever the preceding deltas happen to sum to.
+  const waterfallSteps: WaterfallStep[] = [
+    { label: 'Revenue', value: pl.revenue, isTotal: true },
+    { label: '+ Other Income', value: pl.other_income },
+    { label: '- Cost of Services', value: -pl.cos },
+    { label: '- Employee Costs', value: -pl.employee_benefits },
+    { label: '- Other Expenses', value: -pl.other_expenses },
+    { label: '- Finance Costs', value: -pl.finance_costs },
+    { label: '- Depreciation', value: -pl.depreciation },
+    { label: 'PBT', value: pl.pbt, isTotal: true },
+    { label: '- Tax', value: -(pl.current_tax + pl.deferred_tax) },
+    { label: 'PAT', value: pl.pat, isTotal: true },
+  ];
+
+  // Split in two, per BalanceSheetTab.tsx's own already-corrected
+  // architecture (see its doc comment / dashboard-builder-engine.ts's
+  // TabKey doc comment for why this shape, not the original one-panel
+  // CustomizableTabPanel wrap, is mandatory for a Schedule III statutory
+  // statement): only the real supplementary content (the KPI strip + Profit
+  // Bridge waterfall) goes inside CustomizableTabPanel's fixedView. The
+  // statutory Statement of Profit & Loss renders directly in this
+  // component, unconditionally, and is never passed to CustomizableTabPanel
+  // at all — so it can never be swapped out for the widget grid.
+
+  // ── Supplementary zone (customizable) — KPI strip + Profit Bridge ──
+  const supplementaryView = (
+    <div>
+      {/* P&L at a Glance — real KPI summary + live profit bridge, mirroring
+          the bespoke PDF export's own front page (previously only available
+          on download). The statutory statement below is untouched. */}
+      <div className="grid4">
+        <Kpi label="Total Income" value={fn(pl.total_income, 2, displayUnit)} change={`Revenue ${fn(pl.revenue, 2, displayUnit)} + Other ${fn(pl.other_income, 2, displayUnit)}`} tone="neu" />
+        <Kpi label="Total Expenses" value={fn(pl.total_expenses, 2, displayUnit)} change={expensePct != null ? `${expensePct.toFixed(1)}% of Revenue` : '—'} tone="neu" />
+        <Kpi label="Profit Before Tax" value={fn(pl.pbt, 2, displayUnit)} change={pbtMargin != null ? `Margin ${pbtMargin.toFixed(1)}%` : '—'} tone={kpiTone(pl.pbt)} />
+        <Kpi label="Profit After Tax" value={fn(pl.pat, 2, displayUnit)} change={patMargin != null ? `Margin ${patMargin.toFixed(1)}%` : '—'} tone={kpiTone(pl.pat)} />
+      </div>
+
+      <div className="card">
+        <div className="card-hdr">
+          <span className="ct">Profit Bridge — Revenue to PAT</span>
+          <span className="cbadge cb-blue">{unitLabel}</span>
+        </div>
+        <div className="card-body">
+          <div style={{ display: 'flex', gap: 14, fontSize: 10, color: 'var(--text2)', marginBottom: 8 }}>
+            <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#1E3A8A', marginRight: 4, verticalAlign: 'middle' }} />Revenue / PBT / PAT</span>
+            <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#1D9E75', marginRight: 4, verticalAlign: 'middle' }} />Increase</span>
+            <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#D85A30', marginRight: 4, verticalAlign: 'middle' }} />Deduction</span>
+          </div>
+          <div style={{ position: 'relative', height: 220 }}><WaterfallChart steps={waterfallSteps} unit={displayUnit} /></div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div>
       <DownloadBar title={`Statement of Profit & Loss · ${fyLabel}`} subtitle={`Schedule III · IND AS · ${unitLabel} · ${period_label}`} section="pl" compareEnabled={showComparison} />
+
+      <CustomizableTabPanel tabKey="pl" defaultWidgets={PL_DEFAULT_WIDGETS} fixedView={supplementaryView} />
+
+      {/* ── Fixed zone (never a widget, never wrapped, never swapped out) ──
+          The mandated Schedule III Statement of Profit & Loss — every line,
+          every Note reference, byte-identical to how it always rendered,
+          whether or not the supplementary zone above is being customized
+          right now. */}
       <div className="card">
         <div className="card-hdr" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
           <div>

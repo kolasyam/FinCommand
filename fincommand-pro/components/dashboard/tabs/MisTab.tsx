@@ -5,6 +5,9 @@ import { Kpi } from '../Kpi';
 import { fl as flRaw, fn as fnRaw, pct, signedPct, numTone, kpiTone, getFyShortLabel, getUnitHeader, unitSuffix } from '@/lib/utils/format';
 import { DownloadBar } from '../DownloadBar';
 import { ThreeYearBanner, ThreeYearHeader, ThreeYearRow } from '../ThreeYearFrame';
+import { CustomizableTabPanel } from './dashboard-builder/CustomizableTabPanel';
+import { MIS_DEFAULT_WIDGETS } from '@/lib/dashboard-builder/default-layout';
+import { MisTrendChart } from '@/components/charts/MisTrendChart';
 
 export function MisTab() {
   const { bundle, granularity, threeYear, yearType, displayUnit, presentationCurrency } = useDashboard();
@@ -104,18 +107,18 @@ export function MisTab() {
     { label: 'Depreciation & Amortisation', key: 'dep' },
     { label: 'Total Expenses', key: 'totExp', bold: true },
     { label: 'Profit Before Tax', key: 'pbt', bold: true, tone: true },
-    { label: 'Tax (25%, estimated)', key: 'tax' },
+    { label: 'Tax (25% Current + 1% Deferred, estimated)', key: 'tax' },
     { label: 'Profit After Tax', key: 'pat', grand: true, tone: true },
   ];
 
-  return (
+  const fixedView = (
     <div>
       <DownloadBar
         title={`MIS Report — Monthly P&L · ${displayLabel}`}
         subtitle={`Month-wise Revenue · Gross Profit · EBITDA · PAT · Margins · ${unitLabel}`}
         section="mis"
       />
-      <div className="grid3">
+      <div className="grid4">
         <Kpi
           label="Period Revenue"
           value={fl(t.rev)}
@@ -124,6 +127,23 @@ export function MisTab() {
         />
         <Kpi label="Gross Margin" value={pct(t.gm)} change={`GP ${fl(t.rev - t.cos)}${unitSfx}`} tone={kpiTone(t.gm)} />
         <Kpi label="EBITDA Margin" value={pct(t.em)} change={`EBITDA ${fl(t.ebitda)}${unitSfx}`} tone={kpiTone(t.em)} />
+        <Kpi label="Profit After Tax" value={fl(t.pat)} change={`Margin ${pct(t.pm)}`} tone={kpiTone(t.pat)} />
+      </div>
+      <div className="card">
+        <div className="card-hdr">
+          <span className="ct">Revenue, EBITDA &amp; PAT — Monthly Trend</span>
+          <span className="cbadge cb-blue">{unitLabel}</span>
+        </div>
+        <div className="card-body">
+          <div style={{ display: 'flex', gap: 14, fontSize: 10, color: 'var(--text2)', marginBottom: 8 }}>
+            <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#B5D4F4', marginRight: 4, verticalAlign: 'middle' }} />Revenue</span>
+            <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#5DCAA5', marginRight: 4, verticalAlign: 'middle' }} />EBITDA</span>
+            <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#1E3A8A', marginRight: 4, verticalAlign: 'middle' }} />PAT</span>
+          </div>
+          <div style={{ position: 'relative', height: 220 }}>
+            <MisTrendChart labels={mis.columns} revenue={mis.data.map(d => d.rev)} ebitda={mis.data.map(d => d.ebitda)} pat={mis.data.map(d => d.pat)} unit={displayUnit} />
+          </div>
+        </div>
       </div>
       <div className="card">
         <div className="card-hdr">
@@ -170,8 +190,10 @@ export function MisTab() {
         </div>
       </div>
       <div className="info-bar" style={{ marginTop: 10, fontSize: 11 }}>
-        Revenue, income and expense lines above are computed directly from real Trial Balance ledger movements for each month — no assumed percentages. <strong>Tax</strong> is the one modeled line: this Trial Balance carries no dedicated tax-provision ledger to derive a real figure from, so it&apos;s estimated at a flat 25% of Profit Before Tax in a profitable month (each month independently, matching the annual Total column exactly) — and nil in a loss-making month (PBT ≤ 0), per IND AS 12, since no company owes current tax on a loss. Treat PAT below EBITDA/PBT as indicative for planning, not a substitute for your actual tax computation.
+        Revenue, income and expense lines above are computed directly from real Trial Balance ledger movements for each month — no assumed percentages. <strong>Tax</strong> is the one modeled line: this Trial Balance carries no dedicated tax-provision ledger to derive a real figure from, so it&apos;s estimated at a flat 25% Current + 1% Deferred of Profit Before Tax in a profitable month (each month independently, matching the annual Total column exactly, and the same current+deferred model the statutory P&amp;L Account uses) — and nil in a loss-making month (PBT ≤ 0), per IND AS 12, since no company owes current tax on a loss. Treat PAT below EBITDA/PBT as indicative for planning, not a substitute for your actual tax computation.
       </div>
     </div>
   );
+
+  return <CustomizableTabPanel tabKey="mis" defaultWidgets={MIS_DEFAULT_WIDGETS} fixedView={fixedView} />;
 }

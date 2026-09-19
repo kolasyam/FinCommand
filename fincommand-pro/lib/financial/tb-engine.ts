@@ -339,7 +339,23 @@ export function computeMIS(ledgers: TbLedgerRow[], periodParams: PeriodParams): 
     // show a negative modeled tax share here, which is correct: it's an
     // allocation of one real, positive annual tax figure across months, not
     // twelve independent tax computations.
-    const tax = periodIsProfitable ? Math.round(pbt * 0.25) : 0;
+    //
+    // Regression fix: this used to be current tax only (25%), while
+    // computePL()'s statutory P&L separately modeled current tax (25%) AND
+    // deferred tax (1%) — so MIS's own PAT silently disagreed with the
+    // statutory P&L's PAT for the exact same period (confirmed: a real ₹234
+    // gap on a ₹23,448 PBT period). Using the same combined rate closes that
+    // systematic gap. A much smaller residual can still remain (confirmed: ₹1
+    // on the same real data) because this Total is the SUM of twelve
+    // independently-rounded monthly figures (by design — see the Total-
+    // column comment below), while computePL() rounds once on the whole
+    // period's PBT; Math.round() isn't additive, so the two methodologies can
+    // land a rupee or two apart. That's the same, already-accepted "Math.
+    // round isn't additive" limit this file documents for MIS's own Total-
+    // vs-monthly-cells consistency, not a new problem — see this app's "every
+    // report must agree with every other report" principle for why the
+    // *rate* must match even though sub-rupee reconciliation isn't chased.
+    const tax = periodIsProfitable ? Math.round(pbt * 0.25) + Math.round(pbt * 0.01) : 0;
     const pat = pbt - tax;
     const ebitda = rev - cos - emp - oex;
     const gm = rev > 0 ? ((rev - cos) / rev * 100) : 0;
@@ -349,7 +365,7 @@ export function computeMIS(ledgers: TbLedgerRow[], periodParams: PeriodParams): 
   });
 
   // Sum the already-rounded monthly columns rather than independently
-  // re-rounding 25% of the full-period PBT. Every other row (Revenue,
+  // re-rounding the full-period PBT's current+deferred tax. Every other row (Revenue,
   // Total Income, PBT, EBITDA, ...) is a plain sum of real ledger figures,
   // so its Total column exactly equals the sum of the monthly columns by
   // construction — but Math.round() is not additive (round(a)+round(b) can
@@ -1195,5 +1211,237 @@ export function computeCustomerMargin(
     .sort((a, b) => b.revenue - a.revenue);
 
   return { entries, org_tracks_direct_cost: orgTracksDirectCost };
+}
+
+// ── Custom ledger metrics ──────────────────────────────────────────────────
+//
+// A company-defined metric computed from its own real Trial Balance ledgers
+// selected by a structured filter (e.g. "ledger name contains Salary AND
+// Note = 23") — lives HERE, in the single computation engine, rather than in
+// the metric/widget layer, so a ledger metric uses exactly the same period
+// math (resolvePeriod/periodNet/closingBalance) and normal-balance sign
+// convention as every statutory figure in the app. The filter is plain data
+// (field/operator/value triples), matched in code — never a string parsed as
+// an expression, same guarantee as custom-metric-engine.ts's formula trees.
+
+export const LEDGER_FILTER_FIELDS = ['ledger_name', 'ledger_code', 'note_no', 'note_name', 'section', 'zoho_account_type', 'amount'] as const;
+export type LedgerFilterField = typeof LEDGER_FILTER_FIELDS[number];
+/** Fields compared as numbers. `amount` = the ledger's own figure for the selected period and measure (after the sign setting) — the same figure the matched-ledger list shows. */
+export const NUMERIC_LEDGER_FIELDS: readonly LedgerFilterField[] = ['note_no', 'amount'];
+
+export const LEDGER_FILTER_OPERATORS = [
+  'equals', 'not_equals', 'contains', 'not_contains', 'starts_with', 'in', 'not_in',
+  'gt', 'gte', 'lt', 'lte', 'between', 'is_empty', 'is_not_empty',
+] as const;
+export type LedgerFilterOperator = typeof LEDGER_FILTER_OPERATORS[number];
+/** Operators that only make sense on a numeric field. */
+export const NUMERIC_ONLY_OPERATORS: readonly LedgerFilterOperator[] = ['gt', 'gte', 'lt', 'lte', 'between'];
+/** Operators that only make sense on a text field. */
+export const TEXT_ONLY_OPERATORS: readonly LedgerFilterOperator[] = ['contains', 'not_contains', 'starts_with'];
+/** Operators that take no value. */
+export const VALUELESS_OPERATORS: readonly LedgerFilterOperator[] = ['is_empty', 'is_not_empty'];
+
+export interface LedgerFilterCondition {
+  field: LedgerFilterField;
+  operator: LedgerFilterOperator;
+  /** A single value for most operators; a list for in/not_in; [min, max] for between; '' for is_empty/is_not_empty. */
+  value: string | string[];
+}
+
+export const LEDGER_AGGREGATIONS = ['sum', 'avg', 'count', 'min', 'max'] as const;
+export type LedgerAggregation = typeof LEDGER_AGGREGATIONS[number];
+
+export interface LedgerMetricSpec {
+  match: 'all' | 'any';
+  conditions: LedgerFilterCondition[];
+  /** 'movement' = net movement summed over the selected period's months (P&L-style); 'closing' = closing balance at the period end (Balance-Sheet-style, cumulative from the opening balance). */
+  measure: 'movement' | 'closing';
+  /** 'natural' keeps each ledger's normal-balance sign (the convention every note total uses); 'invert' flips it — e.g. to show a Cr-normal figure as an outflow. */
+  sign: 'natural' | 'invert';
+  /**
+   * How the matched ledgers' figures combine (default 'sum'). avg/count/min/
+   * max consider only ledgers with a non-zero figure in the period (or
+   * column) — "ledgers with activity" — so sum = avg × count always holds and
+   * a dormant ledger never drags an average to zero or wins "smallest".
+   */
+  aggregation?: LedgerAggregation;
+}
+
+export interface LedgerMetricResult {
+  /** null only when avg/min/max has no ledger with activity to judge (never a fabricated 0). */
+  value: number | null;
+  /** One point per reporting column of the selected period — the exact same columns/labels computeMIS() produces, so a ledger metric plots on the same axis as every built-in monthly metric. */
+  trend: { label: string; value: number }[];
+  /** Each matched ledger's own figure for the whole period, largest magnitude first. */
+  breakdown: { label: string; value: number }[];
+  matchedCount: number;
+}
+
+function ledgerFieldValue(row: TbLedgerRow, field: Exclude<LedgerFilterField, 'amount'>): string {
+  const raw = row[field];
+  return raw == null ? '' : String(raw).trim().toLowerCase();
+}
+
+function toNumber(v: unknown): number | null {
+  if (v == null) return null;
+  const s = String(v).trim().replace(/,/g, '');
+  if (s === '') return null;
+  const num = Number(s);
+  return Number.isFinite(num) ? num : null;
+}
+
+function conditionMatches(row: TbLedgerRow, c: LedgerFilterCondition, amountOf?: (row: TbLedgerRow) => number): boolean {
+  const isNumeric = NUMERIC_LEDGER_FIELDS.includes(c.field);
+  const values = (Array.isArray(c.value) ? c.value : [c.value]).map((v) => String(v).trim().toLowerCase());
+  const single = values[0] ?? '';
+
+  if (c.field === 'amount' && !amountOf) return false;
+  const text = c.field === 'amount' ? '' : ledgerFieldValue(row, c.field);
+  const num = c.field === 'amount' ? amountOf!(row) : toNumber(text);
+
+  switch (c.operator) {
+    case 'is_empty': return c.field === 'amount' ? num === 0 : text === '';
+    case 'is_not_empty': return c.field === 'amount' ? num !== 0 : text !== '';
+    case 'gt': case 'gte': case 'lt': case 'lte': {
+      const target = toNumber(single);
+      if (num == null || target == null) return false;
+      return c.operator === 'gt' ? num > target : c.operator === 'gte' ? num >= target : c.operator === 'lt' ? num < target : num <= target;
+    }
+    case 'between': {
+      const lo = toNumber(values[0]);
+      const hi = toNumber(values[1]);
+      if (num == null || lo == null || hi == null) return false;
+      return num >= lo && num <= hi;
+    }
+    default: break;
+  }
+  if (isNumeric) {
+    // equals / not_equals / in / not_in on a number compare numerically (so "23" matches 23.0).
+    const nums = values.map(toNumber);
+    switch (c.operator) {
+      case 'equals': return num != null && nums[0] != null && num === nums[0];
+      case 'not_equals': return !(num != null && nums[0] != null && num === nums[0]);
+      case 'in': return num != null && nums.some((x) => x != null && x === num);
+      case 'not_in': return !(num != null && nums.some((x) => x != null && x === num));
+      default: return false;
+    }
+  }
+  switch (c.operator) {
+    case 'equals': return text === single;
+    case 'not_equals': return text !== single;
+    case 'contains': return single !== '' && text.includes(single);
+    case 'not_contains': return single === '' || !text.includes(single);
+    case 'starts_with': return single !== '' && text.startsWith(single);
+    case 'in': return values.includes(text);
+    case 'not_in': return !values.includes(text);
+    default: return false;
+  }
+}
+
+/**
+ * Whether one ledger row is selected by a ledger-metric filter. Text
+ * comparison is case- and surrounding-whitespace-insensitive; numeric fields
+ * (note no., amount) compare as numbers. A spec with no conditions matches
+ * NOTHING — summing every ledger in a Trial Balance across mixed Dr/Cr
+ * normal balances yields a meaningless number, so "no filter" means "not
+ * configured", never "everything". A Zoho parent/group row
+ * (is_child_present) never matches, so a filter can't double-count a group
+ * total plus its own children. `amountOf` supplies the `amount` field (the
+ * ledger's figure for the period being computed); without it an amount
+ * condition never matches.
+ */
+export function ledgerMatchesSpec(
+  row: TbLedgerRow, spec: Pick<LedgerMetricSpec, 'match' | 'conditions'>, amountOf?: (row: TbLedgerRow) => number,
+): boolean {
+  if (!spec.conditions.length) return false;
+  if (row.is_child_present === true) return false;
+  return spec.match === 'any'
+    ? spec.conditions.some((c) => conditionMatches(row, c, amountOf))
+    : spec.conditions.every((c) => conditionMatches(row, c, amountOf));
+}
+
+/** Combines per-ledger figures per LedgerMetricSpec.aggregation (see its doc comment). */
+function aggregateFigures(figures: number[], agg: LedgerAggregation): number | null {
+  if (agg === 'sum') return figures.reduce((sum, v) => sum + v, 0);
+  const active = figures.filter((v) => Math.abs(v) > 1e-9);
+  if (agg === 'count') return active.length;
+  if (!active.length) return null;
+  if (agg === 'avg') return active.reduce((sum, v) => sum + v, 0) / active.length;
+  return agg === 'min' ? Math.min(...active) : Math.max(...active);
+}
+
+/**
+ * Computes a ledger metric for the selected period from real ledgers — the
+ * same `ledgers` array (already CY-merged where applicable) the route feeds
+ * every other compute* function, so a ledger metric can never disagree with
+ * the statutory reports about which months "the period" covers. Which
+ * ledgers match is decided once, on the whole period (so an `amount`
+ * condition means "the ledger's figure for this period"); the trend then
+ * aggregates those same ledgers column by column.
+ */
+export function computeLedgerMetric(ledgers: TbLedgerRow[], spec: LedgerMetricSpec, periodParams: PeriodParams): LedgerMetricResult {
+  const { plIndices, bsLastIdx, colLabels, colIndices } = resolvePeriod(periodParams);
+  const signFactor = spec.sign === 'invert' ? -1 : 1;
+  const agg: LedgerAggregation = spec.aggregation ?? 'sum';
+
+  const figureFor = (row: TbLedgerRow, indices: number[]): number => {
+    if (spec.measure === 'closing') {
+      const lastIdx = indices.length ? indices[indices.length - 1] : bsLastIdx;
+      return closingBalance(row, lastIdx) * signFactor;
+    }
+    return periodNet(row, indices) * signFactor;
+  };
+  const periodIndices = spec.measure === 'closing' ? [bsLastIdx] : plIndices;
+  const amountOf = (row: TbLedgerRow) => figureFor(row, periodIndices);
+
+  const matched = ledgers.filter((row) => ledgerMatchesSpec(row, spec, amountOf));
+  const perLedger = matched.map((row) => ({ row, value: amountOf(row) }));
+  const value = aggregateFigures(perLedger.map((p) => p.value), agg);
+
+  const trend = colIndices.map((idx, i) => ({
+    label: colLabels[i],
+    value: aggregateFigures(matched.map((row) => figureFor(row, idx)), agg) ?? 0,
+  }));
+
+  // Disambiguate the (rare) case of two matched ledgers sharing a name by
+  // appending the ledger code, so a breakdown never shows two identical
+  // labels that a reader can't tell apart.
+  const nameCounts = new Map<string, number>();
+  matched.forEach((row) => nameCounts.set(row.ledger_name, (nameCounts.get(row.ledger_name) ?? 0) + 1));
+  const breakdown = perLedger
+    .map(({ row, value: v }) => ({
+      label: (nameCounts.get(row.ledger_name) ?? 0) > 1 && row.ledger_code ? `${row.ledger_name} (${row.ledger_code})` : row.ledger_name,
+      value: v,
+    }))
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+
+  return { value, trend, breakdown, matchedCount: matched.length };
+}
+
+/**
+ * The period immediately before `params` (same length), and whether it comes
+ * from the SAME financial year's ledgers or the PREVIOUS one:
+ *   Q2-Q4 → the previous quarter (same FY); Q1 → Q4 of the previous FY;
+ *   H2 → H1 (same FY); H1 → H2 of the previous FY;
+ *   a whole-year view (annual, or quarterly/half-yearly with no sub-period)
+ *   → the same view of the previous FY.
+ * In CY mode, only a sub-period that has a predecessor inside the same merged
+ * calendar year is available (Q2-Q4, H2); anything else returns null — the
+ * previous calendar year's data isn't assembled here, so it's honestly
+ * unavailable rather than approximated.
+ */
+export function priorPeriodOf(params: PeriodParams): { params: PeriodParams; source: 'same' | 'previous' } | null {
+  const { periodType = 'annual', period = null, yearType = 'FY' } = params;
+  const cy = yearType === 'CY';
+  if (periodType === 'quarterly' && period) {
+    const qi = ['Q1', 'Q2', 'Q3', 'Q4'].indexOf(period);
+    if (qi > 0) return { params: { periodType, period: (['Q1', 'Q2', 'Q3'] as const)[qi - 1], yearType }, source: 'same' };
+    return cy ? null : { params: { periodType, period: 'Q4', yearType }, source: 'previous' };
+  }
+  if (periodType === 'halfyear' && period) {
+    if (period === 'H2') return { params: { periodType, period: 'H1', yearType }, source: 'same' };
+    return cy ? null : { params: { periodType, period: 'H2', yearType }, source: 'previous' };
+  }
+  return cy ? null : { params: { periodType, period, yearType }, source: 'previous' };
 }
 

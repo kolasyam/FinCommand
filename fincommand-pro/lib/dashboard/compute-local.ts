@@ -50,6 +50,7 @@ export function computeLocalReportBundle(fyKey: SampleFyKey, params: PeriodParam
   let prev_mis = null;
   let prev_notes = null;
   let prev_treasury = null;
+  let prev_ratios = null;
   let prev_financial_year = null;
 
   if (prevKey) {
@@ -60,6 +61,7 @@ export function computeLocalReportBundle(fyKey: SampleFyKey, params: PeriodParam
     prev_mis = computeMIS(prevLedgers, params);
     prev_notes = Object.values(computeNotes(prevLedgers, params)).sort((a, b) => a.note_no - b.note_no);
     prev_treasury = computeTreasury(prevLedgers, params);
+    prev_ratios = computeRatios(prevLedgers, params);
     prev_financial_year = SAMPLE_FY_META[prevKey];
   }
 
@@ -134,6 +136,7 @@ export function computeLocalReportBundle(fyKey: SampleFyKey, params: PeriodParam
     cashflow: computeCashFlow(computeLedgers, params),
     prev_cashflow,
     ratios: computeRatios(computeLedgers, params),
+    prev_ratios,
     top_customers,
     vendor_expense,
     customer_margin,

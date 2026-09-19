@@ -11,7 +11,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { ReportBundle } from '@/lib/dashboard/types';
-import { fl, fn, pct, signedPct, fcPdf, getFyLabel, getFyShortLabel, getUnitHeaderPdf, unitSuffix, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
+import { fl, fn, pct, signedPct, fcUnitPdf, getFyLabel, getFyShortLabel, getUnitHeaderPdf, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
 import {
   NAVY, NAVY_DARK, SLATE, BORDER, RED, GREEN, PAGE_W, MARGIN, CONTENT_W, DEFAULT_COMPANY_NAME,
   toneColor, addPdfHeader, addPdfFooter, drawKpiCards, pdfSectionTitle, pdfTableBottom, PDF_TABLE_STYLES,
@@ -118,6 +118,9 @@ export function buildMisPdf(bundle: ReportBundle, companyName = DEFAULT_COMPANY_
   const fyShort = getFyShortLabel(bundle.financial_year, yearType);
   const { mis } = bundle;
   const t = mis.totals;
+  const revYoy = compare && bundle.prev_mis && bundle.prev_mis.totals.rev !== 0
+    ? ((t.rev - bundle.prev_mis.totals.rev) / Math.abs(bundle.prev_mis.totals.rev)) * 100
+    : null;
 
   const header = () => addPdfHeader(doc, companyName, 'MIS Report · Monthly P&L', fyLabel, bundle.period_label);
   header();
@@ -134,10 +137,14 @@ export function buildMisPdf(bundle: ReportBundle, companyName = DEFAULT_COMPANY_
   doc.line(MARGIN, 44, PAGE_W - MARGIN, 44);
 
   let y = drawKpiCards(doc, [
-    { label: 'Revenue', value: fcPdf(t.rev, currency), sub: `${fl(t.rev, 2, unit)} ${unitSuffix(unit)}`, tone: 0 },
-    { label: 'Gross Profit', value: fcPdf(t.rev - t.cos, currency), sub: `Margin ${pct(t.gm)}`, tone: t.rev - t.cos },
-    { label: 'EBITDA (Operating)', value: fcPdf(t.ebitda, currency), sub: `Margin ${pct(t.em)}`, tone: t.ebitda },
-    { label: 'PAT', value: fcPdf(t.pat, currency), sub: `Margin ${pct(t.pm)}`, tone: t.pat },
+    // fcUnitPdf() (unit-scaled) replaces fcPdf() (adaptive Lakh/Crore,
+    // ignores the Unit Selector — see its own doc comment) so this card's
+    // bolded value tracks the selector the same way the monthly matrix
+    // below it, and the on-screen tab's own KPI, already do.
+    { label: 'Revenue', value: fcUnitPdf(t.rev, unit, currency), sub: revYoy != null ? `${signedPct(revYoy)} YoY` : 'Current period', tone: 0 },
+    { label: 'Gross Profit', value: fcUnitPdf(t.rev - t.cos, unit, currency), sub: `Margin ${pct(t.gm)}`, tone: t.rev - t.cos },
+    { label: 'EBITDA (Operating)', value: fcUnitPdf(t.ebitda, unit, currency), sub: `Margin ${pct(t.em)}`, tone: t.ebitda },
+    { label: 'PAT', value: fcUnitPdf(t.pat, unit, currency), sub: `Margin ${pct(t.pm)}`, tone: t.pat },
   ], 49);
 
   y += 6;
@@ -159,7 +166,7 @@ export function buildMisPdf(bundle: ReportBundle, companyName = DEFAULT_COMPANY_
     { label: 'Depreciation & Amortisation', key: 'dep' },
     { label: 'Total Expenses', key: 'totExp', bold: true },
     { label: 'Profit Before Tax', key: 'pbt', bold: true, tone: true },
-    { label: 'Tax (25%, estimated)', key: 'tax' },
+    { label: 'Tax (25% Current + 1% Deferred, estimated)', key: 'tax' },
     { label: 'Profit After Tax', key: 'pat', bold: true, tone: true },
     { label: 'Gross Margin %', key: 'gm', pctRow: true },
     { label: 'EBITDA Margin %', key: 'em', pctRow: true },
@@ -236,7 +243,7 @@ export function buildMisPdf(bundle: ReportBundle, companyName = DEFAULT_COMPANY_
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(...SLATE);
-  const note = 'Revenue, income and expense lines above are computed directly from real Trial Balance ledger movements for each month - no assumed percentages. Tax is the one modeled line: this Trial Balance carries no dedicated tax-provision ledger to derive a real figure from, so it is estimated at a flat 25% of Profit Before Tax in a profitable month, and nil in a loss-making month (PBT <= 0), per IND AS 12 - a company owes no current tax on a loss.';
+  const note = 'Revenue, income and expense lines above are computed directly from real Trial Balance ledger movements for each month - no assumed percentages. Tax is the one modeled line: this Trial Balance carries no dedicated tax-provision ledger to derive a real figure from, so it is estimated at a flat 25% Current + 1% Deferred of Profit Before Tax in a profitable month (the same current+deferred model the statutory P&L Account uses), and nil in a loss-making month (PBT <= 0), per IND AS 12 - a company owes no current tax on a loss.';
   const split = doc.splitTextToSize(note, CONTENT_W);
   doc.text(split, MARGIN, y + 4);
 

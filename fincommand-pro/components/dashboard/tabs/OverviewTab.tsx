@@ -4,20 +4,29 @@ import { useDashboard } from '@/lib/dashboard/DashboardContext';
 import { Kpi } from '../Kpi';
 import { RevenueEbitdaChart } from '@/components/charts/RevenueEbitdaChart';
 import { MarginTrendChart } from '@/components/charts/MarginTrendChart';
-import { fc as fcRaw, fl as flRaw, fn as fnRaw, frRaw, pct, signedPct, numTone, kpiTone, getFyLabel, getFyShortLabel, getUnitHeader } from '@/lib/utils/format';
+import { fl as flRaw, fn as fnRaw, frRaw, pct, fx, signedPct, numTone, kpiTone, benchmarkTone, getFyLabel, getFyShortLabel, getUnitHeader } from '@/lib/utils/format';
 import { getCurrencyMeta } from '@/lib/services/currency';
 import { DownloadBar } from '../DownloadBar';
+import { CustomizableTabPanel } from './dashboard-builder/CustomizableTabPanel';
+import { OVERVIEW_DEFAULT_WIDGETS } from '@/lib/dashboard-builder/default-layout';
+import { findMetricCatalogEntry } from '@/lib/financial/dashboard-builder-engine';
 
 export function OverviewTab() {
   const { bundle, threeYear, granularity, yearType, dataMode, displayUnit, presentationCurrency } = useDashboard();
-  // Shadow fl()/fn()/fc() with the currently-selected table unit (Lakhs/
-  // Thousands/Crores) / active Presentation Currency bound in — every
-  // existing fl(v)/fn(v)/fc(v) call below stays unchanged. frRaw() (Top
-  // Customers' already-Crores figures) is deliberately left untouched — see
-  // format.ts's doc comments for why.
+  // Shadow fl()/fn() with the currently-selected table unit (Lakhs/
+  // Thousands/Crores) bound in — every existing fl(v)/fn(v) call below
+  // stays unchanged. frRaw() (Top Customers' already-Crores figures) is
+  // deliberately left untouched — see format.ts's doc comments for why.
+  // Every KPI value here now goes through fl()/fn() rather than fc() — see
+  // fc()'s own doc comment: it auto-scales to Lakh/Crore regardless of the
+  // topbar Unit Selector, which used to leave every card on this tab (and,
+  // when Revenue's YoY% caption replaced its old unit-scaled fallback text,
+  // the Revenue card specifically) with NO text that tracked the Unit
+  // Selector at all — unlike every other tab (BalanceSheetTab, MisTab,
+  // PLTab, TreasuryTab, CashFlowTab, ...), whose own KPI cards already use
+  // fl()/fn() as their primary value.
   const fl = (n: number | null | undefined, d?: number) => flRaw(n, d, displayUnit);
   const fn = (n: number | null | undefined, d?: number) => fnRaw(n, d, displayUnit);
-  const fc = (n: number | null | undefined) => fcRaw(n, presentationCurrency);
   const unitLabel = getUnitHeader(displayUnit, presentationCurrency);
   const symbol = getCurrencyMeta(presentationCurrency).symbol;
 
@@ -32,7 +41,7 @@ export function OverviewTab() {
               <Kpi
                 key={y.financial_year.id}
                 label={y.financial_year.label}
-                value={y.mis ? fc(y.mis.rev) : '—'}
+                value={y.mis ? fl(y.mis.rev) : '—'}
                 tone={growth === null ? 'neu' : kpiTone(growth)}
                 change={y.mis ? `${growth !== null ? `Rev ${signedPct(growth)} YoY | ` : 'Base year | '}EBITDA ${pct(y.mis.em)}` : 'No data'}
               />
@@ -44,7 +53,7 @@ export function OverviewTab() {
             <Kpi
               key={`pat-${y.financial_year.id}`}
               label={`PAT — ${y.financial_year.short_label}`}
-              value={y.mis ? fc(y.mis.pat) : '—'}
+              value={y.mis ? fl(y.mis.pat) : '—'}
               tone={y.mis ? kpiTone(y.mis.pat) : 'neu'}
               change={y.mis ? `Net ${pct(y.mis.pm)} | GM ${pct(y.mis.gm)}` : undefined}
             />
@@ -61,7 +70,7 @@ export function OverviewTab() {
 
   if (!bundle) return null;
 
-  const { mis } = bundle;
+  const { mis, treasury, ratios } = bundle;
   const t = mis.totals;
   const labels = mis.columns;
   const revenue = mis.data.map(d => d.rev);
@@ -70,15 +79,92 @@ export function OverviewTab() {
   const em = mis.data.map(d => d.em);
   const pm = mis.data.map(d => d.pm);
 
-  return (
+  // Real, already-computed cash flow/ratio/balance-sheet figures — same
+  // fields BoardPackTab/TreasuryTab/RatiosTab/WorkingCapitalTab already read,
+  // just surfaced here too so Executive Overview covers profitability,
+  // liquidity, solvency AND cash position on one landing page.
+  const ocfTotal = (bundle.cashflow.operating as Record<string, unknown>).total as number;
+  // Free Cash Flow (Operating CF − Capex) — real, already-computed
+  // (computeCashFlow()'s own field, identical to what CashFlowTab.tsx's own
+  // fixed zone and the Cash Flow tab's `free_cash_flow` METRIC_CATALOG entry
+  // both read), previously computed but never surfaced anywhere on this
+  // tab despite being a headline cash metric any CFO would expect next to
+  // Operating Cash Flow — added per this build's own gap audit.
+  const fcfTotal = bundle.cashflow.free_cash_flow;
+  const netWorkingCapital = bundle.bs.assets.total_ca - bundle.bs.equity_liabilities.total_cl;
+  // Real benchmarks — read from METRIC_CATALOG's own current_ratio/roe_pct/
+  // debt_equity entries rather than retyped a third time (previously Current
+  // Ratio and Debt/Equity carried no tone at all, and ROE used plain
+  // sign-based numTone() instead of comparing against its real 15% target —
+  // a positive-but-below-benchmark ROE would have shown green/favorable).
+  const crThresholds = findMetricCatalogEntry('current_ratio')!.thresholds!;
+  const roeThresholds = findMetricCatalogEntry('roe_pct')!.thresholds!;
+  const deThresholds = findMetricCatalogEntry('debt_equity')!.thresholds!;
+  // Real YoY% (same prev_mis-derived figure the customized ov-revenue stat
+  // card already shows via its own deltaPct) — this card previously showed
+  // the identical Revenue number restated in the selected unit instead,
+  // which carried no real information the primary value above it didn't
+  // already show, and left the Fixed and Customized views displaying two
+  // genuinely different pieces of context for the same KPI.
+  const revYoy = bundle.prev_mis && bundle.prev_mis.totals.rev !== 0
+    ? ((t.rev - bundle.prev_mis.totals.rev) / Math.abs(bundle.prev_mis.totals.rev)) * 100
+    : null;
+
+  const supplementaryView = (
     <div>
-      <DownloadBar title={`Executive Overview · ${getFyLabel(bundle.financial_year, yearType)}`} subtitle={`KPIs, Revenue, EBITDA, PAT & Margin Trends · ${unitLabel}`} section="overview" />
       <div className="grid4">
-        <Kpi label="Revenue" value={fc(t.rev)} change={`${fl(t.rev)} ${displayUnit}`} tone="neu" />
-        <Kpi label="Gross Profit" value={fc(t.rev - t.cos)} change={`GM ${pct(t.gm)}`} tone={kpiTone(t.rev - t.cos)} />
-        <Kpi label="EBITDA" value={fc(t.ebitda)} change={`Margin ${pct(t.em)}`} tone={kpiTone(t.ebitda)} />
-        <Kpi label="PAT" value={fc(t.pat)} change={`Net ${pct(t.pm)}`} tone={kpiTone(t.pat)} />
+        <Kpi label="Revenue" value={fl(t.rev)} change={revYoy != null ? `${signedPct(revYoy)} YoY` : `${fl(t.rev)} ${displayUnit}`} tone={revYoy != null ? kpiTone(revYoy) : 'neu'} />
+        <Kpi label="Gross Profit" value={fl(t.rev - t.cos)} change={`GM ${pct(t.gm)}`} tone={kpiTone(t.rev - t.cos)} />
+        <Kpi label="EBITDA" value={fl(t.ebitda)} change={`Margin ${pct(t.em)}`} tone={kpiTone(t.ebitda)} />
+        <Kpi label="PAT" value={fl(t.pat)} change={`Net ${pct(t.pm)}`} tone={kpiTone(t.pat)} />
       </div>
+      <div className="grid3">
+        <Kpi
+          label="Total Treasury" value={fl(treasury.total)}
+          change={`Cash & Bank ${fl(treasury.total_cash_and_bank)} | FDs ${fl(treasury.total_fd)}${treasury.total_mf > 0 ? ` | MFs ${fl(treasury.total_mf)}` : ''}`}
+          tone="neu"
+        />
+        <Kpi
+          label="Operating Cash Flow" value={fl(ocfTotal)}
+          change={`OCF/PAT ${ratios.cashflow.ocf_to_pat != null ? fx(ratios.cashflow.ocf_to_pat) : 'n/a'}`}
+          tone={kpiTone(ocfTotal)}
+        />
+        <Kpi
+          label="Free Cash Flow" value={fl(fcfTotal)}
+          change="Operating CF − Capex"
+          tone={kpiTone(fcfTotal)}
+        />
+      </div>
+
+      <div className="card">
+        <div className="card-hdr">
+          <span className="ct">Financial Health &amp; Solvency</span>
+          <span className="cbadge cb-blue">Liquidity · Profitability · Leverage</span>
+        </div>
+        <div className="card-body grid4" style={{ marginBottom: 0 }}>
+          <div className="so-item">
+            <div className="so-lbl">Current Ratio</div>
+            <div className={`so-val ${benchmarkTone(ratios.liquidity.current_ratio, crThresholds.target, crThresholds.direction)}`}>{fx(ratios.liquidity.current_ratio)}</div>
+            <div style={{ fontSize: 10, color: 'var(--text3)' }}>Benchmark &gt; 1.5x</div>
+          </div>
+          <div className="so-item">
+            <div className="so-lbl">Net Working Capital</div>
+            <div className={`so-val ${numTone(netWorkingCapital)}`}>{fn(netWorkingCapital)}</div>
+            <div style={{ fontSize: 10, color: 'var(--text3)' }}>Current Assets − Current Liabilities</div>
+          </div>
+          <div className="so-item">
+            <div className="so-lbl">Return on Equity</div>
+            <div className={`so-val ${benchmarkTone(ratios.profitability.roe, roeThresholds.target, roeThresholds.direction)}`}>{pct(ratios.profitability.roe)}</div>
+            <div style={{ fontSize: 10, color: 'var(--text3)' }}>Benchmark &gt; 15%</div>
+          </div>
+          <div className="so-item">
+            <div className="so-lbl">Debt / Equity</div>
+            <div className={`so-val ${benchmarkTone(ratios.leverage.debt_equity, deThresholds.target, deThresholds.direction)}`}>{fx(ratios.leverage.debt_equity)}</div>
+            <div style={{ fontSize: 10, color: 'var(--text3)' }}>Benchmark &lt; 1.0x</div>
+          </div>
+        </div>
+      </div>
+
       <div className="grid2">
         <div className="card">
           <div className="card-hdr">
@@ -106,7 +192,16 @@ export function OverviewTab() {
           </div>
         </div>
       </div>
-      <div className="card">
+    </div>
+  );
+
+  return (
+    <div>
+      <DownloadBar title={`Executive Overview · ${getFyLabel(bundle.financial_year, yearType)}`} subtitle={`KPIs, Treasury, Cash Flow, Ratios & Margin Trends · ${unitLabel}`} section="overview" />
+
+      <CustomizableTabPanel tabKey="overview" defaultWidgets={OVERVIEW_DEFAULT_WIDGETS} fixedView={supplementaryView} />
+
+      <div className="card" style={{ marginTop: 16 }}>
         <div className="card-hdr">
           <span className="ct">Period Summary · {bundle.financial_year.short_label} · {bundle.period_label}</span>
           <span className="cbadge cb-blue">{unitLabel}</span>
@@ -155,6 +250,7 @@ export function OverviewTab() {
           </table>
         </div>
       </div>
+
       <div className="grid2">
         <div className="card">
           <div className="card-hdr">
@@ -174,22 +270,31 @@ export function OverviewTab() {
                     <th>Customer</th>
                     <th className="num">Revenue ({symbol}Cr)</th>
                     <th className="num">% of Revenue</th>
+                    <th className="num">GM %</th>
                     <th>Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {bundle.top_customers.map((c, i) => (
-                    <tr key={i}>
-                      <td>{c.customer}</td>
-                      <td className="num">{frRaw(c.revenue_cr, 2)}</td>
-                      <td className="num">{pct(c.pct_of_total)}</td>
-                      <td>
-                        <span className={`pill ${c.status === 'Healthy' ? 'pg' : c.status === 'Key Account' ? 'pa' : 'pr'}`}>
-                          {c.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {bundle.top_customers.map((c, i) => {
+                    const marginEntry = bundle.customer_margin?.entries.find((e) => e.customer === c.customer);
+                    const gm = marginEntry && marginEntry.direct_cost > 0 ? marginEntry.direct_margin_pct : null;
+                    const gmTone = gm == null ? '' : gm >= 25 ? 'up' : gm < 15 ? 'dn' : '';
+                    return (
+                      <tr key={i}>
+                        <td>{c.customer}</td>
+                        <td className="num">{frRaw(c.revenue_cr, 2)}</td>
+                        <td className="num">{pct(c.pct_of_total)}</td>
+                        <td className={`num ${gmTone}`} title={gm == null ? 'No direct cost tagged for this customer in Zoho' : undefined}>
+                          {gm != null ? pct(gm) : '—'}
+                        </td>
+                        <td>
+                          <span className={`pill ${c.status === 'Healthy' ? 'pg' : c.status === 'Key Account' ? 'pa' : 'pr'}`}>
+                            {c.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             ) : (
@@ -204,7 +309,7 @@ export function OverviewTab() {
         </div>
         <div className="card">
           <div className="card-hdr">
-            <span className="ct">Year-on-Year — {getFyShortLabel(bundle.financial_year, yearType)} vs {getFyShortLabel(bundle.prev_financial_year, yearType) || 'Prior Year'}</span>
+            <span className="ct">Year-on-Year Variance — {getFyShortLabel(bundle.financial_year, yearType)} vs {getFyShortLabel(bundle.prev_financial_year, yearType) || 'Prior Year'}</span>
             <span className="cbadge cb-blue">{unitLabel}</span>
           </div>
           <div className="card-body" style={{ overflowX: 'auto' }}>
@@ -212,29 +317,32 @@ export function OverviewTab() {
               <table className="fc-table">
                 <thead>
                   <tr>
-                    <th>Metric</th>
+                    <th>Head</th>
                     <th className="num">{getFyShortLabel(bundle.financial_year, yearType)}</th>
                     <th className="num" style={{ color: 'var(--text2)' }}>{getFyShortLabel(bundle.prev_financial_year, yearType)}</th>
-                    <th className="num">YoY</th>
+                    <th className="num">Variance</th>
                   </tr>
                 </thead>
                 <tbody>
                   {([
-                    { label: 'Revenue', curr: t.rev, prev: bundle.prev_mis.totals.rev, tone: false },
+                    { label: 'Revenue', curr: t.rev, prev: bundle.prev_mis.totals.rev, tone: true },
+                    { label: 'Gross Profit', curr: t.rev - t.cos, prev: bundle.prev_mis.totals.rev - bundle.prev_mis.totals.cos, tone: true },
                     { label: 'EBITDA', curr: t.ebitda, prev: bundle.prev_mis.totals.ebitda, tone: true },
+                    { label: 'PBT', curr: t.pbt, prev: bundle.prev_mis.totals.pbt, tone: true },
                     { label: 'PAT', curr: t.pat, prev: bundle.prev_mis.totals.pat, tone: true, bold: true },
                     { label: 'Employee Cost', curr: t.emp, prev: bundle.prev_mis.totals.emp, tone: false },
                   ] as { label: string; curr: number; prev: number; tone: boolean; bold?: boolean }[]).map((row) => {
                     const chgPct = row.prev !== 0 ? ((row.curr - row.prev) / Math.abs(row.prev)) * 100 : null;
                     const valTone = row.tone ? numTone(row.curr) : '';
                     const prevTone = row.tone ? numTone(row.prev) : '';
+                    const badgeClass = chgPct == null ? 'pgy' : !row.tone ? 'pgy' : chgPct >= 0 ? 'pg' : 'pr';
                     return (
                       <tr key={row.label} className={row.bold ? 'tot-row' : undefined}>
                         <td className={row.bold ? 'bold' : undefined}>{row.label}</td>
                         <td className={`num ${row.bold ? 'bold' : ''} ${valTone}`}>{fn(row.curr)}</td>
                         <td className={`num ${prevTone}`} style={!prevTone ? { color: 'var(--text2)' } : undefined}>{fn(row.prev)}</td>
-                        <td className={`num ${row.bold ? 'bold' : ''} ${chgPct === null ? '' : numTone(chgPct)}`}>
-                          {chgPct === null ? '—' : signedPct(chgPct)}
+                        <td className="num">
+                          <span className={`pill ${badgeClass}`}>{chgPct === null ? 'n/a' : signedPct(chgPct)}</span>
                         </td>
                       </tr>
                     );

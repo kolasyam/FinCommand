@@ -7,6 +7,9 @@ import { DownloadBar } from '../DownloadBar';
 import { fn as fnRaw, numTone, kpiTone, getFyLabel, getFyShortLabel, getUnitHeader } from '@/lib/utils/format';
 import { cfLabel } from '@/lib/financial/cashflow-labels';
 import { ThreeYearBanner, ThreeYearHeader, ThreeYearRow } from '../ThreeYearFrame';
+import { WaterfallChart, type WaterfallStep } from '@/components/charts/WaterfallChart';
+import { CustomizableTabPanel } from './dashboard-builder/CustomizableTabPanel';
+import { CASHFLOW_DEFAULT_WIDGETS } from '@/lib/dashboard-builder/default-layout';
 
 export function CashFlowTab() {
   const { bundle, granularity, threeYear, yearType, displayUnit, presentationCurrency } = useDashboard();
@@ -112,15 +115,82 @@ export function CashFlowTab() {
   const fyShort = getFyShortLabel(financial_year, yearType);
   const prevFyShort = getFyShortLabel(prevFy, yearType);
 
+  const ocfTotal = op.total as number;
+  const icfTotal = inv.total as number;
+  const financingTotal = fin.total as number;
+  // Real, already-computed by computeCashFlow() — shown in 3-Year mode's own
+  // summary table but previously missing entirely from this single-year
+  // view, even though it's one of the first things a CFO asks for.
+  const hasMaterialGap = Math.abs(cf.reconciling_gap) >= 1000;
+  const cashBridgeSteps: WaterfallStep[] = [
+    { label: 'Opening Cash', value: cf.opening_cash, isTotal: true },
+    { label: 'Operating CF', value: ocfTotal },
+    { label: 'Investing CF', value: icfTotal },
+    { label: 'Financing CF', value: financingTotal },
+    // Included only when material (same >=1000 threshold the statement table
+    // below already uses) so the bridge lands exactly on the real Closing
+    // Cash figure rather than a small, unexplained visual gap.
+    ...(hasMaterialGap ? [{ label: 'Reconciling Diff.', value: cf.reconciling_gap }] : []),
+    { label: 'Closing Cash', value: cf.closing_cash, isTotal: true },
+  ];
+
+  // Split in two, per BalanceSheetTab.tsx/PLTab.tsx's own already-corrected
+  // architecture (see their doc comments / dashboard-builder-engine.ts's
+  // TabKey doc comment for why this shape, not a single CustomizableTabPanel
+  // wrap, is mandatory for an IND AS 7 statutory statement): only the real
+  // supplementary content already added to this tab this engagement — the
+  // 3-KPI strip (Free Cash Flow, Opening Cash & Bank, Closing Cash & Bank)
+  // and the Cash Bridge waterfall — goes inside CustomizableTabPanel's
+  // fixedView. The Operating/Investing/Financing/Net-Change KPI strip and
+  // the statutory Statement of Cash Flows both render directly in this
+  // component, unconditionally, and are never passed to CustomizableTabPanel
+  // at all — so neither can ever be swapped out for the widget grid.
+
+  // ── Supplementary zone (customizable) — 3-KPI strip + Cash Bridge ──
+  const supplementaryView = (
+    <div>
+      <div className="grid3">
+        <Kpi label="Free Cash Flow" value={fn(cf.free_cash_flow)} change="Operating CF − Capex" tone={kpiTone(cf.free_cash_flow)} />
+        <Kpi label="Opening Cash & Bank" value={fn(cf.opening_cash)} change={`As at start of ${period_label}`} tone="neu" />
+        <Kpi label="Closing Cash & Bank" value={fn(cf.closing_cash)} change={`As at end of ${period_label}`} tone="neu" />
+      </div>
+      <div className="card">
+        <div className="card-hdr">
+          <span className="ct">Cash Bridge — Opening to Closing</span>
+          <span className="cbadge cb-blue">{unitLabel}</span>
+        </div>
+        <div className="card-body">
+          <div style={{ display: 'flex', gap: 14, fontSize: 10, color: 'var(--text2)', marginBottom: 8 }}>
+            <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#1E3A8A', marginRight: 4, verticalAlign: 'middle' }} />Opening / Closing</span>
+            <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#1D9E75', marginRight: 4, verticalAlign: 'middle' }} />Inflow</span>
+            <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#D85A30', marginRight: 4, verticalAlign: 'middle' }} />Outflow</span>
+          </div>
+          <div style={{ position: 'relative', height: 220 }}><WaterfallChart steps={cashBridgeSteps} unit={displayUnit} /></div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div>
       <DownloadBar title={`Statement of Cash Flows · ${fyFullLabel}`} subtitle={`Indirect Method · IND AS 7 · ${unitLabel} · ${period_label}`} section="cashflow" compareEnabled={showComparison} />
+
+      {/* ── Fixed zone (never a widget, never wrapped, never swapped out) ──
+          The Operating/Investing/Financing/Net-Change KPI strip, restating
+          the statutory statement's own A/B/C totals at a glance. */}
       <div className="grid4">
-        <Kpi label="Operating Cash Flow" value={fn(op.total as number)} change={cf.ocf_to_pat != null ? `OCF/PAT = ${cf.ocf_to_pat.toFixed(2)}x` : 'OCF/PAT: n/a (loss-making period)'} tone={kpiTone(op.total as number)} />
-        <Kpi label="Investing Cash Flow" value={fn(inv.total as number)} change="Capex + FD/MF movements" tone={kpiTone(inv.total as number)} />
-        <Kpi label="Financing Cash Flow" value={fn(fin.total as number)} change="Debt repayment + dividend" tone={kpiTone(fin.total as number)} />
+        <Kpi label="Operating Cash Flow" value={fn(ocfTotal)} change={cf.ocf_to_pat != null ? `OCF/PAT = ${cf.ocf_to_pat.toFixed(2)}x` : 'OCF/PAT: n/a (loss-making period)'} tone={kpiTone(ocfTotal)} />
+        <Kpi label="Investing Cash Flow" value={fn(icfTotal)} change="Capex + FD/MF movements" tone={kpiTone(icfTotal)} />
+        <Kpi label="Financing Cash Flow" value={fn(financingTotal)} change="Debt repayment + dividend" tone={kpiTone(financingTotal)} />
         <Kpi label="Net Change in Cash" value={fn(cf.net_change)} change={`Closing: ${fn(cf.closing_cash)} ${displayUnit}`} tone={kpiTone(cf.net_change)} />
       </div>
+
+      <CustomizableTabPanel tabKey="cashflow" defaultWidgets={CASHFLOW_DEFAULT_WIDGETS} fixedView={supplementaryView} />
+
+      {/* ── Fixed zone continued ── The mandated IND AS 7 Statement of Cash
+          Flows — every line, byte-identical to how it always rendered,
+          whether or not the supplementary zone above is being customized
+          right now. */}
       <div className="card">
         <div className="card-hdr">
           <div>

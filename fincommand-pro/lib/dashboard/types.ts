@@ -38,6 +38,7 @@ export interface ReportBundle {
   cashflow: CashFlowResult;
   prev_cashflow?: CashFlowResult | null;
   ratios: RatiosResult;
+  prev_ratios?: RatiosResult | null;
   top_customers?: TopCustomer[];
   /** Real per-vendor spend for the selected period (Zoho Bills only — see VendorExpense's own doc comment). Undefined/[] when unavailable (Excel-uploaded TB, or no Zoho bill data synced yet) — VendorExpenseTab must show that honestly, not a mock table. */
   vendor_expense?: VendorExpense[];
@@ -45,7 +46,51 @@ export interface ReportBundle {
   customer_margin?: CustomerMarginResult;
   /** Real, company-wide audit_trail activity — drives the Compliance tab's "Audit trail enabled" check. Undefined in sample mode (there's no real company to have an audit trail for); ComplianceTab treats that the same as dataMode !== 'api'. */
   audit_summary?: { total_events: number; last_event_at: string | null };
+  /**
+   * Server-computed values for this company's LEDGER-kind custom metrics
+   * (tb-engine.ts::computeLedgerMetric), keyed by metric key, for this exact
+   * period — ledger metrics need the raw ledgers, which never leave the
+   * server, so they're resolved in /reports/all alongside every other
+   * figure. Formula-kind custom metrics aren't here: they compose values
+   * already in this bundle and are evaluated client-side. Undefined in
+   * sample mode (no real company, no custom metrics).
+   */
+  custom_metric_values?: Record<string, CustomMetricValue>;
+  /**
+   * The same statements recomputed for the period immediately BEFORE this
+   * one (Q2 → Q1, Q1 → previous FY's Q4, H2 → H1, a full year → the previous
+   * year — tb-engine.ts::priorPeriodOf()), used only by custom metrics set to
+   * "compare with previous period". Built from the same real ledgers as
+   * everything else; null when that period isn't available (no previous FY
+   * data, or a CY view whose predecessor lies in another calendar year).
+   * Notes are carried as totals only (no ledger detail) to keep the payload small.
+   */
+  prior_period?: PriorPeriodBundle | null;
   generated_at: string;
+}
+
+export interface PriorPeriodBundle {
+  /** e.g. "Q1 (Q1 Apr-Jun)" or "FY Annual" */
+  label: string;
+  /** Which financial year the prior period's ledgers came from. */
+  financial_year_label: string;
+  mis: MISResult;
+  bs: BSResult;
+  pl: PLResult;
+  cashflow: CashFlowResult;
+  treasury: TreasuryResult;
+  ratios: RatiosResult;
+  notes: AggregatedNote[];
+  custom_metric_values: Record<string, CustomMetricValue>;
+}
+
+export interface CustomMetricValue {
+  value: number | null;
+  /** Same-period prior-year figure (FY mode, when a prior FY with data exists); null otherwise — never estimated. */
+  previous: number | null;
+  trend: { label: string; value: number }[];
+  breakdown: { label: string; value: number }[];
+  matchedCount: number;
 }
 
 export interface ThreeYearEntry {

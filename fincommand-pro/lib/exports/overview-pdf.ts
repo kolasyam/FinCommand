@@ -11,7 +11,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { ReportBundle } from '@/lib/dashboard/types';
-import { fl, fn, frRaw, pct, signedPct, fcPdf, getFyLabel, getFyShortLabel, getUnitHeaderPdf, unitSuffix, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
+import { fl, fn, frRaw, pct, signedPct, fcUnitPdf, getFyLabel, getFyShortLabel, getUnitHeaderPdf, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
 import { getCurrencyMeta } from '@/lib/services/currency';
 import {
   NAVY, NAVY_DARK, SLATE, BORDER, RED, AMBER, GREEN, PAGE_W, MARGIN, CONTENT_W, DEFAULT_COMPANY_NAME,
@@ -119,6 +119,9 @@ export function buildOverviewPdf(bundle: ReportBundle, companyName = DEFAULT_COM
   const { mis } = bundle;
   const t = mis.totals;
   const grossProfit = t.rev - t.cos;
+  const revYoy = compare && bundle.prev_mis && bundle.prev_mis.totals.rev !== 0
+    ? ((t.rev - bundle.prev_mis.totals.rev) / Math.abs(bundle.prev_mis.totals.rev)) * 100
+    : null;
 
   const header = () => addPdfHeader(doc, companyName, 'Executive Overview · CFO Financial Command Center', fyLabel, bundle.period_label);
   header();
@@ -135,10 +138,16 @@ export function buildOverviewPdf(bundle: ReportBundle, companyName = DEFAULT_COM
   doc.line(MARGIN, 44, PAGE_W - MARGIN, 44);
 
   let y = drawKpiCards(doc, [
-    { label: 'Revenue', value: fcPdf(t.rev, currency), sub: `${fl(t.rev, 2, unit)} ${unitSuffix(unit)}`, tone: 0 },
-    { label: 'Gross Profit', value: fcPdf(grossProfit, currency), sub: `Margin ${pct(t.gm)}`, tone: grossProfit },
-    { label: 'EBITDA (Operating)', value: fcPdf(t.ebitda, currency), sub: `Margin ${pct(t.em)}`, tone: t.ebitda },
-    { label: 'PAT', value: fcPdf(t.pat, currency), sub: `Net Margin ${pct(t.pm)}`, tone: t.pat },
+    // fcPdf() (adaptive Lakh/Crore, ignores the Unit Selector — see its own
+    // doc comment) previously made this card's bolded value stop tracking
+    // the selector, silently mismatching the on-screen tab's own
+    // fl()-scaled KPI value and this very PDF's own comparison table a few
+    // inches below under the same "unless noted" unit header. fcUnitPdf()
+    // is the unit-scaled equivalent.
+    { label: 'Revenue', value: fcUnitPdf(t.rev, unit, currency), sub: revYoy != null ? `${signedPct(revYoy)} YoY` : 'Current period', tone: 0 },
+    { label: 'Gross Profit', value: fcUnitPdf(grossProfit, unit, currency), sub: `Margin ${pct(t.gm)}`, tone: grossProfit },
+    { label: 'EBITDA (Operating)', value: fcUnitPdf(t.ebitda, unit, currency), sub: `Margin ${pct(t.em)}`, tone: t.ebitda },
+    { label: 'PAT', value: fcUnitPdf(t.pat, unit, currency), sub: `Net Margin ${pct(t.pm)}`, tone: t.pat },
   ], 49);
 
   y += 6;

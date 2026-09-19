@@ -9,10 +9,14 @@ import {
   computeTreasury, computeCashFlow, computeRatios, resolvePeriod,
   computeTopCustomers, computeVendorExpense, computeCustomerMargin,
   type AggregatedNote, type MISResult, type TbLedgerRow, type CustomerRevenueInput, type VendorExpenseInput, type TreasuryResult,
-  type VendorExpense, type CustomerMarginResult, type ContactInfo,
+  type VendorExpense, type CustomerMarginResult, type ContactInfo, type RatiosResult,
 } from '@/lib/financial/tb-engine';
 import { mergeCyLedgers, mergeCyCustomerRevenue, mergeCyVendorExpense } from '@/lib/financial/cy-merge';
 import { getCachedReport, setCachedReport } from '@/lib/cache/report-cache';
+import { loadCustomMetricDefinitions } from '@/lib/db/queries/custom-metrics';
+import { computeLedgerMetric, priorPeriodOf, type PeriodParams, type LedgerMetricSpec } from '@/lib/financial/tb-engine';
+import type { CustomMetricDefinition } from '@/lib/financial/custom-metric-engine';
+import type { CustomMetricValue, PriorPeriodBundle } from '@/lib/dashboard/types';
 
 export const runtime = 'nodejs';
 
@@ -72,7 +76,12 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   let prev_mis: MISResult | null = null;
   let prev_notes: AggregatedNote[] | null = null;
   let prev_treasury: TreasuryResult | null = null;
+  let prev_ratios: RatiosResult | null = null;
   let prev_financial_year = null;
+  // Prior-year ledgers for ledger-kind custom metrics' YoY comparative —
+  // same source as every prev_* figure above (FY mode only; CY mode has no
+  // comparative anywhere in this bundle).
+  let prevLedgersForMetrics: TbLedgerRow[] | null = null;
 
   if (isCY) {
     const [nextFy, prevFy] = await Promise.all([
@@ -123,7 +132,9 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
         const pNotesMap = computeNotes(prevLedgers, params);
         prev_notes = Object.values(pNotesMap).sort((a, b) => a.note_no - b.note_no);
         prev_treasury = computeTreasury(prevLedgers, params);
+        prev_ratios = computeRatios(prevLedgers, params);
         prev_financial_year = prevFy;
+        prevLedgersForMetrics = prevLedgers;
       }
     }
   }
@@ -131,7 +142,12 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   // mis is computed first (synchronously) so computeTopCustomers can size
   // each customer's revenue against the real company-wide total.
   const mis = computeMIS(computeLedgers, params);
-  const [bs, pl, notes, treasury, cashflow, ratios, companyRows, auditRows] = await Promise.all([
+  // zohoContacts is fetched in this same wave, not as a separate awaited
+  // round trip afterward — it has zero dependency on bs/pl/notes/etc. (it's
+  // only joined onto vendor_expense/customer_margin below by name), so
+  // sequencing it after this Promise.all was a pure, unnecessary extra
+  // network round trip on every single report load.
+  const [bs, pl, notes, treasury, cashflow, ratios, companyRows, auditRows, zohoContacts, customMetricDefs] = await Promise.all([
     computeBS(computeLedgers, params),
     computePL(computeLedgers, params),
     computeNotes(computeLedgers, params),
@@ -151,21 +167,29 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     query<{ count: string; last_at: string | null }>(
       `SELECT COUNT(*) AS count, MAX(created_at) AS last_at FROM audit_trail WHERE company_id=$1`, [user.company_id]
     ),
+    // Real Zoho contact directory (customer AND vendor master data — email,
+    // phone, GSTIN, live outstanding balance) — joined in below by name onto
+    // the already-computed vendor spend / customer margin, rather than
+    // threaded through computeVendorExpense()/computeCustomerMargin()
+    // themselves, so those stay pure functions with no DB dependency (same
+    // reasoning as every other compute* function in tb-engine.ts). A vendor/
+    // customer with no matching contact record (Excel-uploaded TB, or a name
+    // that doesn't exactly match Zoho's contact directory) just keeps
+    // `contact` undefined — never a fabricated placeholder.
+    loadZohoContacts(user.company_id),
+    // This company's custom metric definitions — only ledger-kind ones are
+    // computed here (they need raw ledgers, which never leave the server).
+    // A failure here must never take down the statutory reports: it's
+    // logged and the bundle simply carries no custom metric values.
+    loadCustomMetricDefinitions(user.company_id).catch((err: Error): CustomMetricDefinition[] => {
+      console.error('[reports/all] custom metric definitions unavailable:', err.message);
+      return [];
+    }),
   ]);
   const top_customers = computeTopCustomers(computeCustomerRev, computeLedgers, params, mis.totals.rev);
   const rawVendorExpense = computeVendorExpense(computeVendorExp, params);
   const rawCustomerMargin = computeCustomerMargin(computeCustomerRev, computeCustomerCost, params);
 
-  // Real Zoho contact directory (customer AND vendor master data — email,
-  // phone, GSTIN, live outstanding balance) — joined in here by name onto
-  // the already-computed vendor spend / customer margin, rather than
-  // threaded through computeVendorExpense()/computeCustomerMargin()
-  // themselves, so those stay pure functions with no DB dependency (same
-  // reasoning as every other compute* function in tb-engine.ts). A vendor/
-  // customer with no matching contact record (Excel-uploaded TB, or a name
-  // that doesn't exactly match Zoho's contact directory) just keeps
-  // `contact` undefined — never a fabricated placeholder.
-  const zohoContacts = await loadZohoContacts(user.company_id);
   const vendor_expense = attachVendorContacts(rawVendorExpense, zohoContacts);
   const customer_margin = attachCustomerContacts(rawCustomerMargin, zohoContacts);
   // Source Currency (the currency the Trial Balance ledgers were actually
@@ -180,6 +204,39 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     total_events: parseInt(auditRows.rows[0]?.count || '0', 10),
     last_event_at: auditRows.rows[0]?.last_at || null,
   };
+
+  const ledgerDefs = customMetricDefs.filter(
+    (d): d is CustomMetricDefinition & { ledgerSpec: LedgerMetricSpec } => d.kind === 'ledger' && !!d.ledgerSpec,
+  );
+  const custom_metric_values: Record<string, CustomMetricValue> = {};
+  for (const def of ledgerDefs) {
+    const current = computeLedgerMetric(computeLedgers, def.ledgerSpec, params);
+    const prior = prevLedgersForMetrics ? computeLedgerMetric(prevLedgersForMetrics, def.ledgerSpec, params) : null;
+    custom_metric_values[def.key] = {
+      value: current.value,
+      // A prior year in which no ledger matched has no honest comparative.
+      previous: prior && prior.matchedCount > 0 ? prior.value : null,
+      trend: current.trend,
+      breakdown: current.breakdown,
+      matchedCount: current.matchedCount,
+    };
+  }
+
+  // The period immediately before the selected one — only built when some
+  // custom metric compares against it (it costs a second pass of every
+  // statement). Q2–Q4 / H2 come from this same year's ledgers; Q1 / H1 /
+  // a whole year need the previous FY, which exists only in FY mode (CY mode
+  // has no comparative anywhere in this bundle). null = not available, and
+  // the metric then shows no change figure rather than a guessed one.
+  let prior_period: PriorPeriodBundle | null = null;
+  const pp = customMetricDefs.some((d) => d.comparison === 'prior_period') ? priorPeriodOf(params) : null;
+  if (pp) {
+    const ppLedgers = pp.source === 'same' ? computeLedgers : prevLedgersForMetrics;
+    const ppFy = pp.source === 'same' ? cyLabelFy : prev_financial_year;
+    if (ppLedgers?.length && ppFy) {
+      prior_period = buildPriorPeriod(ppLedgers, pp.params, ppFy.label, ledgerDefs);
+    }
+  }
 
   const responseData = {
     financial_year: cyLabelFy,
@@ -196,16 +253,45 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     treasury, prev_treasury, cashflow,
     prev_cashflow,
     ratios,
+    prev_ratios,
     top_customers,
     vendor_expense,
     customer_margin,
     audit_summary,
+    custom_metric_values,
+    prior_period,
     generated_at: new Date().toISOString(),
   };
 
   setCachedReport(cacheKey, responseData);
   return json(responseData);
 });
+
+/** Every statement for one earlier period, plus its ledger-metric values. Notes carry totals only — the ledger detail is never read from a prior period and would double the payload. */
+function buildPriorPeriod(
+  ledgers: TbLedgerRow[], params: PeriodParams, fyLabel: string,
+  ledgerDefs: (CustomMetricDefinition & { ledgerSpec: LedgerMetricSpec })[],
+): PriorPeriodBundle {
+  const values: Record<string, CustomMetricValue> = {};
+  for (const def of ledgerDefs) {
+    const r = computeLedgerMetric(ledgers, def.ledgerSpec, params);
+    values[def.key] = { value: r.matchedCount > 0 ? r.value : null, previous: null, trend: [], breakdown: [], matchedCount: r.matchedCount };
+  }
+  return {
+    label: resolvePeriod(params).label,
+    financial_year_label: fyLabel,
+    mis: computeMIS(ledgers, params),
+    bs: computeBS(ledgers, params),
+    pl: computePL(ledgers, params),
+    cashflow: computeCashFlow(ledgers, params),
+    treasury: computeTreasury(ledgers, params),
+    ratios: computeRatios(ledgers, params),
+    notes: Object.values(computeNotes(ledgers, params))
+      .map((n) => ({ ...n, ledgers: [] }))
+      .sort((a, b) => a.note_no - b.note_no),
+    custom_metric_values: values,
+  };
+}
 
 function toContactInfo(c: ZohoContactRow, balanceField: 'outstanding_payable_amount_bcy' | 'outstanding_receivable_amount_bcy'): ContactInfo {
   return {

@@ -102,10 +102,10 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const [yearType, setYearTypeState] = useState<YearType>('FY');
   const [granularity, setGranularityState] = useState<Granularity>('annual');
   const [subPeriod, setSubPeriodState] = useState<Period>(null);
-  // Always boot at the 'Lakhs' default on both server and first client render
+  // Boot at the 'Crores' default on both server and first client render
   // (avoids a hydration mismatch) — the real stored preference, if any, is
   // applied a moment later from an effect that only runs in the browser.
-  const [displayUnit, setDisplayUnitState] = useState<DisplayUnit>('Lakhs');
+  const [displayUnit, setDisplayUnitState] = useState<DisplayUnit>('Crores');
   const [requestedTab, setRequestedTab] = useState<string | null>(null);
   const [pendingNoteKey, setPendingNoteKey] = useState<string | null>(null);
   // The bundle exactly as fetched/computed — always in Source Currency.
@@ -205,6 +205,17 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
     storeSession(data.access_token, data.refresh_token, data.user);
     setUser(data.user);
+    // Clear the sample-mode fy id (e.g. 'sample-fy25') BEFORE flipping
+    // dataMode — the report-loading effect below depends on both and fires
+    // as soon as either changes, so switching dataMode first let it build a
+    // live /reports/all request with a sample-mode id that isn't a real
+    // UUID, which Postgres rejects with a 500 (confirmed via a real login:
+    // GET /reports/all?fy_id=sample-fy25... -> 500 "invalid input syntax for
+    // type uuid", visible in the console for a moment on every sample-to-
+    // live sign-in). Clearing it first makes the effect's own `if
+    // (!currentFyId) return` guard short-circuit instead, and loadFyList()
+    // below sets a real id moments later.
+    setCurrentFyId(null);
     setDataMode('api');
     setError(null);
     await loadFyList();
@@ -396,7 +407,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
             const key = sampleKeyForFyId(fyId);
             if (!cancelled) { setRawBundle(computeLocalReportBundle(key, params)); setThreeYear(null); }
           } else {
-            const qs = new URLSearchParams({ fy_id: fyId, period_type: periodType, year_type: yearType, nocache: 'true' });
+            // Deliberately NOT forcing nocache=true here: report-cache.ts's
+            // 15-min TTL cache exists precisely to serve tab switches/FY
+            // re-loads instantly, and every data-mutating path (TB upload,
+            // ledger reclassify, Zoho sync — see docs/FLOW.md) already calls
+            // invalidateReportCache() on write, so a stale cache read here
+            // isn't a real risk. Forcing nocache unconditionally defeated
+            // that cache on every single request.
+            const qs = new URLSearchParams({ fy_id: fyId, period_type: periodType, year_type: yearType });
             if (subPeriod) qs.set('period', subPeriod);
             const b = await apiFetch<ReportBundle>(`/reports/all?${qs.toString()}`);
             if (!cancelled) { setRawBundle(b); setThreeYear(null); }

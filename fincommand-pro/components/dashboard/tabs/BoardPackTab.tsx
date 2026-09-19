@@ -2,18 +2,23 @@
 
 import { useDashboard } from '@/lib/dashboard/DashboardContext';
 import { DownloadBar } from '../DownloadBar';
-import { fc as fcRaw, fl as flRaw, fn as fnRaw, pct, numTone, getFyLabel, getUnitHeader, unitSuffix } from '@/lib/utils/format';
+import { fl as flRaw, fn as fnRaw, pct, numTone, getFyLabel, getUnitHeader, unitSuffix } from '@/lib/utils/format';
 import { getCurrencyMeta } from '@/lib/services/currency';
 import { ThreeYearBanner, ThreeYearHeader, ThreeYearRow } from '../ThreeYearFrame';
+import { CustomizableTabPanel } from './dashboard-builder/CustomizableTabPanel';
+import { BOARDPACK_DEFAULT_WIDGETS } from '@/lib/dashboard-builder/default-layout';
 
 export function BoardPackTab() {
   const { bundle, granularity, threeYear, yearType, displayUnit, presentationCurrency } = useDashboard();
-  // Shadow fl()/fn()/fc() with the currently-selected table unit (Lakhs/
-  // Thousands/Crores) / active Presentation Currency bound in — every
-  // existing fl(v)/fn(v)/fc(v) call below stays unchanged.
+  // Shadow fl()/fn() with the currently-selected table unit (Lakhs/
+  // Thousands/Crores) bound in — every existing fl(v)/fn(v) call below
+  // stays unchanged. Every KPI-adjacent figure here (the highlight
+  // sentences and the "bp-kpi" cards) already used the symbol+fl()+unitSfx
+  // shape below for SOME figures (Balance Sheet diff, Treasury) but fc()
+  // (currency-symbol only, ignores the Unit Selector — see its own doc
+  // comment) for Revenue/EBITDA/PAT/OCF specifically; now uniform.
   const fl = (n: number | null | undefined, d?: number) => flRaw(n, d, displayUnit);
   const fn = (n: number | null | undefined, d?: number) => fnRaw(n, d, displayUnit);
-  const fc = (n: number | null | undefined) => fcRaw(n, presentationCurrency);
   const unitLabel = getUnitHeader(displayUnit, presentationCurrency);
   const unitSfx = unitSuffix(displayUnit);
   const symbol = getCurrencyMeta(presentationCurrency).symbol;
@@ -137,23 +142,23 @@ export function BoardPackTab() {
   const ocfTotal = (cashflow.operating as Record<string, unknown>).total as number;
 
   const highlights: { tone: 'hl-green' | 'hl-amber' | 'hl-red' | 'hl-blue'; text: string }[] = [
-    { tone: numTone(t.rev) === 'dn' ? 'hl-red' : 'hl-green', text: `Revenue of ${fc(t.rev)} with EBITDA margin of ${pct(t.em)} for ${period_label}.` },
+    { tone: numTone(t.rev) === 'dn' ? 'hl-red' : 'hl-green', text: `Revenue of ${symbol}${fl(t.rev)}${unitSfx} with EBITDA margin of ${pct(t.em)} for ${period_label}.` },
     { tone: bs.balanced ? 'hl-blue' : 'hl-red', text: bs.balanced ? 'Balance Sheet tallies — no reconciliation issues flagged.' : `Balance Sheet out of balance by ${symbol}${fl(bs.difference)}${unitSfx} — needs review before board sign-off.` },
     { tone: ratios.liquidity.current_ratio >= 1.5 ? 'hl-green' : 'hl-amber', text: `Current ratio at ${ratios.liquidity.current_ratio.toFixed(2)}x (benchmark 1.5x).` },
     { tone: 'hl-blue', text: `Treasury position of ${symbol}${fl(treasury.total)}${unitSfx} across cash, bank, FDs and MFs.` },
   ];
 
-  return (
+  const fixedView = (
     <div>
       <DownloadBar title={`Board Pack · ${getFyLabel(financial_year, yearType)}`} subtitle={`Executive summary · ${period_label}`} section="boardpack" />
       <div className="bp-section">
         <div className="bp-hdr"><span>Financial Highlights</span></div>
         <div className="bp-body">
           <div className="bp-kpi-row">
-            <div className="bp-kpi"><div className="bl">Revenue</div><div className="bv">{fc(t.rev)}</div></div>
-            <div className="bp-kpi"><div className="bl">EBITDA</div><div className={`bv ${numTone(t.ebitda)}`}>{fc(t.ebitda)}</div></div>
-            <div className="bp-kpi"><div className="bl">PAT</div><div className={`bv ${numTone(t.pat)}`}>{fc(t.pat)}</div></div>
-            <div className="bp-kpi"><div className="bl">OCF</div><div className={`bv ${numTone(ocfTotal)}`}>{fc(ocfTotal)}</div></div>
+            <div className="bp-kpi"><div className="bl">Revenue</div><div className="bv">{symbol}{fl(t.rev)}{unitSfx}</div></div>
+            <div className="bp-kpi"><div className="bl">EBITDA</div><div className={`bv ${numTone(t.ebitda)}`}>{symbol}{fl(t.ebitda)}{unitSfx}</div></div>
+            <div className="bp-kpi"><div className="bl">PAT</div><div className={`bv ${numTone(t.pat)}`}>{symbol}{fl(t.pat)}{unitSfx}</div></div>
+            <div className="bp-kpi"><div className="bl">OCF</div><div className={`bv ${numTone(ocfTotal)}`}>{symbol}{fl(ocfTotal)}{unitSfx}</div></div>
           </div>
           {highlights.map((h, i) => <div key={i} className={`hl-row ${h.tone}`}>{h.text}</div>)}
         </div>
@@ -168,4 +173,6 @@ export function BoardPackTab() {
       </div>
     </div>
   );
+
+  return <CustomizableTabPanel tabKey="boardpack" defaultWidgets={BOARDPACK_DEFAULT_WIDGETS} fixedView={fixedView} />;
 }

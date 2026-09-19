@@ -15,7 +15,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { ReportBundle } from '@/lib/dashboard/types';
 import type { AggregatedNote } from '@/lib/financial/tb-engine';
-import { fn, fcPdf, getFyLabel, getFyShortLabel, getUnitHeaderPdf, unitSuffix, formatChg, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
+import { fn, fcUnitPdf, getFyLabel, getFyShortLabel, getUnitHeaderPdf, unitSuffix, formatChg, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
 import { getCurrencyMeta } from '@/lib/services/currency';
 import {
   NAVY, NAVY_DARK, SLATE, BORDER, PAGE_W, MARGIN, CONTENT_W, DEFAULT_COMPANY_NAME,
@@ -62,9 +62,9 @@ export function buildNotesPdf(bundle: ReportBundle, companyName = DEFAULT_COMPAN
 
   let y = drawKpiCards(doc, [
     { label: 'Total Notes', value: String(combined.length), sub: `${combined.filter(c => isBSSection(c.curr?.section || c.prev?.section)).length} Balance Sheet, ${combined.length - combined.filter(c => isBSSection(c.curr?.section || c.prev?.section)).length} P&L`, tone: 0 },
-    { label: 'Equity & Liabilities Notes', value: fcPdf(eqLiabTotal, currency), sub: 'Notes 1-19 range', tone: 0 },
-    { label: 'Assets Notes', value: fcPdf(assetsTotal, currency), sub: 'Non-current + Current', tone: 0 },
-    { label: 'Income & Expense Notes', value: fcPdf(plTotal, currency), sub: 'Notes 20-26 range', tone: 0 },
+    { label: 'Equity & Liabilities Notes', value: fcUnitPdf(eqLiabTotal, unit, currency), sub: 'Notes 1-19 range', tone: 0 },
+    { label: 'Assets Notes', value: fcUnitPdf(assetsTotal, unit, currency), sub: 'Non-current + Current', tone: 0 },
+    { label: 'Income & Expense Notes', value: fcUnitPdf(plTotal, unit, currency), sub: 'Notes 20-26 range', tone: 0 },
   ], 49);
 
   y += 8;

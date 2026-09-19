@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/lib/dashboard/ToastContext';
 import { ApiClientError } from '@/lib/dashboard/api-client';
@@ -40,6 +40,8 @@ export function StructureEditor({
   const [savedValidation, setSavedValidation] = useState<ValidationResult | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ id: string; pos: 'before' | 'after' } | null>(null);
+  const [flashLineIds, setFlashLineIds] = useState<Set<string>>(new Set());
+  const lineRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   useEffect(() => {
     let cancelled = false;
@@ -71,6 +73,13 @@ export function StructureEditor({
 
   const errorLineIds = useMemo(() => new Set(liveValidation?.errors.flatMap((i) => i.lineIds) ?? []), [liveValidation]);
   const warnLineIds = useMemo(() => new Set(liveValidation?.warnings.flatMap((i) => i.lineIds) ?? []), [liveValidation]);
+
+  // Temporary flash from jumpToIssue() — auto-clears so it reads as a pulse, not a permanent state.
+  useEffect(() => {
+    if (flashLineIds.size === 0) return;
+    const t = setTimeout(() => setFlashLineIds(new Set()), 2500);
+    return () => clearTimeout(t);
+  }, [flashLineIds]);
 
   if (loading) return <div className="notice">Loading structure…</div>;
   if (!template || !lines) return null;
@@ -127,6 +136,14 @@ export function StructureEditor({
 
   function setPercentBase(id: string) {
     setLines((prev) => prev!.map((l) => ({ ...l, isPercentBase: l.id === id ? !l.isPercentBase : false })));
+  }
+
+  /** Wired from ValidationPanel — scrolls to and briefly highlights the line(s) an issue points at, rather than leaving the user to scan the whole list for the tinted row. */
+  function jumpToIssue(lineIds: string[]) {
+    setFlashLineIds(new Set(lineIds));
+    const firstId = lineIds[0];
+    const el = firstId ? lineRefs.current.get(firstId) : undefined;
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
   async function handleSave() {
@@ -186,7 +203,7 @@ export function StructureEditor({
         </div>
       </div>
 
-      {showValidation && liveValidation && <ValidationPanel result={savedValidation ?? liveValidation} />}
+      {showValidation && liveValidation && <ValidationPanel result={savedValidation ?? liveValidation} onIssueClick={jumpToIssue} />}
       {!currentFyId && (
         <div className="warn-bar" style={{ marginBottom: 12 }}>
           No financial year selected — sign-vs-section validation and the ledger picker need one. Pick a financial year from the top bar.
@@ -208,6 +225,7 @@ export function StructureEditor({
           return (
             <div
               key={line.id}
+              ref={(el) => { if (el) lineRefs.current.set(line.id, el); else lineRefs.current.delete(line.id); }}
               draggable
               onDragStart={() => setDragId(line.id)}
               onDragOver={(e) => {
@@ -229,6 +247,8 @@ export function StructureEditor({
                 background: showValidation && errorLineIds.has(line.id) ? 'var(--red-l, #fef2f2)'
                   : showValidation && warnLineIds.has(line.id) ? 'var(--amber-l, #fffbeb)'
                   : undefined,
+                boxShadow: flashLineIds.has(line.id) ? 'inset 0 0 0 2px var(--blue)' : undefined,
+                transition: 'box-shadow .2s',
                 ...TYPE_STYLE[line.lineType],
               }}
             >

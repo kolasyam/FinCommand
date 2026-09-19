@@ -13,7 +13,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { ReportBundle } from '@/lib/dashboard/types';
 import type { AggregatedNote } from '@/lib/financial/tb-engine';
-import { fl, fn, fcPdf, getFyLabel, getFyShortLabel, cyYearFromFy, formatDate, getUnitHeaderPdf, unitSuffix, formatChg, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
+import { fl, fn, fcUnitPdf, getFyLabel, getFyShortLabel, cyYearFromFy, formatDate, getUnitHeaderPdf, unitSuffix, formatChg, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
 import { getCurrencyMeta } from '@/lib/services/currency';
 import { resolvePeriod } from '@/lib/financial/tb-engine';
 import {
@@ -146,9 +146,13 @@ export function buildBsPdf(bundle: ReportBundle, companyName = DEFAULT_COMPANY_N
   doc.line(MARGIN, 44, PAGE_W - MARGIN, 44);
 
   let y = drawKpiCards(doc, [
-    { label: 'Total Assets', value: fcPdf(as.total, currency), sub: `NCA ${fl(as.total_nca, 2, unit)}${unitSuffix(unit)} + CA ${fl(as.total_ca, 2, unit)}${unitSuffix(unit)}`, tone: 0 },
-    { label: 'Total Equity', value: fcPdf(eq.total_equity, currency), sub: 'Shareholders\' funds', tone: eq.total_equity },
-    { label: 'Total Liabilities', value: fcPdf(eq.total_ncl + eq.total_cl, currency), sub: `NCL ${fl(eq.total_ncl, 2, unit)}${unitSuffix(unit)} + CL ${fl(eq.total_cl, 2, unit)}${unitSuffix(unit)}`, tone: 0 },
+    // fcUnitPdf() (unit-scaled) replaces fcPdf() (adaptive Lakh/Crore,
+    // ignores the Unit Selector — see its own doc comment) so this card's
+    // bolded value matches the on-screen tab's own KPI and the statutory
+    // table a few inches below, both already Unit-Selector-responsive.
+    { label: 'Total Assets', value: fcUnitPdf(as.total, unit, currency), sub: `NCA ${fl(as.total_nca, 2, unit)}${unitSuffix(unit)} + CA ${fl(as.total_ca, 2, unit)}${unitSuffix(unit)}`, tone: 0 },
+    { label: 'Total Equity', value: fcUnitPdf(eq.total_equity, unit, currency), sub: 'Shareholders\' funds', tone: eq.total_equity },
+    { label: 'Total Liabilities', value: fcUnitPdf(eq.total_ncl + eq.total_cl, unit, currency), sub: `NCL ${fl(eq.total_ncl, 2, unit)}${unitSuffix(unit)} + CL ${fl(eq.total_cl, 2, unit)}${unitSuffix(unit)}`, tone: 0 },
     {
       label: 'Balance Check',
       value: bs.balanced ? 'Balanced' : 'Out of Balance',

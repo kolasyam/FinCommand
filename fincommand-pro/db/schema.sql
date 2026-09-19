@@ -347,6 +347,242 @@ CREATE INDEX IF NOT EXISTS idx_report_lines_parent          ON report_lines(pare
 CREATE INDEX IF NOT EXISTS idx_report_line_ledgers_line     ON report_line_ledgers(line_id);
 CREATE INDEX IF NOT EXISTS idx_report_saved_reports_company ON report_saved_reports(company_id, template_id);
 
+-- ═══════════════════════════════════════════════════════════
+--  DASHBOARD BUILDER — per-user customizable "My Dashboard"
+--  (drag/resize KPI widgets bound to a curated metric catalog —
+--  see lib/financial/dashboard-builder-engine.ts). Widgets store ONLY
+--  layout + metric bindings, never computed amounts — every render
+--  resolves fresh against the live ReportBundle, same convention as
+--  Report Builder's saved reports above.
+-- ═══════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS dashboard_layouts (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id    UUID REFERENCES companies(id) ON DELETE CASCADE,
+  -- NULL = the company-wide default layout new users start from (set by an
+  -- admin/cfo/manager); non-NULL = one specific user's own personal layout.
+  user_id       UUID REFERENCES users(id) ON DELETE CASCADE,
+  layout_cols   INTEGER NOT NULL DEFAULT 12,
+  row_height_px INTEGER NOT NULL DEFAULT 40,
+  created_at    TIMESTAMPTZ DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Generalizes this table beyond the original single "My Dashboard" tab to
+-- ANY customizable tab (Overview, MIS, Ratios, Treasury, Working Capital,
+-- Customer Margin, Vendor Expense, Board Pack — see
+-- lib/financial/dashboard-builder-engine.ts's TAB_KEYS). 'my-dashboard'
+-- (the default) keeps every row written before this column existed pointing
+-- at exactly the tab they already belonged to — a genuinely additive
+-- migration, not a breaking one.
+ALTER TABLE dashboard_layouts ADD COLUMN IF NOT EXISTS tab_key VARCHAR(50) NOT NULL DEFAULT 'my-dashboard';
+
+-- Plain UNIQUE(company_id,user_id,tab_key) would NOT stop multiple
+-- company-default (user_id NULL) rows per company+tab — NULL never equals
+-- NULL under a uniqueness check. Partial indexes express the real
+-- constraint: at most one personal layout per user per tab, at most one
+-- default layout per company per tab. (Superseded the tab-less
+-- idx_dashboard_layouts_personal/idx_dashboard_layouts_company_default from
+-- this table's first version — Postgres has no ALTER INDEX to add a column
+-- to an existing index, so those are dropped and recreated here, same
+-- evolve-an-index pattern this file already uses for
+-- idx_tb_uploads_current -> idx_tb_uploads_current_partial below.)
+DROP INDEX IF EXISTS idx_dashboard_layouts_personal;
+DROP INDEX IF EXISTS idx_dashboard_layouts_company_default;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dashboard_layouts_personal
+  ON dashboard_layouts(company_id, user_id, tab_key) WHERE user_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dashboard_layouts_company_default
+  ON dashboard_layouts(company_id, tab_key) WHERE user_id IS NULL;
+
+CREATE TABLE IF NOT EXISTS dashboard_widgets (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  layout_id    UUID REFERENCES dashboard_layouts(id) ON DELETE CASCADE,
+  widget_type  VARCHAR(30) NOT NULL
+               CHECK (widget_type IN
+                 ('stat_card','stat_card_sparkline','line_chart','bar_chart',
+                  'donut_chart','gauge','data_table','text_block')),
+  title        VARCHAR(200),
+  subtitle     VARCHAR(200),
+  grid_x       INTEGER NOT NULL DEFAULT 0,
+  grid_y       INTEGER NOT NULL DEFAULT 0,
+  grid_w       INTEGER NOT NULL DEFAULT 3,
+  grid_h       INTEGER NOT NULL DEFAULT 4,
+  -- [{metric_key, label?, color?, render_as?}] — metric_key validated at the
+  -- API layer against lib/financial/dashboard-builder-engine.ts's
+  -- METRIC_CATALOG (built-in) or custom_metric_definitions (per-company),
+  -- never trusted raw from the client.
+  series       JSONB NOT NULL DEFAULT '[]',
+  viz_config   JSONB NOT NULL DEFAULT '{}',
+  sequence     INTEGER NOT NULL DEFAULT 0,
+  created_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_dashboard_widgets_layout ON dashboard_widgets(layout_id);
+
+-- Adds 'metric_table', 'period_summary', 'yoy_variance', 'financial_health', 'top_customers', 'profit_bridge', 'cash_bridge', 'note_index',
+-- and (2026-09-18) 'hbar_chart', 'ratio_card', 'kpi_group' widget types. KEEP IN SYNC with lib/db/neon.ts's startup copy of this constraint.
+ALTER TABLE dashboard_widgets DROP CONSTRAINT IF EXISTS dashboard_widgets_widget_type_check;
+ALTER TABLE dashboard_widgets ADD CONSTRAINT dashboard_widgets_widget_type_check
+  CHECK (widget_type IN
+    ('stat_card','stat_card_sparkline','line_chart','bar_chart',
+     'donut_chart','gauge','data_table','text_block','metric_table','period_summary','yoy_variance','financial_health','top_customers','profit_bridge','cash_bridge','note_index',
+     'hbar_chart','ratio_card','kpi_group'));
+
+-- ─────────────────────────────────────────────
+--  CUSTOM METRIC DEFINITIONS — user-authored KPIs composed from the
+--  existing, tb-engine-verified metric catalog (lib/financial/
+--  dashboard-builder-engine.ts::METRIC_CATALOG), never from raw ledgers
+--  directly. `expression` is a small, structured expression tree
+--  ({type:'metric'|'const'|'op', ...} — see lib/financial/
+--  custom-metric-engine.ts), never a free-text formula string — there is no
+--  string-formula parser/injection surface anywhere in this feature.
+--  Company-wide (like ledger_master), not per-user: a custom metric is a
+--  definition, not a personal display preference.
+-- ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS custom_metric_definitions (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id           UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  metric_key           VARCHAR(100) NOT NULL,
+  label                VARCHAR(150) NOT NULL,
+  value_type           VARCHAR(20) NOT NULL DEFAULT 'ratio'
+                       CHECK (value_type IN ('currency','percent','ratio','days','number')),
+  decimals             INTEGER NOT NULL DEFAULT 2,
+  expression           JSONB NOT NULL,
+  target_value         NUMERIC(18,4),
+  threshold_direction  VARCHAR(20) CHECK (threshold_direction IN ('higher_is_better','lower_is_better')),
+  created_by           UUID REFERENCES users(id),
+  created_at           TIMESTAMPTZ DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(company_id, metric_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_custom_metric_definitions_company ON custom_metric_definitions(company_id);
+
+-- Custom metrics v2 (2026-09-18, see docs/CUSTOM-METRICS-V2.md) — two
+-- definition kinds instead of one:
+--   'formula' — the original structured expression tree (`expression`),
+--               which may now ALSO reference this company's other custom
+--               metrics (cycles rejected at save time, see
+--               custom-metric-engine.ts::findDependencyCycle), plus the
+--               abs/round/percent_change/avg_per_month/coalesce functions.
+--   'ledger'  — a structured filter over this company's real Trial Balance
+--               ledgers (`ledger_spec`: {match, conditions[], measure,
+--               sign}), computed server-side by tb-engine.ts's
+--               computeLedgerMetric() — still never a free-text formula.
+-- `version` increments on every save/restore; every version's full
+-- snapshot lives in custom_metric_versions below.
+ALTER TABLE custom_metric_definitions ADD COLUMN IF NOT EXISTS definition_kind VARCHAR(20) NOT NULL DEFAULT 'formula';
+ALTER TABLE custom_metric_definitions ADD COLUMN IF NOT EXISTS ledger_spec JSONB;
+ALTER TABLE custom_metric_definitions ADD COLUMN IF NOT EXISTS description VARCHAR(300);
+ALTER TABLE custom_metric_definitions ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE custom_metric_definitions ADD COLUMN IF NOT EXISTS updated_by UUID REFERENCES users(id);
+ALTER TABLE custom_metric_definitions ALTER COLUMN expression DROP NOT NULL;
+ALTER TABLE custom_metric_definitions DROP CONSTRAINT IF EXISTS custom_metric_definitions_kind_check;
+ALTER TABLE custom_metric_definitions ADD CONSTRAINT custom_metric_definitions_kind_check
+  CHECK (definition_kind IN ('formula','ledger'));
+-- Compare-with choice and an optional early-warning level (2026-09-18):
+-- comparison 'prior_year' (default — what every metric did before),
+-- 'prior_period' (the period immediately before), or 'none'. warn_value sits
+-- on the bad side of target_value (validated in custom-metric-engine.ts).
+ALTER TABLE custom_metric_definitions ADD COLUMN IF NOT EXISTS comparison VARCHAR(20) NOT NULL DEFAULT 'prior_year';
+ALTER TABLE custom_metric_definitions ADD COLUMN IF NOT EXISTS warn_value NUMERIC(18,4);
+ALTER TABLE custom_metric_definitions DROP CONSTRAINT IF EXISTS custom_metric_definitions_comparison_check;
+ALTER TABLE custom_metric_definitions ADD CONSTRAINT custom_metric_definitions_comparison_check
+  CHECK (comparison IN ('prior_year','prior_period','none'));
+ALTER TABLE custom_metric_definitions DROP CONSTRAINT IF EXISTS custom_metric_definitions_shape_check;
+ALTER TABLE custom_metric_definitions ADD CONSTRAINT custom_metric_definitions_shape_check
+  CHECK ((definition_kind = 'formula' AND expression IS NOT NULL)
+      OR (definition_kind = 'ledger'  AND ledger_spec IS NOT NULL));
+
+-- ─────────────────────────────────────────────
+--  CUSTOM METRIC VERSIONS — one row per saved version of a custom metric
+--  (creation, every edit, and every restore), each a full snapshot of the
+--  definition as it stood at that version, so any version can be restored
+--  exactly. A restore never rewrites history: it writes a NEW version whose
+--  snapshot equals the restored one. Rows cascade away with their metric —
+--  the audit_trail's custom_metric.delete row is the permanent record.
+-- ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS custom_metric_versions (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  metric_id       UUID NOT NULL REFERENCES custom_metric_definitions(id) ON DELETE CASCADE,
+  company_id      UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  version         INTEGER NOT NULL,
+  snapshot        JSONB NOT NULL,
+  change_note     VARCHAR(300),
+  changed_fields  JSONB NOT NULL DEFAULT '[]',
+  changed_by      UUID REFERENCES users(id) ON DELETE SET NULL,
+  changed_by_name VARCHAR(255),
+  created_at      TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(metric_id, version)
+);
+CREATE INDEX IF NOT EXISTS idx_custom_metric_versions_metric ON custom_metric_versions(metric_id, version DESC);
+
+-- Backfill: a metric created before version history existed gets its
+-- current state recorded as its first version (idempotent — only for
+-- metrics that have no version row yet). Snapshot keys mirror
+-- CustomMetricSnapshot in custom-metric-engine.ts exactly.
+INSERT INTO custom_metric_versions (metric_id, company_id, version, snapshot, change_note, changed_by)
+SELECT d.id, d.company_id, d.version,
+       jsonb_build_object(
+         'key', d.metric_key, 'label', d.label, 'description', d.description,
+         'kind', d.definition_kind, 'valueType', d.value_type, 'decimals', d.decimals,
+         'expression', d.expression, 'ledgerSpec', d.ledger_spec,
+         'targetValue', d.target_value, 'thresholdDirection', d.threshold_direction),
+       'Existing definition recorded when version history was introduced', d.created_by
+FROM custom_metric_definitions d
+WHERE NOT EXISTS (SELECT 1 FROM custom_metric_versions v WHERE v.metric_id = d.id);
+
+-- ─────────────────────────────────────────────
+--  CUSTOM TABS — user-named dashboard tabs beyond the 13 fixed ones in
+--  lib/financial/dashboard-builder-engine.ts's TAB_KEYS. Identity only: the
+--  layout/widgets for a custom tab live in the EXISTING dashboard_layouts/
+--  dashboard_widgets tables above, under this row's tab_key, exactly like
+--  every fixed tab — nothing new is built for widgets or custom-metric
+--  formulas, both are reused as-is (custom_metric_definitions above is
+--  already company-wide with no tab scoping, so a new tab needs zero
+--  changes there to use every existing formula, and vice versa).
+--  tab_key is server-generated ('custom-' + slugify(name), deduped) and
+--  immutable once created — renaming changes `name` only, never the key
+--  already written into dashboard_layouts rows for this tab. No FK from
+--  dashboard_layouts to this table by design (tab_key already has no DB-level
+--  integrity backing it today, for any tab): deleteCustomTab() explicitly
+--  deletes this tab's dashboard_layouts rows (cascading to dashboard_widgets
+--  via its existing FK) in the same transaction as deleting this row — see
+--  lib/db/queries/custom-tabs.ts.
+-- ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS custom_tabs (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id   UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  tab_key      VARCHAR(50) NOT NULL,
+  name         VARCHAR(100) NOT NULL,
+  description  VARCHAR(300),
+  icon         VARCHAR(10),
+  sort_order   INTEGER NOT NULL DEFAULT 0,
+  created_by   UUID REFERENCES users(id),
+  created_at   TIMESTAMPTZ DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(company_id, tab_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_custom_tabs_company ON custom_tabs(company_id, sort_order);
+
+-- Role-based sharing (2026-09-18). Enforced server-side on every route that
+-- reads or writes a custom tab or its layouts (lib/db/queries/custom-tabs.ts
+-- ::canViewCustomTab) — never just hidden in the UI:
+--   'company' — everyone in the company (the original behavior, so every
+--               pre-existing tab keeps exactly the visibility it had),
+--   'roles'   — only users whose role is in shared_roles,
+--   'private' — only the creator.
+-- Admins always see every tab (governance: someone must be able to find and
+-- remove an abandoned private tab), and the creator always sees their own.
+ALTER TABLE custom_tabs ADD COLUMN IF NOT EXISTS visibility VARCHAR(10) NOT NULL DEFAULT 'company';
+ALTER TABLE custom_tabs ADD COLUMN IF NOT EXISTS shared_roles TEXT[] NOT NULL DEFAULT '{}';
+-- Which gallery template (lib/dashboard-builder/templates.ts) or source tab
+-- the tab was started from — provenance only, never re-applied.
+ALTER TABLE custom_tabs ADD COLUMN IF NOT EXISTS started_from VARCHAR(60);
+ALTER TABLE custom_tabs DROP CONSTRAINT IF EXISTS custom_tabs_visibility_check;
+ALTER TABLE custom_tabs ADD CONSTRAINT custom_tabs_visibility_check
+  CHECK (visibility IN ('company','roles','private'));
+
 -- ─────────────────────────────────────────────
 --  LEDGER MASTER (company-specific + global pre-seeded)
 -- ─────────────────────────────────────────────
@@ -561,4 +797,14 @@ EXCEPTION WHEN duplicate_object THEN NULL; END; $$;
 DO $$ BEGIN
   CREATE TRIGGER trg_ledger_master_updated_at
     BEFORE UPDATE ON ledger_master FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+EXCEPTION WHEN duplicate_object THEN NULL; END; $$;
+
+DO $$ BEGIN
+  CREATE TRIGGER trg_dashboard_layouts_updated_at
+    BEFORE UPDATE ON dashboard_layouts FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+EXCEPTION WHEN duplicate_object THEN NULL; END; $$;
+
+DO $$ BEGIN
+  CREATE TRIGGER trg_custom_metric_definitions_updated_at
+    BEFORE UPDATE ON custom_metric_definitions FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 EXCEPTION WHEN duplicate_object THEN NULL; END; $$;

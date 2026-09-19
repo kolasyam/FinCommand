@@ -4,6 +4,8 @@ import { useDashboard } from '@/lib/dashboard/DashboardContext';
 import { fl as flRaw, pct, numTone, getFyLabel, getUnitHeader, unitSuffix } from '@/lib/utils/format';
 import { getCurrencyMeta } from '@/lib/services/currency';
 import { DownloadBar } from '../DownloadBar';
+import { CustomizableTabPanel } from './dashboard-builder/CustomizableTabPanel';
+import { CUSTOMER_MARGIN_DEFAULT_WIDGETS } from '@/lib/dashboard-builder/default-layout';
 
 /**
  * Customer-level margin report — real revenue (Zoho Sales by Customer,
@@ -51,7 +53,7 @@ export function CustomerMarginTab() {
   // Real Zoho contact master data — see VendorExpenseTab's identical note.
   const hasContactData = entries.some(e => e.contact);
 
-  return (
+  const fixedView = (
     <div>
       <DownloadBar title={`Customer Margin Report · ${fyLabel}`} subtitle={`Real revenue vs. direct cost by customer · ${period_label}`} section="customer-margin" compareEnabled={false} />
 
@@ -145,4 +147,6 @@ export function CustomerMarginTab() {
       )}
     </div>
   );
+
+  return <CustomizableTabPanel tabKey="customer-margin" defaultWidgets={CUSTOMER_MARGIN_DEFAULT_WIDGETS} fixedView={fixedView} />;
 }

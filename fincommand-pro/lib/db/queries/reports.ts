@@ -1,5 +1,6 @@
 import { query } from '@/lib/db/neon';
 import type { TbLedgerRow } from '@/lib/financial/tb-engine';
+import { mergeCyLedgers } from '@/lib/financial/cy-merge';
 import type { PeriodParams, PeriodType, YearType, Period } from '@/lib/financial/tb-engine';
 
 export interface FinancialYearRow {
@@ -166,4 +167,27 @@ export function parsePeriodParams(searchParams: URLSearchParams): PeriodParams {
     period: (searchParams.get('period') as Period) || null,
     yearType: (searchParams.get('year_type') as YearType) || 'FY',
   };
+}
+
+/**
+ * The ledgers a report for (fy, period) is computed from, plus the prior
+ * year's ledgers for comparatives — the SAME selection /api/v1/reports/all
+ * makes (FY mode: this FY + the previous FY; CY mode: Jan–Mar from one FY
+ * merged with Apr–Dec from the next, no comparative). Used by the
+ * custom-metric preview endpoint so a draft ledger metric previews against
+ * exactly the ledgers the saved metric will later be computed from.
+ */
+export async function loadPeriodLedgers(
+  companyId: string, fy: FinancialYearRow, params: PeriodParams,
+): Promise<{ ledgers: TbLedgerRow[]; prevLedgers: TbLedgerRow[] | null }> {
+  const ledgers = await loadLedgers(companyId, fy.id);
+  if (params.yearType === 'CY') {
+    const [nextFy, prevFy] = await Promise.all([getNextFY(companyId, fy), getPreviousFY(companyId, fy)]);
+    if (nextFy) return { ledgers: mergeCyLedgers(ledgers, await loadLedgers(companyId, nextFy.id)), prevLedgers: null };
+    if (prevFy) return { ledgers: mergeCyLedgers(await loadLedgers(companyId, prevFy.id), ledgers), prevLedgers: null };
+    return { ledgers: mergeCyLedgers(ledgers, []), prevLedgers: null };
+  }
+  const prevFy = await getPreviousFY(companyId, fy);
+  const prevLedgers = prevFy ? await loadLedgers(companyId, prevFy.id) : [];
+  return { ledgers, prevLedgers: prevLedgers.length ? prevLedgers : null };
 }

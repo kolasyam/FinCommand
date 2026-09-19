@@ -178,6 +178,28 @@ describe('validateTemplate', () => {
     expect(result.ok).toBe(true); // warnings alone don't block saving
   });
 
+  test('flags more than one %-base line as a blocking error — computeStatementReport() would otherwise silently use only the first', () => {
+    const lines: ReportLine[] = [
+      makeLine({ id: 'l_1', label: 'Revenue', sequence: 10, lineType: 'detail', isPercentBase: true }),
+      makeLine({ id: 'l_2', label: 'COGS', sequence: 20, lineType: 'detail', sign: -1, isPercentBase: true }),
+      makeLine({ id: 'l_3', label: 'Gross Profit', sequence: 30, lineType: 'subtotal' }),
+    ];
+    const result = validateTemplate(lines, { l_1: ['Revenue'], l_2: ['COGS'] }, sections);
+    const issue = result.errors.find((i) => i.code === 'multiple_percent_base');
+    expect(issue).toBeDefined();
+    expect(issue!.lineIds.sort()).toEqual(['l_1', 'l_2']);
+    expect(result.ok).toBe(false); // this one blocks saving, unlike the zero-base case
+  });
+
+  test('exactly one %-base line raises no multiple_percent_base issue', () => {
+    const lines: ReportLine[] = [
+      makeLine({ id: 'l_1', label: 'Revenue', sequence: 10, lineType: 'detail', isPercentBase: true }),
+      makeLine({ id: 'l_2', label: 'Total', sequence: 20, lineType: 'subtotal' }),
+    ];
+    const result = validateTemplate(lines, { l_1: ['Revenue'] }, sections);
+    expect(result.issues.some((i) => i.code === 'multiple_percent_base')).toBe(false);
+  });
+
   test('a fully valid template has zero issues', () => {
     const lines: ReportLine[] = [
       makeLine({ id: 'l_1', label: 'Revenue', sequence: 10, lineType: 'detail', sign: 1, isPercentBase: true }),

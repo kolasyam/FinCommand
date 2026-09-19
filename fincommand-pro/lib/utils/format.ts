@@ -28,7 +28,7 @@ export type { CurrencyCode };
 
 const EPSILON = 0.005; // values that would round to 0.00 at 2dp display as the neutral dash, not "0.00" or "(0.00)"
 
-/** The three table-display units the topbar Unit Selector offers. Default 'Lakhs' — this app's longstanding convention and every existing export/tab's assumption. */
+/** The three table-display units the topbar Unit Selector offers. Default 'Crores'. */
 export type DisplayUnit = 'Lakhs' | 'Thousands' | 'Crores';
 
 const UNIT_DIVISOR: Record<DisplayUnit, number> = {
@@ -54,31 +54,10 @@ export function unitSuffix(unit: DisplayUnit = 'Lakhs'): string {
   return UNIT_SUFFIX[unit];
 }
 
-/**
- * Formats a raw-rupee value (unconditionally divided by the selected unit's
- * divisor) as an accounting-style string: `324.80` or `(13.26)` — never a
- * bare minus sign. Null/undefined/NaN and near-zero values render as `—`.
- *
- * Every real call site across the engine (MIS, BS, P&L, Cash Flow, Notes,
- * Treasury, Ratios, ...) passes raw rupees — tb-engine.ts's ledger amounts
- * are always raw NUMERIC rupees, with no exceptions. This function used to
- * guess the unit from magnitude (only divide values past some threshold) to
- * also accommodate the couple of call sites that pass an already-Crores
- * figure (Top Customers' `revenue_cr`) — but that guess is unsound at any
- * threshold: a genuinely small *raw-rupee* movement (a ledger balance that
- * happens to net to, say, ₹292 for the period) is indistinguishable by
- * magnitude alone from an already-scaled ₹292 Lakhs figure, so it silently
- * rendered as "(292.14)" under a "₹ in Lakhs" column header — a 100,000×
- * overstatement (confirmed on the Cash Flow tab's real equity-movement line)
- * that a real finance reviewer would, rightly, refuse to believe. Use
- * frRaw() for figures that aren't raw-rupee table amounts (Top Customers'
- * revenue_cr, EPS) instead of routing them through this function — never
- * reintroduce a magnitude guess here.
- */
 export function fl(n: number | null | undefined, decimals = 2, unit: DisplayUnit = 'Lakhs'): string {
   if (n === null || n === undefined || Number.isNaN(n)) return '—';
+  if (Math.abs(n) < 1e-9) return '—';
   const scaled = n / UNIT_DIVISOR[unit];
-  if (Math.abs(scaled) < EPSILON) return '—';
 
   const formatted = Math.abs(scaled).toLocaleString('en-IN', {
     minimumFractionDigits: decimals,
@@ -131,7 +110,7 @@ export function formatChg(
  */
 export function frRaw(n: number | null | undefined, decimals = 2): string {
   if (n === null || n === undefined || Number.isNaN(n)) return '—';
-  if (Math.abs(n) < EPSILON) return '—';
+  if (Math.abs(n) < 1e-9) return '—';
   const formatted = Math.abs(n).toLocaleString('en-IN', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
@@ -143,20 +122,30 @@ export function frRaw(n: number | null | undefined, decimals = 2): string {
 function fcMagnitude(n: number | null | undefined, currency: CurrencyCode): { magnitude: string; isNeg: boolean } | null {
   if (n === null || n === undefined || Number.isNaN(n)) return null;
   const absVal = Math.abs(n);
-  if (absVal < EPSILON) return null;
+  if (absVal < 1e-9) return null;
   const isNeg = n < 0;
 
   let magnitude: string;
   if (currency === 'INR') {
+    // Unconditional real-magnitude ladder — no "this figure is probably
+    // already expressed in Lakhs" guess. A prior version special-cased
+    // 100 <= absVal < 100000 as "must already be Lakhs, divide by 100 for
+    // Cr" instead of the honest "divide by 1,00,000 for Lakhs" every other
+    // branch (and fl()/fn() unconditionally, per their own regression test)
+    // uses — the exact "no magnitude-based guessing" rule format.test.ts
+    // pins for fl()/fn() was being silently violated here, and only here.
+    // That guess existed only to paper over lib/financial/sample-data.ts
+    // authoring its demo figures in Lakhs without converting to real raw
+    // rupees; now that sample-data.ts does that conversion itself (see its
+    // own LAKH constant), this function no longer needs to guess — and
+    // removing the guess is what makes it agree with the Period Summary/
+    // YoY Variance tables directly below every KPI card instead of quietly
+    // fabricating a plausible-looking-but-wrong Cr figure for any real
+    // company whose Trial Balance was, in fact, entered in Lakhs by mistake.
     if (absVal >= 10000000) {
       magnitude = `${(absVal / 10000000).toFixed(2)} Cr`;
-    } else if (absVal >= 100000) {
-      magnitude = `${(absVal / 100000).toFixed(2)} Lakhs`;
-    } else if (absVal >= 100) {
-      // Already in Lakhs (e.g. 721.74 Lakhs = ₹7.21 Cr)
-      magnitude = `${(absVal / 100).toFixed(2)} Cr`;
     } else {
-      magnitude = `${absVal.toFixed(2)} Lakhs`;
+      magnitude = `${(absVal / 100000).toFixed(2)} Lakhs`;
     }
   } else {
     // International convention — Lakh/Crore has no meaning to a non-INR
@@ -192,7 +181,7 @@ export function fc(n: number | null | undefined, currency: CurrencyCode = 'INR')
 /** Accounting-style percentage: `45.2%` or `(0.4%)`. Null/undefined/NaN render as `—`. */
 export function pct(n: number | null | undefined, digits = 1): string {
   if (n === null || n === undefined || Number.isNaN(n)) return '—';
-  if (Math.abs(n) < EPSILON) return '—';
+  if (Math.abs(n) < 1e-9) return '—';
   const abs = Math.abs(n).toFixed(digits);
   return n < 0 ? `(${abs}%)` : `${abs}%`;
 }
@@ -218,6 +207,31 @@ export function numTone(n: number | null | undefined): 'up' | 'dn' | '' {
 /** Same sign logic as numTone(), but always returns a value — for the `<Kpi tone>` prop, which has no empty/neutral-string variant (its neutral state is the literal 'neu'). */
 export function kpiTone(n: number | null | undefined): 'up' | 'dn' | 'neu' {
   return numTone(n) || 'neu';
+}
+
+/**
+ * Tone for a ratio/percentage/day-count metric that has a real benchmark —
+ * never derive this from the value's raw sign. A positive Debt/Equity of
+ * 3.0x is still unfavorable (target 1.0, lower_is_better); a positive-but-
+ * below-target ROE is still unfavorable. This is the one canonical
+ * implementation both widget-renderers.tsx's toneForMetric() (its threshold
+ * branch delegates here) and any hand-coded benchmark comparison — the
+ * Financial Health & Solvency card's Current Ratio/ROE/Debt-Equity, in both
+ * OverviewTab.tsx's fixed view and its FinancialHealthWidget mirror — must
+ * go through, so the two can never drift the way they did before this fix:
+ * Current Ratio and Debt/Equity carried no tone at all, and ROE used plain
+ * sign-based numTone() instead of comparing against its real 15% target (a
+ * hypothetical +8% ROE, genuinely below benchmark, would have shown up as
+ * green/favorable).
+ */
+export function benchmarkTone(
+  value: number | null | undefined,
+  target: number,
+  direction: 'higher_is_better' | 'lower_is_better',
+): 'up' | 'dn' | '' {
+  if (value === null || value === undefined || Number.isNaN(value)) return '';
+  const healthy = direction === 'higher_is_better' ? value >= target : value <= target;
+  return healthy ? 'up' : 'dn';
 }
 
 /** Accounting-style multiple (ratios): `2.50x` or `(0.80x)`. Null/undefined/NaN render as `—`. */
@@ -248,6 +262,31 @@ export function fcPdf(n: number | null | undefined, currency: CurrencyCode = 'IN
   const meta = getCurrencyMeta(currency);
   const formatted = `${meta.pdfSymbol}${meta.pdfSpacer}${m.magnitude}`;
   return m.isNeg ? `(${formatted})` : formatted;
+}
+
+/**
+ * PDF-safe KPI-card formatter that IS unit-selector-responsive (unlike
+ * fcPdf(), which auto-scales to Lakh/Crore or K/M/B regardless of the
+ * topbar Unit Selector — see fcPdf()'s own doc comment: that's correct for
+ * an auxiliary "quick glance" figure, but every bespoke PDF export's own
+ * headline KPI cards are the primary restatement of a number the matching
+ * on-screen tab already shows unit-scaled via fl()/fn() — fcPdf() there
+ * made the PDF's big bolded figure silently stop tracking the Unit
+ * Selector, so a "Total Assets" card could read "Rs. 9.92 Cr" while the
+ * live tab (and the very same PDF's own comparison table two inches below)
+ * showed "992.08" under "Rs. in Lakhs"). This instead applies the SAME
+ * Lakhs/Thousands/Crores-scaled magnitude fl() produces for every table
+ * cell, with the currency symbol and the unit's short suffix around it —
+ * e.g. "Rs. 324.76L", "$3.91K" — so a PDF KPI card always shows the
+ * identical number, at the identical scale, as its on-screen counterpart.
+ * Same symbol+fl()+unitSuffix() shape BoardPackTab.tsx's own highlight
+ * sentences and bs-pdf.ts's "out of balance" line already use.
+ */
+export function fcUnitPdf(n: number | null | undefined, unit: DisplayUnit = 'Lakhs', currency: CurrencyCode = 'INR'): string {
+  const formatted = fl(n, 2, unit);
+  if (formatted === '—') return '—';
+  const meta = getCurrencyMeta(currency);
+  return `${meta.pdfSymbol}${meta.pdfSpacer}${formatted}${unitSuffix(unit)}`;
 }
 
 export function formatDate(iso: string | undefined | null): string {

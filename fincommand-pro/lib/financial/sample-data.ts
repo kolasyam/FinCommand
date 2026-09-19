@@ -91,6 +91,25 @@ export const SAMPLE_CUSTOMER_DIRECT_COST: { customer: string; pct_of_revenue: nu
 
 const SCALE: Record<SampleFyKey, number> = { FY25: 1, FY24: 0.78, FY23: 0.635 };
 
+// BS_LINES/PL_MONTHLY below are AUTHORED in ₹ Lakhs (a base value of 2012
+// means "₹2012 Lakhs") purely for readability — but tb-engine.ts and every
+// consumer of TbLedgerRow (fl()/fn()/frRaw() in lib/utils/format.ts,
+// computeTopCustomers()'s revenue_cr divide-by-1-crore, etc.) is documented
+// and tested (tests/unit/format.test.ts's "divides unconditionally — no
+// magnitude-based guessing" suite) to treat every ledger amount as REAL RAW
+// RUPEES, with no exceptions. Before this constant existed, buildSampleLedgers()
+// stored the authored Lakhs-scale numbers directly as the raw amount — a
+// real, confirmed bug: Executive Overview's Period Summary/YoY Variance
+// tables showed garbage sub-1 values ("0.29" instead of "29,457.00" under a
+// "₹ in Lakhs" header) and Top Customers' revenue_cr rendered "—" for every
+// customer (dividing an already-tiny number by 1 crore rounds to 0.00) —
+// while fc()'s KPI cards happened to *look* right only because of a since-
+// removed unit-guessing heuristic (see format.ts's fcMagnitude() history).
+// Multiplying every authored figure by LAKH here, once, at construction time
+// is the actual fix: every downstream consumer already assumes raw rupees
+// correctly, so this is the one place that needed to stop violating that.
+const LAKH = 100000;
+
 function dr(monthly: number[]): number[] { return monthly; }
 function zeros(): number[] { return Array(12).fill(0); }
 
@@ -159,7 +178,7 @@ export function buildSampleLedgers(fyKey: SampleFyKey): TbLedgerRow[] {
 
   // Balance sheet ledgers: full opening balance, zero movement all year.
   BS_LINES.forEach((line, i) => {
-    const amt = Math.round(line.amount * factor);
+    const amt = Math.round(line.amount * factor * LAKH);
     const isDr = line.normal_bal === 'Dr';
     rows.push({
       id: `sample-bs-${fyKey}-${i}`,
@@ -183,7 +202,7 @@ export function buildSampleLedgers(fyKey: SampleFyKey): TbLedgerRow[] {
     code: string, name: string, note_no: number, note_name: string,
     section: 'inc' | 'exp', normal_bal: 'Dr' | 'Cr', monthly: number[]
   ) => {
-    const scaled = scaleArr(monthly, factor);
+    const scaled = scaleArr(monthly, factor).map(v => v * LAKH);
     const row: TbLedgerRow = {
       id: `sample-pl-${fyKey}-${code}`,
       ledger_code: code, ledger_name: name, note_no, note_name, section,

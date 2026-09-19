@@ -7,7 +7,8 @@ import {
   fetchTemplateStructure, fetchLedgerOptions, setLineLedgers,
   type RealLedgerOption,
 } from '@/lib/dashboard/report-builder-api';
-import type { ReportLine, LineLedgerMap, ReportTemplate } from '@/lib/financial/report-builder-engine';
+import { SECTION_LABELS, type ReportLine, type LineLedgerMap, type ReportTemplate } from '@/lib/financial/report-builder-engine';
+import type { Section } from '@/lib/financial/tb-engine';
 
 export function LedgerMapper({
   templateId, currentFyId, onBack,
@@ -24,6 +25,7 @@ export function LedgerMapper({
   const [loading, setLoading] = useState(true);
   const [activeLineId, setActiveLineId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [sectionFilter, setSectionFilter] = useState<Section | 'all'>('all');
 
   useEffect(() => {
     let cancelled = false;
@@ -57,8 +59,14 @@ export function LedgerMapper({
   }, [detailLines, lineLedgerMap]);
 
   const selected = activeLineId ? (lineLedgerMap[activeLineId] ?? []) : [];
+  // Only offer sections this company's real synced ledgers actually use — never a fabricated option for a section with nothing in it.
+  const availableSections = useMemo(
+    () => [...new Set(ledgers.map((l) => l.section).filter((s): s is Section => Boolean(s)))].sort(),
+    [ledgers],
+  );
   const filtered = ledgers.filter(
-    (l) => l.name.toLowerCase().includes(query.toLowerCase()) || (l.noteName ?? '').toLowerCase().includes(query.toLowerCase())
+    (l) => (sectionFilter === 'all' || l.section === sectionFilter)
+      && (l.name.toLowerCase().includes(query.toLowerCase()) || (l.noteName ?? '').toLowerCase().includes(query.toLowerCase()))
   );
 
   async function toggle(ledgerName: string) {
@@ -122,6 +130,15 @@ export function LedgerMapper({
                 value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search real synced ledgers…"
                 style={{ flex: 1, border: 'none', outline: 'none', fontSize: 12, background: 'transparent' }}
               />
+              {availableSections.length > 1 && (
+                <select
+                  value={sectionFilter} onChange={(e) => setSectionFilter(e.target.value as Section | 'all')}
+                  style={{ fontSize: 11, padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border2)', appearance: 'auto', background: 'var(--bg)', color: 'var(--text)' }}
+                >
+                  <option value="all">All sections</option>
+                  {availableSections.map((s) => <option key={s} value={s}>{SECTION_LABELS[s]}</option>)}
+                </select>
+              )}
               <span className="pill pb">{selected.length} selected</span>
             </div>
             {filtered.map((l) => {

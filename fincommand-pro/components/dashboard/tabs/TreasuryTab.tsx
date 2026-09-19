@@ -9,6 +9,8 @@ import { fn, fl, pct, numTone, kpiTone, signedPct, getFyLabel, getFyShortLabel, 
 import { getCurrencyMeta } from '@/lib/services/currency';
 import type { TreasuryEntry, TreasuryResult } from '@/lib/financial/tb-engine';
 import { ThreeYearBanner, ThreeYearHeader, ThreeYearRow } from '../ThreeYearFrame';
+import { CustomizableTabPanel } from './dashboard-builder/CustomizableTabPanel';
+import { TREASURY_DEFAULT_WIDGETS } from '@/lib/dashboard-builder/default-layout';
 
 /** Match a current-year entry to its prior-year counterpart by ledger code (reliable) or, failing that, by name (best-effort — same approach as Notes to Accounts' YoY ledger matching). */
 function matchPrev(entry: TreasuryEntry, prevEntries: TreasuryEntry[]): TreasuryEntry | undefined {
@@ -151,9 +153,8 @@ export function TreasuryTab() {
     treasury.total_mf,
   ];
 
-  return (
+  const supplementaryView = (
     <div>
-      <DownloadBar title={`Treasury · ${getFyLabel(financial_year, yearType)}`} subtitle={`Cash, Bank, FDs & MFs · ${unitLabel} · ${period_label}`} section="treasury" compareEnabled={showComparison} />
       <div className="grid4">
         <Kpi label="Cash & Bank" value={fn(treasury.total_cash_and_bank, 2, displayUnit)} change={cashYoy != null ? `${signedPct(cashYoy * 100)} vs ${prevFyShort}` : undefined} tone={kpiTone(treasury.total_cash_and_bank)} />
         <Kpi label="Fixed Deposits" value={fn(treasury.total_fd, 2, displayUnit)} change={fdYoy != null ? `${signedPct(fdYoy * 100)} vs ${prevFyShort}` : undefined} tone={kpiTone(treasury.total_fd)} />
@@ -193,9 +194,17 @@ export function TreasuryTab() {
           )}
         </div>
       </div>
+    </div>
+  );
+
+  return (
+    <div>
+      <DownloadBar title={`Treasury · ${getFyLabel(financial_year, yearType)}`} subtitle={`Cash, Bank, FDs & MFs · ${unitLabel} · ${period_label}`} section="treasury" compareEnabled={showComparison} />
+
+      <CustomizableTabPanel tabKey="funds" defaultWidgets={TREASURY_DEFAULT_WIDGETS} fixedView={supplementaryView} />
 
       {hasPrev && (
-        <div className="card" style={{ padding: '10px 16px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <div className="card" style={{ padding: '10px 16px', marginBottom: 16, marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
           <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>Instrument-Level Detail</div>
           <label style={{ fontSize: 12, color: 'var(--text2)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, userSelect: 'none' }}>
             <input type="checkbox" checked={showComparison} onChange={e => setShowComparison(e.target.checked)} style={{ cursor: 'pointer' }} />

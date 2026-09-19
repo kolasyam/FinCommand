@@ -5,6 +5,8 @@ import { fl as flRaw, numTone, getFyLabel, getUnitHeader, unitSuffix } from '@/l
 import { getCurrencyMeta } from '@/lib/services/currency';
 import { DownloadBar } from '../DownloadBar';
 import { ThreeYearBanner, ThreeYearHeader, ThreeYearRow } from '../ThreeYearFrame';
+import { CustomizableTabPanel } from './dashboard-builder/CustomizableTabPanel';
+import { WORKING_CAPITAL_DEFAULT_WIDGETS } from '@/lib/dashboard-builder/default-layout';
 
 export function WorkingCapitalTab() {
   const { bundle, granularity, threeYear, yearType, displayUnit, presentationCurrency } = useDashboard();
@@ -64,7 +66,7 @@ export function WorkingCapitalTab() {
     { name: 'Other Current Assets', value: bs.assets.total_ca - (bs.assets.current.find(n => n.note_no === 16)?.total || 0) - (bs.assets.current.find(n => n.note_no === 15)?.total || 0), bench: 'vs CA', max: bs.assets.total_ca, color: '#3C3489' },
   ];
 
-  return (
+  const fixedView = (
     <div>
       <DownloadBar title={`Working Capital Analysis · ${fyLabel}`} subtitle={`DSO, DPO, CCC & Current Position · ${unitLabel}`} section="workingcapital" />
       <div className="info-bar">
@@ -90,4 +92,6 @@ export function WorkingCapitalTab() {
       </div>
     </div>
   );
+
+  return <CustomizableTabPanel tabKey="wc" defaultWidgets={WORKING_CAPITAL_DEFAULT_WIDGETS} fixedView={fixedView} />;
 }

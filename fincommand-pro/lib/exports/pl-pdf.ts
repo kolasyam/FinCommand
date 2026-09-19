@@ -12,7 +12,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { ReportBundle } from '@/lib/dashboard/types';
-import { fl, fn, frRaw, fcPdf, getFyLabel, getFyShortLabel, getUnitHeaderPdf, unitSuffix, formatChg, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
+import { fl, fn, frRaw, fcUnitPdf, getFyLabel, getFyShortLabel, getUnitHeaderPdf, unitSuffix, formatChg, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
 import { getCurrencyMeta } from '@/lib/services/currency';
 import {
   NAVY, NAVY_DARK, SLATE, BORDER, RED, GREEN, PAGE_W, MARGIN, CONTENT_W, DEFAULT_COMPANY_NAME,
@@ -151,10 +151,10 @@ export function buildPlPdf(bundle: ReportBundle, companyName = DEFAULT_COMPANY_N
   doc.line(MARGIN, 44, PAGE_W - MARGIN, 44);
 
   let y = drawKpiCards(doc, [
-    { label: 'Total Income', value: fcPdf(pl.total_income, currency), sub: `Revenue ${fl(pl.revenue, 2, unit)}${unitSuffix(unit)} + Other ${fl(pl.other_income, 2, unit)}${unitSuffix(unit)}`, tone: 0 },
-    { label: 'Total Expenses', value: fcPdf(pl.total_expenses, currency), sub: `${pl.revenue > 0 ? ((pl.total_expenses / pl.revenue) * 100).toFixed(1) : '—'}% of Revenue`, tone: 0 },
-    { label: 'Profit Before Tax', value: fcPdf(pl.pbt, currency), sub: `Margin ${pl.revenue > 0 ? ((pl.pbt / pl.revenue) * 100).toFixed(1) : '—'}%`, tone: pl.pbt },
-    { label: 'Profit After Tax', value: fcPdf(pl.pat, currency), sub: `Margin ${pl.revenue > 0 ? ((pl.pat / pl.revenue) * 100).toFixed(1) : '—'}%`, tone: pl.pat },
+    { label: 'Total Income', value: fcUnitPdf(pl.total_income, unit, currency), sub: `Revenue ${fl(pl.revenue, 2, unit)}${unitSuffix(unit)} + Other ${fl(pl.other_income, 2, unit)}${unitSuffix(unit)}`, tone: 0 },
+    { label: 'Total Expenses', value: fcUnitPdf(pl.total_expenses, unit, currency), sub: `${pl.revenue > 0 ? ((pl.total_expenses / pl.revenue) * 100).toFixed(1) : '—'}% of Revenue`, tone: 0 },
+    { label: 'Profit Before Tax', value: fcUnitPdf(pl.pbt, unit, currency), sub: `Margin ${pl.revenue > 0 ? ((pl.pbt / pl.revenue) * 100).toFixed(1) : '—'}%`, tone: pl.pbt },
+    { label: 'Profit After Tax', value: fcUnitPdf(pl.pat, unit, currency), sub: `Margin ${pl.revenue > 0 ? ((pl.pat / pl.revenue) * 100).toFixed(1) : '—'}%`, tone: pl.pat },
   ], 49);
 
   y += 6;

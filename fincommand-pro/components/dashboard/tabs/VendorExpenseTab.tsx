@@ -4,6 +4,8 @@ import { useDashboard } from '@/lib/dashboard/DashboardContext';
 import { fl as flRaw, numTone, getFyLabel, getUnitHeader, unitSuffix } from '@/lib/utils/format';
 import { getCurrencyMeta } from '@/lib/services/currency';
 import { DownloadBar } from '../DownloadBar';
+import { CustomizableTabPanel } from './dashboard-builder/CustomizableTabPanel';
+import { VENDOR_EXPENSE_DEFAULT_WIDGETS } from '@/lib/dashboard-builder/default-layout';
 
 const STATUS_PILL_CLASS: Record<string, string> = {
   'Concentration Risk': 'pr',
@@ -51,7 +53,7 @@ export function VendorExpenseTab() {
   // synced contacts.
   const hasContactData = vendors.some(v => v.contact);
 
-  return (
+  const fixedView = (
     <div>
       <DownloadBar title={`Vendor Expense Report · ${fyLabel}`} subtitle={`Real per-vendor spend from Zoho Bills · ${period_label}`} section="vendor-expense" compareEnabled={false} />
 
@@ -127,4 +129,6 @@ export function VendorExpenseTab() {
       )}
     </div>
   );
+
+  return <CustomizableTabPanel tabKey="vendor-expense" defaultWidgets={VENDOR_EXPENSE_DEFAULT_WIDGETS} fixedView={fixedView} />;
 }

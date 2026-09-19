@@ -93,7 +93,10 @@ describe('computeBS', () => {
 });
 
 describe('computeMIS', () => {
-  test('revenue, cost and PAT roll up correctly with a flat 25% tax', () => {
+  test('revenue, cost and PAT roll up correctly with the real 25% current + 1% deferred tax model', () => {
+    // 150 (25% of 600) + 6 (1% of 600) = 156 — same current+deferred model
+    // computePL() uses for the statutory P&L, so the two engines' PAT always
+    // agree for the same period (see this fix's own regression test below).
     const ledgers: TbLedgerRow[] = [
       makeLedger({ ledger_name: 'Revenue', note_no: 20, section: 'inc', normal_bal: 'Cr', m1_cr: 1000 }),
       makeLedger({ ledger_name: 'COS', note_no: 22, section: 'exp', normal_bal: 'Dr', m1_dr: 400 }),
@@ -102,8 +105,26 @@ describe('computeMIS', () => {
     expect(mis.totals.rev).toBe(1000);
     expect(mis.totals.cos).toBe(400);
     expect(mis.totals.pbt).toBe(600);
-    expect(mis.totals.tax).toBe(150);
-    expect(mis.totals.pat).toBe(450);
+    expect(mis.totals.tax).toBe(156);
+    expect(mis.totals.pat).toBe(444);
+  });
+
+  test('regression: computeMIS PAT agrees exactly with computePL PAT for the same real period', () => {
+    // The bug this fix closes: computeMIS() used to model current tax only
+    // (25%), while computePL() (the statutory P&L) modeled current (25%) +
+    // deferred (1%) — so the two engines silently disagreed on PAT for the
+    // exact same period, violating this app's "every report must agree with
+    // every other report" principle. Confirmed on real data: a genuine ₹234
+    // gap on a ₹23,448 PBT period before this fix.
+    const ledgers: TbLedgerRow[] = [
+      makeLedger({ ledger_name: 'Revenue', note_no: 20, section: 'inc', normal_bal: 'Cr', m1_cr: 5000, m6_cr: 6000, m12_cr: 7000 }),
+      makeLedger({ ledger_name: 'COS', note_no: 22, section: 'exp', normal_bal: 'Dr', m1_dr: 1000, m6_dr: 1200, m12_dr: 1400 }),
+      makeLedger({ ledger_name: 'Employee', note_no: 23, section: 'exp', normal_bal: 'Dr', m1_dr: 800, m6_dr: 900, m12_dr: 1000 }),
+    ];
+    const mis = computeMIS(ledgers, { periodType: 'annual', yearType: 'FY' });
+    const pl = computePL(ledgers, { periodType: 'annual', yearType: 'FY' });
+    expect(mis.totals.pbt).toBe(pl.pbt);
+    expect(mis.totals.pat).toBe(pl.pat);
   });
 
   test('a loss-making month owes no tax — PAT equals PBT exactly, never a fabricated tax credit', () => {

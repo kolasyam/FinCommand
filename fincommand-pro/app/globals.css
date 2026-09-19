@@ -38,6 +38,7 @@ a { color: var(--blue); text-decoration: none; }
   .pb-sep { width: 1px; height: 16px; background: var(--border2); margin: 0 10px; flex-shrink: 0; }
   .pbp { font-size: 11px; padding: 3px 9px; border: 1px solid var(--border2); border-radius: 20px; background: transparent; cursor: pointer; color: var(--text2); white-space: nowrap; transition: all .12s; }
   .pbp:hover:not(.on) { background: var(--bg3); }
+  .export-menu-item:hover, .export-menu-item:focus-visible { background: var(--bg2) !important; outline: none; }
   .pbp.on { background: var(--text); color: #fff; border-color: transparent; }
   .pbp.yt.on { background: var(--blue); color: #fff; }
   .pbp.sub.on { background: var(--green); color: #fff; }
@@ -186,6 +187,10 @@ a { color: var(--blue); text-decoration: none; }
   .dn, td.dn, span.dn, div.dn, .kpi .val.dn, .fc-table td.dn, .grand-row td.dn, .tot-row td.dn {
     color: #dc2626 !important;
   }
+  /* Between a metric's warning level and its target (MetricThresholds.warn) */
+  .wn, td.wn, span.wn, div.wn, .kpi .val.wn, .fc-table td.wn {
+    color: #d97706 !important;
+  }
   .neu { color: var(--text3); }
 
   /* ── Tables ── */
@@ -290,6 +295,36 @@ a { color: var(--blue); text-decoration: none; }
   .hl-amber { background: #fffbeb; border-left: 3px solid #EF9F27; color: #78350f; }
   .hl-red { background: #fff5f2; border-left: 3px solid #D85A30; color: #7f1d1d; }
   .hl-blue { background: var(--blue-l); border-left: 3px solid var(--blue); color: var(--blue-d); }
+
+  /* ── My Dashboard — custom widget grid ── */
+  .dash-grid { border-radius: var(--radius-lg); transition: background-color .12s; }
+  .dash-grid.editable { border: 1px dashed var(--border2); background-color: var(--bg2); }
+  .dash-grid-empty {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: var(--text3); font-style: italic; pointer-events: none;
+  }
+  .dash-grid-item { position: absolute; padding: 6px; box-sizing: border-box; }
+  .dash-grid-item.editable { cursor: move; }
+  .dash-grid-item.editable:hover .dash-grid-toolbar { opacity: 1; }
+  .dash-grid-item.selected > .card { box-shadow: 0 0 0 2px var(--blue); }
+  .dash-grid-item.dragging { z-index: 20; opacity: .85; }
+  .dash-grid-toolbar {
+    position: absolute; top: 10px; right: 10px; display: flex; gap: 2px;
+    opacity: 0; transition: opacity .12s; z-index: 5;
+  }
+  .dash-grid-toolbar button {
+    width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border2); border-radius: 5px; background: var(--bg); color: var(--text2);
+    font-size: 11px; cursor: pointer;
+  }
+  .dash-grid-toolbar button:hover { background: var(--bg2); color: var(--text); }
+  .dash-grid-resize-handle {
+    position: absolute; right: 10px; bottom: 10px; width: 12px; height: 12px;
+    cursor: nwse-resize; border-right: 2px solid var(--border2); border-bottom: 2px solid var(--border2);
+    border-radius: 0 0 3px 0; z-index: 5;
+  }
+  .dash-grid-item.editable:hover .dash-grid-resize-handle,
+  .dash-grid-item.selected .dash-grid-resize-handle { border-color: var(--blue); }
 
   /* ── Misc ── */
   .toast { position: fixed; bottom: 24px; right: 24px; background: #1f2937; color: #fff; padding: 10px 18px; border-radius: var(--radius); font-size: 12px; font-weight: 500; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 999; box-shadow: 0 4px 12px rgba(0,0,0,.2); }

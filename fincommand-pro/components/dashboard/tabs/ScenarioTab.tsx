@@ -2,16 +2,19 @@
 
 import { useMemo, useState } from 'react';
 import { useDashboard } from '@/lib/dashboard/DashboardContext';
-import { fc as fcRaw, fl as flRaw, pct, numTone, getUnitHeader } from '@/lib/utils/format';
+import { fl as flRaw, pct, numTone, getUnitHeader } from '@/lib/utils/format';
 import { DownloadBar } from '../DownloadBar';
 
 export function ScenarioTab() {
   const { bundle, granularity, threeYear, displayUnit, presentationCurrency } = useDashboard();
-  // Shadow fl()/fc() with the currently-selected table unit / active
-  // Presentation Currency bound in — every existing fl(v)/fc(v) call below
-  // stays unchanged.
+  // Shadow fl() with the currently-selected table unit bound in — every
+  // existing fl(v) call below stays unchanged. The "so-grid" Projected
+  // Revenue/EBITDA/PAT cards used to go through fc() (currency-symbol,
+  // Lakh/Crore-adaptive, ignores the Unit Selector — see its own doc
+  // comment) while the "Actual vs Projected" table 3 lines below showed
+  // the identical figures correctly Unit-scaled via fl() — the same real
+  // number at two different, inconsistent scales on one screen.
   const fl = (n: number | null | undefined, d?: number) => flRaw(n, d, displayUnit);
-  const fc = (n: number | null | undefined) => fcRaw(n, presentationCurrency);
   const unitLabel = getUnitHeader(displayUnit, presentationCurrency);
   const [revGrowth, setRevGrowth] = useState(10);
   const [costChange, setCostChange] = useState(0);
@@ -29,19 +32,21 @@ export function ScenarioTab() {
 
   // The company's own real trailing effective tax rate (this period's actual
   // tax / actual PBT), used to project tax on the *hypothetical* scenario
-  // PBT below — more accurate than an assumed flat 25% for a company whose
+  // PBT below — more accurate than an assumed flat rate for a company whose
   // real effective rate differs (carried losses, incentives, etc.). Falls
-  // back to the engine's own flat-25% modeling convention (tb-engine.ts
-  // computePL/computeMIS) only when the base period itself has no positive
-  // PBT to derive a real rate from — same "disclosed flat-rate estimate,
-  // never fabricated to look more precise than it is" philosophy used
-  // throughout the engine, just applied to a forward projection instead of
-  // an actual-period figure. Clamped to a sane 0–40% band so a real period
-  // with an unusually small PBT (where tax/PBT can swing wildly) can't send
-  // a projection's tax figure to an implausible extreme.
+  // back to the engine's own flat-rate modeling convention (25% current +
+  // 1% deferred = 26% combined — tb-engine.ts computePL/computeMIS, kept in
+  // sync there specifically so every report agrees) only when the base
+  // period itself has no positive PBT to derive a real rate from — same
+  // "disclosed flat-rate estimate, never fabricated to look more precise
+  // than it is" philosophy used throughout the engine, just applied to a
+  // forward projection instead of an actual-period figure. Clamped to a sane
+  // 0–40% band so a real period with an unusually small PBT (where tax/PBT
+  // can swing wildly) can't send a projection's tax figure to an implausible
+  // extreme.
   const effectiveTaxRate = base && base.pbt > 0
     ? Math.min(0.4, Math.max(0, base.tax / base.pbt))
-    : 0.25;
+    : 0.26;
 
   const projected = useMemo(() => {
     if (!base) return null;
@@ -96,9 +101,9 @@ export function ScenarioTab() {
         </div>
       </div>
       <div className="so-grid">
-        <div className="so-item"><div className="so-lbl">Projected Revenue</div><div className="so-val">{fc(projected.rev)}</div></div>
-        <div className="so-item"><div className="so-lbl">Projected EBITDA</div><div className={`so-val ${numTone(projected.ebitda)}`}>{fc(projected.ebitda)}</div></div>
-        <div className="so-item"><div className="so-lbl">Projected PAT</div><div className={`so-val ${numTone(projected.pat)}`}>{fc(projected.pat)}</div></div>
+        <div className="so-item"><div className="so-lbl">Projected Revenue</div><div className="so-val">{fl(projected.rev)}</div></div>
+        <div className="so-item"><div className="so-lbl">Projected EBITDA</div><div className={`so-val ${numTone(projected.ebitda)}`}>{fl(projected.ebitda)}</div></div>
+        <div className="so-item"><div className="so-lbl">Projected PAT</div><div className={`so-val ${numTone(projected.pat)}`}>{fl(projected.pat)}</div></div>
       </div>
       <div className="card">
         <div className="card-hdr"><span className="ct">Actual vs Projected</span><span className="cbadge cb-blue">{unitLabel}</span></div>

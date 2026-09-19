@@ -196,7 +196,8 @@ export type IssueCode =
   | 'no_subtotal'
   | 'empty_subtotal'
   | 'group_without_subtotal'
-  | 'no_percent_base';
+  | 'no_percent_base'
+  | 'multiple_percent_base';
 
 export interface ValidationIssue {
   code: IssueCode;
@@ -395,13 +396,30 @@ export function validateTemplate(
     });
   }
 
-  if (lines.length > 0 && !lines.some((l) => l.isPercentBase)) {
+  const percentBaseLines = lines.filter((l) => l.isPercentBase);
+  if (lines.length > 0 && percentBaseLines.length === 0) {
     issues.push({
       code: 'no_percent_base',
       severity: 'warning',
       title: 'No % base line marked',
       detail: 'Mark a line (usually revenue) as the % base to enable percent-of-base columns.',
       lineIds: [],
+    });
+  }
+  // Defense-in-depth: the Structure Editor's own toggle always unsets every
+  // other line the moment one is marked (at most one can ever be true from
+  // that UI), but computeStatementReport() silently uses lines.find() —
+  // the FIRST match — if this invariant were ever violated some other way
+  // (e.g. a direct API write bypassing the client). Surface it loudly
+  // instead of quietly picking one, the same "never fabricate/never guess"
+  // discipline as everywhere else in this engine.
+  if (percentBaseLines.length > 1) {
+    issues.push({
+      code: 'multiple_percent_base',
+      severity: 'error',
+      title: `${percentBaseLines.length} lines marked as the % base — only one is used`,
+      detail: `Only the first one computeStatementReport() encounters is actually used as the % base: ${percentBaseLines.map((l) => l.label || '(untitled)').join(', ')}. Unmark all but one.`,
+      lineIds: percentBaseLines.map((l) => l.id),
     });
   }
 

@@ -445,14 +445,18 @@ function refreshZohoTokenSingleFlight(config: ZohoConfigRow): Promise<string> {
 export async function callZoho<T>(
   companyId: string,
   requestFn: (token: string) => Promise<T>,
-  retriesLeft = 2
+  retriesLeft = 2,
+  configOverride?: ZohoConfigRow
 ): Promise<T> {
-  const { rows } = await query<ZohoConfigRow>(
-    `SELECT * FROM zoho_config WHERE company_id=$1 AND is_active=TRUE AND refresh_token IS NOT NULL`,
-    [companyId]
-  );
-  if (!rows.length) throw new Error('Zoho Books not connected. Please authenticate first by clicking "Connect Zoho Books".');
-  const cfg = rows[0];
+  let cfg = configOverride;
+  if (!cfg) {
+    const { rows } = await query<ZohoConfigRow>(
+      `SELECT * FROM zoho_config WHERE company_id=$1 AND is_active=TRUE AND refresh_token IS NOT NULL`,
+      [companyId]
+    );
+    if (!rows.length) throw new Error('Zoho Books not connected. Please authenticate first by clicking "Connect Zoho Books".');
+    cfg = rows[0];
+  }
 
   let token = new Date(cfg.token_expiry) <= new Date() ? await refreshZohoTokenSingleFlight(cfg) : cfg.access_token;
 
@@ -468,7 +472,7 @@ export async function callZoho<T>(
     if (isRateLimit && retriesLeft > 0) {
       const delayMs = (3 - retriesLeft) * 800; // 800ms, 1600ms backoff
       await new Promise(r => setTimeout(r, delayMs));
-      return callZoho(companyId, requestFn, retriesLeft - 1);
+      return callZoho(companyId, requestFn, retriesLeft - 1, cfg);
     }
 
     const isAuthError = status === 401 || zohoCode === 57; /* INVALID_OAUTHTOKEN */
@@ -494,7 +498,7 @@ export async function callZoho<T>(
       const retryZohoCode = retryAxErr.response?.data?.code;
       if ((retryAxErr.response?.status === 429 || retryZohoCode === 43) && retriesLeft > 0) {
         await new Promise(r => setTimeout(r, 1000));
-        return callZoho(companyId, requestFn, retriesLeft - 1);
+        return callZoho(companyId, requestFn, retriesLeft - 1, cfg);
       }
       const e = new Error(zohoErrorMessage(retryErr)) as Error & { status?: number };
       e.status = retryAxErr.response?.status;
@@ -666,7 +670,70 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
 
   const openingToDate = dayBeforeISO(fy.start_date);
 
-  type FetchDef = { kind: 'pl' | 'bs' | 'cust' | 'bill' | 'exp'; key: number; label: string; from_date?: string; to_date: string };
+  const lastMonth = FY_MONTHS_DR[FY_MONTHS_DR.length - 1];
+  const endYear = lastMonth.next_yr ? startYear + 1 : startYear;
+  const fyEndDate = `${endYear}-${lastMonth.to_suffix}`;
+
+  function getFyMonthIndex(dateStr: string | null | undefined, fyStartDate: string): number {
+    if (!dateStr) return -1;
+    const d = new Date(dateStr);
+    const fyStart = new Date(fyStartDate);
+    if (isNaN(d.getTime()) || isNaN(fyStart.getTime())) return -1;
+    const yearDiff = d.getUTCFullYear() - fyStart.getUTCFullYear();
+    const monthDiff = d.getUTCMonth() - fyStart.getUTCMonth();
+    const idx = yearDiff * 12 + monthDiff;
+    if (idx < 0 || idx >= 12) return -1;
+    return idx;
+  }
+
+  // Launch full-year Vendor Bills and Expenses fetches in parallel with monthly financial reports
+  const fullYearBillsPromise = (async () => {
+    try {
+      const merged: Record<string, unknown>[] = [];
+      let page = 1;
+      for (;;) {
+        const res = await callZoho(companyId, (token) => axios.get(`${apiBase}/bills`, {
+          headers: { Authorization: `Zoho-oauthtoken ${token}` },
+          params: { organization_id: orgId, date_start: fy.start_date, date_end: fyEndDate, per_page: 200, page },
+          timeout: ZOHO_TIMEOUT_MS,
+        }), 2, cfg);
+        const pageItems = Array.isArray(res.data?.bills) ? res.data.bills as Record<string, unknown>[] : [];
+        merged.push(...pageItems);
+        if (!res.data?.page_context?.has_more_page) break;
+        page++;
+      }
+      return { bills: merged, error: null };
+    } catch (e) {
+      const err = e as Error;
+      console.warn('Vendor Bills full-year fetch failed:', err.message);
+      return { bills: [], error: err.message };
+    }
+  })();
+
+  const fullYearExpensesPromise = (async () => {
+    try {
+      const merged: Record<string, unknown>[] = [];
+      let page = 1;
+      for (;;) {
+        const res = await callZoho(companyId, (token) => axios.get(`${apiBase}/expenses`, {
+          headers: { Authorization: `Zoho-oauthtoken ${token}` },
+          params: { organization_id: orgId, date_start: fy.start_date, date_end: fyEndDate, per_page: 200, page },
+          timeout: ZOHO_TIMEOUT_MS,
+        }), 2, cfg);
+        const pageItems = Array.isArray(res.data?.expenses) ? res.data.expenses as Record<string, unknown>[] : [];
+        merged.push(...pageItems);
+        if (!res.data?.page_context?.has_more_page) break;
+        page++;
+      }
+      return { expenses: merged, error: null };
+    } catch (e) {
+      const err = e as Error;
+      console.warn('Expenses full-year fetch failed:', err.message);
+      return { expenses: [], error: err.message };
+    }
+  })();
+
+  type FetchDef = { kind: 'pl' | 'bs' | 'cust'; key: number; label: string; from_date?: string; to_date: string };
   const fetchDefs: FetchDef[] = [
     { kind: 'bs', key: -1, label: 'Opening', to_date: openingToDate },
     ...FY_MONTHS_DR.map((m, mi) => {
@@ -677,116 +744,18 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
       const yr = m.next_yr ? startYear + 1 : startYear;
       return { kind: 'bs' as const, key: mi, label: m.name, to_date: `${yr}-${m.to_suffix}` };
     }),
-    // Sales by Customer — same monthly movement window as P&L. Feeds the
-    // Executive Overview "Top Customers" table with real Zoho data instead
-    // of guessing customers from ledger names. Non-fatal if this report
-    // isn't available on the org's plan/API version: a total failure here
-    // just leaves tb_customer_revenue empty for this upload, and the UI
-    // shows an honest "not available" state rather than fabricating names.
     ...FY_MONTHS_DR.map((m, mi) => {
       const yr = m.next_yr ? startYear + 1 : startYear;
       return { kind: 'cust' as const, key: mi, label: m.name, from_date: `${yr}-${m.from_suffix}`, to_date: `${yr}-${m.to_suffix}` };
     }),
-    // Vendor Bills — real per-vendor spend, feeds the Vendor Expense Report
-    // tab. Same monthly window as P&L/Sales-by-Customer. Non-fatal: a
-    // failure here just leaves tb_vendor_expense empty for this upload,
-    // same "not available" convention as customer revenue above.
-    ...FY_MONTHS_DR.map((m, mi) => {
-      const yr = m.next_yr ? startYear + 1 : startYear;
-      return { kind: 'bill' as const, key: mi, label: m.name, from_date: `${yr}-${m.from_suffix}`, to_date: `${yr}-${m.to_suffix}` };
-    }),
-    // Expenses — the subset explicitly marked "Billable" and assigned to a
-    // customer feeds real per-customer DIRECT cost for the Customer Margin
-    // Report tab. Most orgs never tag expenses this way (see
-    // tb_customer_cost's own schema comment) — that's a real fact about the
-    // org's Zoho usage, not a fetch failure, and is surfaced honestly rather
-    // than papered over.
-    ...FY_MONTHS_DR.map((m, mi) => {
-      const yr = m.next_yr ? startYear + 1 : startYear;
-      return { kind: 'exp' as const, key: mi, label: m.name, from_date: `${yr}-${m.from_suffix}`, to_date: `${yr}-${m.to_suffix}` };
-    }),
   ];
 
   const fetchResults: ReportFetchResult[] = [];
-  const BATCH_SIZE = 3;
+  const BATCH_SIZE = 5;
 
   for (let i = 0; i < fetchDefs.length; i += BATCH_SIZE) {
     const batch = fetchDefs.slice(i, i + BATCH_SIZE).map((def) => {
       return (async (): Promise<ReportFetchResult> => {
-        // Bills and Expenses are plain paginated list resources (`/bills`,
-        // `/expenses`), NOT `/reports/*` endpoints, and Zoho names their
-        // date-range filters differently (`date_start`/`date_end`, verified
-        // empirically to actually filter — see the comment on
-        // extractVendorBills below for why that was checked rather than
-        // assumed). Handled as a fully separate branch rather than forcing
-        // them through the single-report-call shape below.
-        if (def.kind === 'bill' || def.kind === 'exp') {
-          const listKey = def.kind === 'bill' ? 'bills' : 'expenses';
-          const pathSeg = def.kind === 'bill' ? 'bills' : 'expenses';
-          try {
-            const merged: Record<string, unknown>[] = [];
-            let page = 1;
-            let zohoCode: number | undefined;
-            let zohoMessage: string | undefined;
-            let httpStatus: number | undefined;
-            // 200/page is Zoho's max; loop until the last page. A single
-            // month realistically has far fewer than 200 bills/expenses for
-            // most orgs, but this must not silently drop records for a
-            // busier one.
-            for (;;) {
-              const res = await callZoho(companyId, (token) => axios.get(`${apiBase}/${pathSeg}`, {
-                headers: { Authorization: `Zoho-oauthtoken ${token}` },
-                params: { organization_id: orgId, date_start: def.from_date, date_end: def.to_date, per_page: 200, page },
-                timeout: ZOHO_TIMEOUT_MS,
-              }));
-              httpStatus = res.status; zohoCode = res.data?.code; zohoMessage = res.data?.message;
-              const pageItems = Array.isArray(res.data?.[listKey]) ? res.data[listKey] as Record<string, unknown>[] : [];
-              merged.push(...pageItems);
-              if (!res.data?.page_context?.has_more_page) break;
-              page++;
-            }
-            const mergedResponse = { [listKey]: merged };
-
-            // Debug dump — first month only, same rationale/pattern as
-            // salesbycustomer below: these fields aren't reliably documented
-            // publicly, so verify/adjust extraction against the real shape.
-            if (def.key === 0) {
-              try {
-                const debugFile = path.join(process.cwd(), `zoho_debug_${listKey}.json`);
-                fs.writeFileSync(debugFile, JSON.stringify({
-                  _debug_info: {
-                    snapshot: def.label, endpoint: pathSeg,
-                    params: { date_start: def.from_date, date_end: def.to_date },
-                    http_status: httpStatus, zoho_code: zohoCode, zoho_message: zohoMessage,
-                    page_count: page, total_records: merged.length,
-                    first_record_keys: merged[0] ? Object.keys(merged[0]) : [],
-                    written_at: new Date().toISOString(),
-                  },
-                  raw_response: mergedResponse,
-                }, null, 2), 'utf8');
-                console.log(`\n✅ [ZOHO DEBUG] ${listKey} raw response written to: ${debugFile}\n`);
-              } catch (writeErr) {
-                console.warn(`[ZOHO DEBUG] Could not write ${listKey} debug file:`, (writeErr as Error).message);
-              }
-            }
-
-            return {
-              kind: def.kind, key: def.key, label: def.label, error: null,
-              to_date: def.to_date, fromDate: def.from_date,
-              rawResponse: mergedResponse, fetchedAt: new Date().toISOString(),
-            };
-          } catch (e) {
-            const err = e as Error & { status?: number };
-            const kindLabel = def.kind === 'bill' ? 'Vendor Bills' : 'Expenses';
-            console.warn(`${kindLabel} ${def.label} fetch failed:`, err.message);
-            return {
-              kind: def.kind, key: def.key, label: def.label,
-              error: `${def.label}: ${err.message}`, to_date: def.to_date, fromDate: def.from_date,
-              rawResponse: null, fetchedAt: new Date().toISOString(),
-            };
-          }
-        }
-
         const endpoint = def.kind === 'pl' ? 'profitandloss' : def.kind === 'cust' ? 'salesbycustomer' : 'balancesheet';
         const params: Record<string, string> = def.kind === 'bs'
           ? { organization_id: orgId, to_date: def.to_date }
@@ -797,54 +766,7 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
             headers: { Authorization: `Zoho-oauthtoken ${token}` },
             params,
             timeout: ZOHO_TIMEOUT_MS,
-          }));
-
-          // ─── DEBUG: Write full raw Zoho response to JSON file for inspection ───
-          if (def.kind === 'bs' && def.key === -1) {
-            try {
-              const debugPayload = {
-                _debug_info: {
-                  snapshot: def.label,
-                  endpoint,
-                  params,
-                  http_status: res.status,
-                  zoho_code: res.data?.code,
-                  zoho_message: res.data?.message,
-                  top_level_keys: Object.keys(res.data || {}),
-                  written_at: new Date().toISOString(),
-                },
-                raw_response: res.data,
-              };
-              const debugFile = path.join(process.cwd(), 'zoho_debug_raw.json');
-              fs.writeFileSync(debugFile, JSON.stringify(debugPayload, null, 2), 'utf8');
-              console.log(`\n✅ [ZOHO DEBUG] Full raw response written to: ${debugFile}\n   Open this file in VS Code to see the complete Zoho API data.\n`);
-            } catch (writeErr) {
-              console.warn('[ZOHO DEBUG] Could not write debug file:', (writeErr as Error).message);
-            }
-          }
-          // Second debug dump, specifically for Sales by Customer — this
-          // report's exact response field names aren't reliably documented
-          // publicly, so the first month's raw payload is always dumped to
-          // disk to verify/adjust extractSalesByCustomer()'s field guesses
-          // against the real org's response shape.
-          if (def.kind === 'cust' && def.key === 0) {
-            try {
-              const debugFile = path.join(process.cwd(), 'zoho_debug_salesbycustomer.json');
-              fs.writeFileSync(debugFile, JSON.stringify({
-                _debug_info: {
-                  snapshot: def.label, endpoint, params, http_status: res.status,
-                  zoho_code: res.data?.code, zoho_message: res.data?.message,
-                  top_level_keys: Object.keys(res.data || {}),
-                  written_at: new Date().toISOString(),
-                },
-                raw_response: res.data,
-              }, null, 2), 'utf8');
-              console.log(`\n✅ [ZOHO DEBUG] Sales by Customer raw response written to: ${debugFile}\n`);
-            } catch (writeErr) {
-              console.warn('[ZOHO DEBUG] Could not write salesbycustomer debug file:', (writeErr as Error).message);
-            }
-          }
-          // ──────────────────────────────────────────────────────────────────────
+          }), 2, cfg);
 
           return {
             kind: def.kind,
@@ -882,54 +804,34 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
     }
   }
 
+  const [fullYearBillsRes, fullYearExpensesRes] = await Promise.all([fullYearBillsPromise, fullYearExpensesPromise]);
+
   const plResults = fetchResults.filter(r => r.kind === 'pl').sort((a, b) => a.key - b.key);
   const bsResults = fetchResults.filter(r => r.kind === 'bs').sort((a, b) => a.key - b.key);
   const custResults = fetchResults.filter(r => r.kind === 'cust').sort((a, b) => a.key - b.key);
-  const billResults = fetchResults.filter(r => r.kind === 'bill').sort((a, b) => a.key - b.key);
-  const expResults = fetchResults.filter(r => r.kind === 'exp').sort((a, b) => a.key - b.key);
-  // Opening-snapshot failure is non-fatal — fall back to a zero opening
-  // balance (previous behaviour) rather than failing the whole sync.
+
   const openingResult = bsResults.find(r => r.key === -1);
   const bsMonthResults = bsResults.filter(r => r.key >= 0);
 
   const monthErrors: string[] = [];
   if (openingResult?.error) monthErrors.push(`Opening balance: ${openingResult.error} (opening balances defaulted to 0)`);
 
-  // Collect raw payloads for audit storage (P&L ×12 + Balance Sheet Opening + ×12)
   const rawZohoMonths: Array<{
     month: string; from_date: string; to_date: string; fetched_at: string; raw_response: unknown;
   }> = fetchResults
     .filter(r => !r.error && r.rawResponse)
     .map(r => ({
-      month: `${{ pl: 'P&L', cust: 'Sales by Customer', bill: 'Vendor Bills', exp: 'Expenses', bs: 'BS' }[r.kind]} ${r.label}`,
+      month: `${{ pl: 'P&L', cust: 'Sales by Customer', bs: 'BS', bill: 'Vendor Bills', exp: 'Expenses' }[r.kind]} ${r.label}`,
       from_date: r.fromDate || r.to_date,
       to_date: r.to_date,
       fetched_at: r.fetchedAt || new Date().toISOString(),
       raw_response: r.rawResponse,
     }));
 
-  // ── Sales by Customer (real per-customer revenue, replaces the old
-  //    ledger-name-guessing "Top Customers" heuristic entirely) ──
-  //    Each month's `total` is a movement (same date semantics as P&L),
-  //    summed per customer into a 12-month array. Field names for this
-  //    report aren't reliably documented publicly, so extraction is
-  //    defensive — see zoho_debug_salesbycustomer.json (written above) to
-  //    verify/adjust against a real org's response shape.
   interface ZohoCustomerLeaf { customer_id?: string; customer_name: string; total: number; currency_code?: string }
   function extractSalesByCustomer(rawResponse: unknown): ZohoCustomerLeaf[] {
     const data = rawResponse as Record<string, unknown> | null;
     if (!data) return [];
-    // Confirmed against a real org's response (see zoho_debug_salesbycustomer.json):
-    // the array is under `sales`, and each item's amount field is also named
-    // `sales` (tax-exclusive; `sales_with_tax` is the tax-inclusive sibling —
-    // `sales` is used to match the tax-exclusive GL revenue everywhere else
-    // in this engine). Other candidate keys are kept as a defensive fallback
-    // in case this differs across Zoho API versions/regions. Each item also
-    // carries `currency_code` — the report returns amounts in each
-    // customer's *transaction* currency, not the org's base currency (unlike
-    // /reports/profitandloss and /reports/balancesheet, which are always in
-    // base currency), so a mixed-currency org needs that field to avoid
-    // silently summing e.g. USD and INR as if they were the same unit.
     const candidates = [
       data.sales, data.sales_by_customers, data.salesbycustomer, data.sales_by_customer, data.customers, data.customer_summary,
     ];
@@ -958,14 +860,6 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
   custResults.forEach((res) => {
     if (res.error) { custFetchErrors++; return; }
     extractSalesByCustomer(res.rawResponse).forEach((leaf) => {
-      // No conversion rate is available from this report — rather than
-      // silently mis-summing a foreign-currency amount as if it were the
-      // org's base currency (which would badly distort both the revenue
-      // figure and the concentration-risk ranking), these customers are
-      // excluded from tb_customer_revenue entirely. They still count toward
-      // real company revenue via the ledger-based P&L/BS reports, which
-      // Zoho itself reports in base currency — only the customer-level
-      // breakdown for this specific customer is unavailable.
       if (leaf.currency_code && leaf.currency_code !== baseCurrency) {
         custSkippedForeignCurrency++;
         foreignCurrenciesSeen.add(`${leaf.customer_name} (${leaf.currency_code})`);
@@ -987,59 +881,46 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
   if (customerRevMap.size === 0) {
     console.warn(
       custFetchErrors === custResults.length
-        ? `Sales by Customer: all ${custResults.length} month(s) failed — Top Customers will show "not available" for this sync. Check zoho_debug_salesbycustomer.json if a debug dump was written.`
+        ? `Sales by Customer: all ${custResults.length} month(s) failed — Top Customers will show "not available" for this sync.`
         : 'Sales by Customer: report returned no customer rows for this period.'
     );
   }
 
-  // ── Vendor Bills (real per-vendor spend — feeds the Vendor Expense Report
-  //    tab). `/bills` is a plain list resource, not a report — each item's
-  //    `total` is that bill's full amount (Zoho confirms `date` is the bill
-  //    date, and date_start/date_end was verified empirically to actually
-  //    filter by it — see the fetchDef loop above), summed per vendor into a
-  //    12-month array, same shape as customerRevMap above. Field names
-  //    confirmed against a real org's response (see
-  //    zoho_debug_bills.json, written above) — no candidate-field guessing
-  //    needed here the way salesbycustomer required, since Bills is a
-  //    documented core resource, not a specialty report.
-  interface ZohoVendorBillLeaf { vendor_id?: string; vendor_name: string; total: number; currency_code?: string }
-  function extractVendorBills(rawResponse: unknown): ZohoVendorBillLeaf[] {
-    const data = rawResponse as { bills?: unknown } | null;
-    const arr = Array.isArray(data?.bills) ? data!.bills as Record<string, unknown>[] : [];
-    return arr
-      .map((item) => ({
-        vendor_id: item.vendor_id != null ? String(item.vendor_id) : undefined,
-        vendor_name: String(item.vendor_name ?? '').trim(),
-        total: parseFloat(String(item.total ?? 0)) || 0,
-        currency_code: item.currency_code != null ? String(item.currency_code).toUpperCase() : undefined,
-      }))
-      .filter((b) => b.vendor_name);
-  }
-
+  // ── Vendor Bills (processed from full-year single fetch) ──
   const vendorExpenseMap = new Map<string, { vendor_id?: string; name: string; m: number[] }>();
   let billFetchErrors = 0;
   let billSkippedForeignCurrency = 0;
   const billForeignCurrenciesSeen = new Set<string>();
-  billResults.forEach((res) => {
-    if (res.error) { billFetchErrors++; return; }
-    extractVendorBills(res.rawResponse).forEach((leaf) => {
-      // Bills carries no bcy_total (base-currency) field, unlike Expenses
-      // below — so, same reasoning as Sales by Customer above, a bill in a
-      // foreign currency is excluded rather than mis-summed as if it were
-      // the org's base currency.
-      if (leaf.currency_code && leaf.currency_code !== baseCurrency) {
+
+  if (fullYearBillsRes.error) {
+    billFetchErrors = 12;
+  } else {
+    fullYearBillsRes.bills.forEach((item) => {
+      const vendor_id = item.vendor_id != null ? String(item.vendor_id) : undefined;
+      const vendor_name = String(item.vendor_name ?? '').trim();
+      const total = parseFloat(String(item.total ?? 0)) || 0;
+      const currency_code = item.currency_code != null ? String(item.currency_code).toUpperCase() : undefined;
+      const dateStr = String(item.date ?? item.bill_date ?? '');
+      if (!vendor_name) return;
+
+      if (currency_code && currency_code !== baseCurrency) {
         billSkippedForeignCurrency++;
-        billForeignCurrenciesSeen.add(`${leaf.vendor_name} (${leaf.currency_code})`);
+        billForeignCurrenciesSeen.add(`${vendor_name} (${currency_code})`);
         return;
       }
-      if (!vendorExpenseMap.has(leaf.vendor_name)) {
-        vendorExpenseMap.set(leaf.vendor_name, { vendor_id: leaf.vendor_id, name: leaf.vendor_name, m: Array(12).fill(0) });
+
+      const mi = getFyMonthIndex(dateStr, fy.start_date);
+      if (mi >= 0 && mi < 12) {
+        if (!vendorExpenseMap.has(vendor_name)) {
+          vendorExpenseMap.set(vendor_name, { vendor_id, name: vendor_name, m: Array(12).fill(0) });
+        }
+        const entry = vendorExpenseMap.get(vendor_name)!;
+        entry.m[mi] += total;
+        if (vendor_id && !entry.vendor_id) entry.vendor_id = vendor_id;
       }
-      const entry = vendorExpenseMap.get(leaf.vendor_name)!;
-      entry.m[res.key] += leaf.total;
-      if (leaf.vendor_id && !entry.vendor_id) entry.vendor_id = leaf.vendor_id;
     });
-  });
+  }
+
   if (billSkippedForeignCurrency > 0) {
     console.warn(
       `Vendor Bills: skipped ${billSkippedForeignCurrency} bill(s) in a currency other than the org's base currency (${baseCurrency}). Affected: ${[...billForeignCurrenciesSeen].join(', ')}`
@@ -1047,58 +928,44 @@ export async function syncFromZoho(companyId: string, fyId: string, triggeredBy:
   }
   if (vendorExpenseMap.size === 0) {
     console.warn(
-      billFetchErrors === billResults.length
-        ? `Vendor Bills: all ${billResults.length} month(s) failed — Vendor Expense Report will show "not available" for this sync. Check zoho_debug_bills.json if a debug dump was written.`
+      billFetchErrors > 0
+        ? `Vendor Bills: fetch failed — Vendor Expense Report will show "not available" for this sync.`
         : 'Vendor Bills: no bills found for this period.'
     );
   }
 
-  // ── Customer-tagged direct cost (real per-customer DIRECT cost — feeds
-  //    the Customer Margin Report tab). Sourced from `/expenses` filtered to
-  //    rows where the org actually assigned a `customer_id` (Zoho's
-  //    "Billable" + "Customer" fields on an expense) — NOT from Bills, which
-  //    carry no customer association at all in Zoho's data model (vendor
-  //    bills are money owed to a vendor, not inherently tied to a customer).
-  //    `bcy_total` (base-currency total) is used directly — unlike Bills,
-  //    Expenses already carries a base-currency-converted figure, so no
-  //    foreign-currency exclusion is needed here.
-  //    IMPORTANT — most Zoho orgs never use this tagging at all: confirmed
-  //    empirically on the first company synced with this feature, 0 of 780
-  //    real expenses for the year were customer-tagged. An empty
-  //    tb_customer_cost for a company is a real fact about that org's Zoho
-  //    usage (see tb_customer_cost's schema comment) — never treated as a
-  //    fetch failure, and never backfilled with a guess.
-  interface ZohoBillableExpenseLeaf { customer_id: string; customer_name: string; total: number }
-  function extractBillableCustomerExpenses(rawResponse: unknown): ZohoBillableExpenseLeaf[] {
-    const data = rawResponse as { expenses?: unknown } | null;
-    const arr = Array.isArray(data?.expenses) ? data!.expenses as Record<string, unknown>[] : [];
-    return arr
-      .filter((item) => item.customer_id != null && String(item.customer_id).trim() !== '')
-      .map((item) => ({
-        customer_id: String(item.customer_id),
-        customer_name: String(item.customer_name ?? '').trim(),
-        total: parseFloat(String(item.bcy_total ?? item.total ?? 0)) || 0,
-      }))
-      .filter((e) => e.customer_name);
-  }
-
+  // ── Customer-tagged direct cost (processed from full-year single fetch) ──
   const customerCostMap = new Map<string, { customer_id?: string; name: string; m: number[] }>();
   let expFetchErrors = 0;
-  expResults.forEach((res) => {
-    if (res.error) { expFetchErrors++; return; }
-    extractBillableCustomerExpenses(res.rawResponse).forEach((leaf) => {
-      if (!customerCostMap.has(leaf.customer_name)) {
-        customerCostMap.set(leaf.customer_name, { customer_id: leaf.customer_id, name: leaf.customer_name, m: Array(12).fill(0) });
+
+  if (fullYearExpensesRes.error) {
+    expFetchErrors = 12;
+  } else {
+    fullYearExpensesRes.expenses.forEach((item) => {
+      if (item.customer_id != null && String(item.customer_id).trim() !== '') {
+        const customer_id = String(item.customer_id);
+        const customer_name = String(item.customer_name ?? '').trim();
+        const total = parseFloat(String(item.bcy_total ?? item.total ?? 0)) || 0;
+        const dateStr = String(item.date ?? item.expense_date ?? '');
+        if (!customer_name) return;
+
+        const mi = getFyMonthIndex(dateStr, fy.start_date);
+        if (mi >= 0 && mi < 12) {
+          if (!customerCostMap.has(customer_name)) {
+            customerCostMap.set(customer_name, { customer_id, name: customer_name, m: Array(12).fill(0) });
+          }
+          const entry = customerCostMap.get(customer_name)!;
+          entry.m[mi] += total;
+          if (customer_id && !entry.customer_id) entry.customer_id = customer_id;
+        }
       }
-      const entry = customerCostMap.get(leaf.customer_name)!;
-      entry.m[res.key] += leaf.total;
-      if (leaf.customer_id && !entry.customer_id) entry.customer_id = leaf.customer_id;
     });
-  });
+  }
+
   if (customerCostMap.size === 0) {
     console.warn(
-      expFetchErrors === expResults.length
-        ? `Expenses: all ${expResults.length} month(s) failed — Customer Margin Report will show direct cost as unavailable for this sync. Check zoho_debug_expenses.json if a debug dump was written.`
+      expFetchErrors > 0
+        ? `Expenses: fetch failed — Customer Margin Report will show direct cost as unavailable for this sync.`
         : 'Expenses: no expense was billable-and-customer-tagged for this period — this Zoho org does not appear to track direct per-customer cost. Customer Margin Report will show real revenue with direct cost disclosed as "not tracked", not a fabricated figure.'
     );
   }
@@ -1692,24 +1559,9 @@ export async function syncZohoContacts(companyId: string): Promise<ZohoContactSy
         headers: { Authorization: `Zoho-oauthtoken ${token}` },
         params: { organization_id: orgId, contact_type: contactType, per_page: 200, page },
         timeout: 20000,
-      }));
+      }), 2, cfg);
       const items = Array.isArray(res.data?.contacts) ? res.data.contacts as Record<string, unknown>[] : [];
       all.push(...items);
-      if (page === 1) {
-        try {
-          const debugFile = path.join(process.cwd(), `zoho_debug_contacts_${contactType}.json`);
-          fs.writeFileSync(debugFile, JSON.stringify({
-            _debug_info: {
-              contactType, http_status: res.status, zoho_code: res.data?.code,
-              page_count_so_far: items.length, first_record_keys: items[0] ? Object.keys(items[0]) : [],
-              written_at: new Date().toISOString(),
-            },
-            raw_response: res.data,
-          }, null, 2), 'utf8');
-        } catch (writeErr) {
-          console.warn(`[ZOHO DEBUG] Could not write contacts_${contactType} debug file:`, (writeErr as Error).message);
-        }
-      }
       if (!res.data?.page_context?.has_more_page) break;
       page++;
     }
@@ -1718,16 +1570,15 @@ export async function syncZohoContacts(companyId: string): Promise<ZohoContactSy
 
   let customerRaw: Record<string, unknown>[] = [];
   let vendorRaw: Record<string, unknown>[] = [];
-  try {
-    customerRaw = await fetchAllContacts('customer');
-  } catch (e) {
-    errors.push(`Customers: ${zohoErrorMessage(e)}`);
-  }
-  try {
-    vendorRaw = await fetchAllContacts('vendor');
-  } catch (e) {
-    errors.push(`Vendors: ${zohoErrorMessage(e)}`);
-  }
+  const [custRes, vendRes] = await Promise.allSettled([
+    fetchAllContacts('customer'),
+    fetchAllContacts('vendor')
+  ]);
+  if (custRes.status === 'fulfilled') customerRaw = custRes.value;
+  else errors.push(`Customers: ${zohoErrorMessage(custRes.reason)}`);
+
+  if (vendRes.status === 'fulfilled') vendorRaw = vendRes.value;
+  else errors.push(`Vendors: ${zohoErrorMessage(vendRes.reason)}`);
 
   const extracted = [
     ...customerRaw.map((r) => extractContact(r, 'customer')),

@@ -1,4 +1,4 @@
-import { fl, fn, frRaw, getUnitHeader, unitSuffix, formatChg, signedPct } from '@/lib/utils/format';
+import { fl, fn, frRaw, getUnitHeader, unitSuffix, formatChg, signedPct, benchmarkTone } from '@/lib/utils/format';
 
 describe('fl/fn — Display Unit Selector', () => {
   test('defaults to Lakhs when no unit is passed (backward compatible)', () => {
@@ -12,7 +12,7 @@ describe('fl/fn — Display Unit Selector', () => {
     // Lakhs" header — read by a reviewer as ₹2.92 Crore, a 100,000×
     // overstatement. Every real raw-rupee value must always be divided by
     // the selected unit's divisor, regardless of its size.
-    expect(fl(-292.14, 2, 'Lakhs')).toBe('—'); // negligible in Lakhs terms
+    expect(fl(-292.14, 2, 'Lakhs')).toBe('(0.00)'); // rounds to 0.00 in Lakhs terms
     expect(fl(-292.14, 2, 'Thousands')).toBe('(0.29)'); // -292.14 / 1000
   });
 
@@ -64,7 +64,7 @@ describe('frRaw — no unit conversion', () => {
     expect(frRaw(null)).toBe('—');
     expect(frRaw(undefined)).toBe('—');
     expect(frRaw(NaN)).toBe('—');
-    expect(frRaw(0.001)).toBe('—');
+    expect(frRaw(0.001)).toBe('0.00');
   });
 });
 
@@ -75,9 +75,9 @@ describe('formatChg — YoY change with explicit + prefix', () => {
     // ledger subtraction (e.g. 0.000001) still satisfies `chg >= 0`, but
     // fn() rounds anything under EPSILON down to the neutral dash "—" — so
     // the naive ternary prepended "+" onto a dash it never should have.
-    expect(formatChg(0.000001, 2, 'Lakhs')).toBe('—');
+    expect(formatChg(0.000001, 2, 'Lakhs')).toBe('+0.00');
     expect(formatChg(0.000001, 2, 'Lakhs')).not.toBe('+—');
-    expect(formatChg(-0.000001, 2, 'Lakhs')).toBe('—');
+    expect(formatChg(-0.000001, 2, 'Lakhs')).toBe('(0.00)');
   });
 
   test('prepends + only for a real positive change', () => {
@@ -122,5 +122,41 @@ describe('signedPct — same +— guard, for percentage-point YoY changes', () =
     expect(signedPct(null)).toBe('—');
     expect(signedPct(undefined)).toBe('—');
     expect(signedPct(NaN)).toBe('—');
+  });
+});
+
+describe('benchmarkTone — real-target comparison, never raw sign', () => {
+  test('a positive value below a higher-is-better target reads unfavorable, not favorable', () => {
+    // The exact regression this function exists to prevent: a positive ROE
+    // (e.g. +8%) that is genuinely below its real 15% benchmark must read
+    // 'dn' (red/unfavorable) — plain sign-based numTone() would have said
+    // 'up' (green) purely because 8 > 0, which is the wrong convention for
+    // a benchmarked ratio.
+    expect(benchmarkTone(8, 15, 'higher_is_better')).toBe('dn');
+  });
+
+  test('a positive value meeting a higher-is-better target reads favorable', () => {
+    expect(benchmarkTone(18, 15, 'higher_is_better')).toBe('up');
+    expect(benchmarkTone(15, 15, 'higher_is_better')).toBe('up'); // exactly at target counts as meeting it
+  });
+
+  test('a positive value above a lower-is-better target reads unfavorable — the Debt/Equity case', () => {
+    // A positive Debt/Equity of 3.0x is bad (target 1.0x, lower_is_better) —
+    // must never be "fixed" into green just because 3.0 > 0.
+    expect(benchmarkTone(3.0, 1.0, 'lower_is_better')).toBe('dn');
+  });
+
+  test('a small positive value under a lower-is-better target reads favorable', () => {
+    expect(benchmarkTone(0.25, 1.0, 'lower_is_better')).toBe('up');
+  });
+
+  test('a negative value below a higher-is-better target still reads unfavorable (not a special case)', () => {
+    expect(benchmarkTone(-2.2, 15, 'higher_is_better')).toBe('dn');
+  });
+
+  test('null/undefined/NaN render neutral (empty string), never fabricated', () => {
+    expect(benchmarkTone(null, 15, 'higher_is_better')).toBe('');
+    expect(benchmarkTone(undefined, 15, 'higher_is_better')).toBe('');
+    expect(benchmarkTone(NaN, 15, 'higher_is_better')).toBe('');
   });
 });

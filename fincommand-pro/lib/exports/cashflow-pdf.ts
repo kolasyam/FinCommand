@@ -9,7 +9,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { ReportBundle } from '@/lib/dashboard/types';
-import { fl, fn, fcPdf, getFyLabel, getFyShortLabel, getUnitHeaderPdf, unitSuffix, formatChg, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
+import { fl, fn, fcUnitPdf, getFyLabel, getFyShortLabel, getUnitHeaderPdf, unitSuffix, formatChg, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
 import { getCurrencyMeta } from '@/lib/services/currency';
 import { cfLabel } from '@/lib/financial/cashflow-labels';
 import {
@@ -158,10 +158,10 @@ export function buildCashFlowPdf(bundle: ReportBundle, companyName = DEFAULT_COM
   doc.line(MARGIN, 44, PAGE_W - MARGIN, 44);
 
   let y = drawKpiCards(doc, [
-    { label: 'Operating Cash Flow', value: fcPdf(ocfTotal, currency), sub: cf.ocf_to_pat != null ? `OCF/PAT = ${cf.ocf_to_pat.toFixed(2)}x` : 'OCF/PAT: n/a (loss)', tone: ocfTotal },
-    { label: 'Investing Cash Flow', value: fcPdf(icfTotal, currency), sub: 'Capex + FD/MF movements', tone: icfTotal },
-    { label: 'Financing Cash Flow', value: fcPdf(fcfTotal, currency), sub: 'Borrowings + equity, net', tone: fcfTotal },
-    { label: 'Net Change in Cash', value: fcPdf(cf.net_change, currency), sub: `Closing: ${fl(cf.closing_cash, 2, unit)}${unitSuffix(unit)}`, tone: cf.net_change },
+    { label: 'Operating Cash Flow', value: fcUnitPdf(ocfTotal, unit, currency), sub: cf.ocf_to_pat != null ? `OCF/PAT = ${cf.ocf_to_pat.toFixed(2)}x` : 'OCF/PAT: n/a (loss)', tone: ocfTotal },
+    { label: 'Investing Cash Flow', value: fcUnitPdf(icfTotal, unit, currency), sub: 'Capex + FD/MF movements', tone: icfTotal },
+    { label: 'Financing Cash Flow', value: fcUnitPdf(fcfTotal, unit, currency), sub: 'Borrowings + equity, net', tone: fcfTotal },
+    { label: 'Net Change in Cash', value: fcUnitPdf(cf.net_change, unit, currency), sub: `Closing: ${fl(cf.closing_cash, 2, unit)}${unitSuffix(unit)}`, tone: cf.net_change },
   ], 49);
 
   y += 6;

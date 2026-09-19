@@ -439,26 +439,34 @@ export function getExportTables(section: string, bundle: ReportBundle, unit: Dis
     // ── Key Financial Ratios ────────────────────────────────────────────────
     case 'ratios': {
       const r = bundle.ratios;
+      const prevR = compare ? bundle.prev_ratios : null;
+      const baseCols = ['Category', 'Metric', `${fyLabel} Value`];
+      const cols = prevR ? [...baseCols, `${prevFyLabel} Value`] : ['Category', 'Metric', 'Ratio Value'];
+      const row = (category: string, metric: string, cur: string, prev: string | null): (string | number)[] =>
+        prevR ? [category, metric, cur, prev ?? '—'] : [category, metric, cur];
+      const xOrNa = (v: number | null) => (v !== null ? `${v}x` : 'N/A (no debt service)');
       return [{
         title: `Key Financial Ratios & Analysis — ${fyFullLabel}`,
         sheetName: 'Ratios',
-        columns: ['Category', 'Metric', 'Ratio Value'],
+        columns: cols,
         rows: [
-          ['Liquidity', 'Current Ratio', `${r.liquidity.current_ratio}x`],
-          ['Liquidity', 'Quick Ratio', `${r.liquidity.quick_ratio}x`],
-          ['Liquidity', 'Cash Ratio', `${r.liquidity.cash_ratio}x`],
-          ['Profitability', 'Gross Margin %', `${r.profitability.gross_margin}%`],
-          ['Profitability', 'EBITDA Margin %', `${r.profitability.ebitda_margin}%`],
-          ['Profitability', 'Net Margin %', `${r.profitability.net_margin}%`],
-          ['Profitability', 'Return on Equity (ROE) %', `${r.profitability.roe}%`],
-          ['Profitability', 'Return on Capital Employed (ROCE) %', `${r.profitability.roce}%`],
-          ['Leverage', 'Debt to Equity', `${r.leverage.debt_equity}x`],
-          ['Leverage', 'Interest Coverage Ratio', `${r.leverage.interest_cover}x`],
-          ['Leverage', 'Debt Service Coverage Ratio (DSCR)', r.leverage.dscr !== null ? `${r.leverage.dscr}x` : 'N/A (no debt service)'],
-          ['Efficiency', 'Asset Turnover Ratio', `${r.efficiency.asset_turnover}x`],
-          ['Efficiency', 'Days Sales Outstanding (DSO)', `${r.efficiency.dso} days`],
-          ['Efficiency', 'Days Payable Outstanding (DPO)', `${r.efficiency.dpo} days`],
-          ['Efficiency', 'Cash Conversion Cycle (CCC)', `${r.efficiency.ccc} days`],
+          row('Liquidity', 'Current Ratio', `${r.liquidity.current_ratio}x`, prevR ? `${prevR.liquidity.current_ratio}x` : null),
+          row('Liquidity', 'Quick Ratio', `${r.liquidity.quick_ratio}x`, prevR ? `${prevR.liquidity.quick_ratio}x` : null),
+          row('Liquidity', 'Cash Ratio', `${r.liquidity.cash_ratio}x`, prevR ? `${prevR.liquidity.cash_ratio}x` : null),
+          row('Profitability', 'Gross Margin %', `${r.profitability.gross_margin}%`, prevR ? `${prevR.profitability.gross_margin}%` : null),
+          row('Profitability', 'EBITDA Margin %', `${r.profitability.ebitda_margin}%`, prevR ? `${prevR.profitability.ebitda_margin}%` : null),
+          row('Profitability', 'Net Margin %', `${r.profitability.net_margin}%`, prevR ? `${prevR.profitability.net_margin}%` : null),
+          row('Profitability', 'Return on Equity (ROE) %', `${r.profitability.roe}%`, prevR ? `${prevR.profitability.roe}%` : null),
+          row('Profitability', 'Return on Capital Employed (ROCE) %', `${r.profitability.roce}%`, prevR ? `${prevR.profitability.roce}%` : null),
+          row('Leverage', 'Debt to Equity', `${r.leverage.debt_equity}x`, prevR ? `${prevR.leverage.debt_equity}x` : null),
+          row('Leverage', 'Interest Coverage Ratio', `${r.leverage.interest_cover}x`, prevR ? `${prevR.leverage.interest_cover}x` : null),
+          row('Leverage', 'Debt Service Coverage Ratio (DSCR)', xOrNa(r.leverage.dscr), prevR ? xOrNa(prevR.leverage.dscr) : null),
+          row('Efficiency', 'Asset Turnover Ratio', `${r.efficiency.asset_turnover}x`, prevR ? `${prevR.efficiency.asset_turnover}x` : null),
+          row('Efficiency', 'Days Sales Outstanding (DSO)', `${r.efficiency.dso} days`, prevR ? `${prevR.efficiency.dso} days` : null),
+          row('Efficiency', 'Days Payable Outstanding (DPO)', `${r.efficiency.dpo} days`, prevR ? `${prevR.efficiency.dpo} days` : null),
+          row('Efficiency', 'Cash Conversion Cycle (CCC)', `${r.efficiency.ccc} days`, prevR ? `${prevR.efficiency.ccc} days` : null),
+          row('Cash Flow Quality', `Free Cash Flow (${symbol}${sfx})`, fl(r.cashflow.free_cash_flow), prevR ? fl(prevR.cashflow.free_cash_flow) : null),
+          row('Cash Flow Quality', 'Operating Cash Flow / PAT', r.cashflow.ocf_to_pat !== null ? `${r.cashflow.ocf_to_pat}x` : 'N/A (PAT is nil/negative)', prevR ? (prevR.cashflow.ocf_to_pat !== null ? `${prevR.cashflow.ocf_to_pat}x` : 'N/A') : null),
         ],
       }];
     }

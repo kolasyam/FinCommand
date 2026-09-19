@@ -18,7 +18,20 @@ export function RevenueEbitdaChart({ labels, revenue, ebitda, unit = 'Lakhs' }: 
       }}
       options={{
         responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
+        plugins: {
+          legend: { display: false },
+          // Previously no tooltip callback at all — Chart.js's default
+          // showed the raw, un-scaled rupee value (e.g. "32475872.45"),
+          // ignoring the Unit Selector entirely even though the Y-axis
+          // ticks right next to it correctly show "324.76" under Lakhs.
+          // Same fl()-based callback WaterfallChart.tsx/widget-renderers.tsx's
+          // MultiSeriesWidget already use for their own tooltips.
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: ${fl(ctx.raw as number, 2, unit)}`,
+            },
+          },
+        },
         scales: {
           y: { ticks: { font: { size: 10 }, callback: (v) => fl(Number(v), 2, unit) }, grid: { color: 'rgba(128,128,128,0.07)' } },
           x: { ticks: { font: { size: 10 }, maxRotation: 40 }, grid: { display: false } },

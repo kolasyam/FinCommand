@@ -5,12 +5,17 @@ import { useDashboard } from '@/lib/dashboard/DashboardContext';
 import { useToast } from '@/lib/dashboard/ToastContext';
 import { apiFetch, ApiClientError } from '@/lib/dashboard/api-client';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { Kpi } from '../Kpi';
 import { DownloadBar } from '../DownloadBar';
-import { fn, numTone, getFyLabel, getFyShortLabel, getUnitHeader, unitSuffix, formatChg, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
+import { fn, numTone, kpiTone, signedPct, getFyLabel, getFyShortLabel, getUnitHeader, unitSuffix, formatChg, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
 import { getCurrencyMeta } from '@/lib/services/currency';
 import type { AggregatedNote } from '@/lib/financial/tb-engine';
 import { NOTE_CATALOG, isBSSection } from '@/lib/financial/note-catalog';
 import { ThreeYearBanner } from '../ThreeYearFrame';
+import { Sparkline } from '@/components/charts/Sparkline';
+import { jumpToNoteCard } from '@/lib/utils/note-navigation';
+import { CustomizableTabPanel } from './dashboard-builder/CustomizableTabPanel';
+import { NOTES_DEFAULT_WIDGETS } from '@/lib/dashboard-builder/default-layout';
 
 // Mirrors ROLE_SETS.canWrite in lib/auth/permissions.ts (server-only — pulls
 // in DB/Next.js server code, so not safe to import into a client
@@ -70,6 +75,13 @@ function SingleNoteCard({
   const totChg = cTotal - pTotal;
   const sfx = unitSuffix(unit);
   const symbol = getCurrencyMeta(currency).symbol;
+  // Real, already-computed by aggregateByNote() for every Income/Expense
+  // note (Notes 20-26) — full 12-month movement, currency-converted along
+  // with everything else — but never actually rendered anywhere before this.
+  // Balance-Sheet-section notes carry an all-zero `monthly` by construction
+  // (a point-in-time balance has no "this month's movement" the same way),
+  // so the sparkline is only shown where it reflects something real.
+  const monthlyTrend = !isBSSection(section) && currNote?.monthly && currNote.monthly.some((m) => m !== 0) ? currNote.monthly : null;
   const v = (n: number) => fn(n, 2, unit);
   const vChg = (n: number) => formatChg(n, 2, unit);
   const [dragOver, setDragOver] = useState(false);
@@ -111,12 +123,15 @@ function SingleNoteCard({
     const ledgers = currNote?.ledgers || [];
     return (
       <div className={`note-block${dragOver ? ' note-drop-target' : ''}`} id={domId} {...dropProps}>
-        <div className="note-hdr" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="note-hdr" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
           <div>
             <span className="nn">Note {noteNo}</span>
             <span className="nb">{noteName}</span>
           </div>
-          <span className="num bold">{symbol}{v(cTotal)}{sfx}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {monthlyTrend && <Sparkline values={monthlyTrend} color={numTone(cTotal) === 'dn' ? '#D85A30' : '#378ADD'} />}
+            <span className="num bold">{symbol}{v(cTotal)}{sfx}</span>
+          </div>
         </div>
         <table className="fc-table">
           <thead>
@@ -195,6 +210,7 @@ function SingleNoteCard({
           <span className="nb">{noteName}</span>
         </div>
         <div style={{ fontSize: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
+          {monthlyTrend && <Sparkline values={monthlyTrend} color={numTone(cTotal) === 'dn' ? '#D85A30' : '#378ADD'} />}
           <span>{financialYearLabel}: <strong>{symbol}{v(cTotal)}{sfx}</strong></span>
           <span style={{ color: 'var(--text2)' }}>{prevYearLabel}: <strong>{symbol}{v(pTotal)}{sfx}</strong></span>
           <span className={`bold ${numTone(totChg)}`}>
@@ -269,15 +285,7 @@ export function NotesTab() {
   // target element already exists in the DOM by the time this looks for it.
   useEffect(() => {
     if (!pendingNoteKey) return;
-    const el = document.getElementById(`note-card-${pendingNoteKey}`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      el.classList.remove('note-highlight');
-      // Force a reflow so re-adding the class restarts the animation even
-      // if the same note is jumped to twice in a row.
-      void el.offsetWidth;
-      el.classList.add('note-highlight');
-    }
+    jumpToNoteCard(pendingNoteKey);
     clearPendingNoteKey();
   });
   const unitLabel = getUnitHeader(displayUnit, presentationCurrency);
@@ -410,10 +418,107 @@ export function NotesTab() {
   const fyLabel = getFyShortLabel(financial_year, yearType);
   const prevFyLabel = getFyShortLabel(prevFy, yearType);
 
+  // Real, already-computed KPI summary + a compact "Note Index" (contents
+  // page) — same pair the bespoke Notes PDF export already has (previously
+  // only available on download): a real audited statement's own "Notes
+  // forming part of the accounts" always opens with an index like this, and
+  // with up to 26 note cards to scroll through, an at-a-glance summary that
+  // jumps straight to any one is a genuine navigation aid, not just parity.
+  const SECTION_LABEL: Record<string, string> = { eq: 'Equity', lnc: 'Non-Curr. Liab.', lc: 'Curr. Liab.', anc: 'Non-Curr. Assets', ac: 'Curr. Assets', inc: 'Income', exp: 'Expense' };
+  const sectionSum = (list: AggregatedNote[], sections: string[]) =>
+    list.filter(n => sections.includes(n.section || '')).reduce((s, n) => s + n.total, 0);
+  const plSum = (list: AggregatedNote[]) =>
+    list.filter(n => ['inc', 'exp'].includes(n.section || '')).reduce((s, n) => s + Math.abs(n.total), 0);
+  const eqLiabTotal = sectionSum(notes, ['eq', 'lnc', 'lc']);
+  const assetsTotal = sectionSum(notes, ['anc', 'ac']);
+  const plTotal = plSum(notes);
+  const bsNoteCount = combinedNotes.filter(c => isBSSection(c.curr?.section || c.prev?.section)).length;
+  // Real prior-year figures for the same 3 currency KPIs — the identical
+  // prevNotes array already used a few lines below for the Note Index/
+  // per-note comparison mode, just not previously read up here too (found
+  // auditing this tab: the KPI strip showed only static/neutral captions
+  // even with real YoY data sitting right there in scope).
+  const prevEqLiabTotal = hasPrev ? sectionSum(prevNotes, ['eq', 'lnc', 'lc']) : null;
+  const prevAssetsTotal = hasPrev ? sectionSum(prevNotes, ['anc', 'ac']) : null;
+  const prevPlTotal = hasPrev ? plSum(prevNotes) : null;
+  const yoyPct = (curr: number, prev: number | null) => prev != null && prev !== 0 ? ((curr - prev) / Math.abs(prev)) * 100 : null;
+  const eqLiabYoy = yoyPct(eqLiabTotal, prevEqLiabTotal);
+  const assetsYoy = yoyPct(assetsTotal, prevAssetsTotal);
+  const plYoy = yoyPct(plTotal, prevPlTotal);
+
+  // Split in two, per Balance Sheet/P&L/Cash Flow's own already-corrected
+  // architecture (see their doc comments / dashboard-builder-engine.ts's
+  // TabKey doc comment for why this shape, not a single CustomizableTabPanel
+  // wrap, is mandatory for a Schedule III statutory statement): only the
+  // real supplementary/navigation content (the KPI strip + Note Index) goes
+  // inside CustomizableTabPanel's fixedView. Every individual note card
+  // renders directly in this component, unconditionally, and is never
+  // passed to CustomizableTabPanel at all — so it can never be swapped out
+  // for the widget grid.
+
+  // ── Supplementary zone (customizable) — KPI strip + Note Index ──
+  const supplementaryView = (
+    <div>
+      <div className="grid4">
+        <Kpi label="Total Notes" value={String(combinedNotes.length)} change={`${bsNoteCount} Balance Sheet, ${combinedNotes.length - bsNoteCount} P&L`} tone="neu" />
+        <Kpi label="Equity & Liabilities Notes" value={fn(eqLiabTotal, 2, displayUnit)} change={eqLiabYoy != null ? `${signedPct(eqLiabYoy)} YoY` : 'Notes 1-19 range'} tone={eqLiabYoy != null ? kpiTone(eqLiabYoy) : 'neu'} />
+        <Kpi label="Assets Notes" value={fn(assetsTotal, 2, displayUnit)} change={assetsYoy != null ? `${signedPct(assetsYoy)} YoY` : 'Non-current + Current'} tone={assetsYoy != null ? kpiTone(assetsYoy) : 'neu'} />
+        <Kpi label="Income & Expense Notes" value={fn(plTotal, 2, displayUnit)} change={plYoy != null ? `${signedPct(plYoy)} YoY` : 'Notes 20-26 range'} tone={plYoy != null ? kpiTone(plYoy) : 'neu'} />
+      </div>
+
+      <div className="card">
+        <div className="card-hdr">
+          <span className="ct">Note Index</span>
+          <span className="cbadge cb-blue">Click a row to jump to its detail</span>
+        </div>
+        <div className="card-body" style={{ overflowX: 'auto' }}>
+          <table className="fc-table">
+            <thead>
+              <tr>
+                <th>Note</th>
+                <th>Description</th>
+                <th>Section</th>
+                <th className="num">{fyLabel}</th>
+                {compare && <th className="num" style={{ color: 'var(--text2)' }}>{prevFyLabel}</th>}
+                {compare && <th className="num">YoY</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {combinedNotes.map(({ key, noteNo, curr, prev }) => {
+                const name = curr?.note_name || prev?.note_name || `Note ${noteNo}`;
+                const sec = curr?.section || prev?.section || '';
+                const cVal = curr?.total ?? 0;
+                const pVal = prev?.total ?? 0;
+                const chg = cVal - pVal;
+                return (
+                  <tr key={key} onClick={() => jumpToNoteCard(key)} style={{ cursor: 'pointer' }} title={`Jump to Note ${noteNo}`}>
+                    <td>{noteNo}</td>
+                    <td>{name}</td>
+                    <td style={{ fontSize: 11, color: 'var(--text2)' }}>{SECTION_LABEL[sec] || sec}</td>
+                    <td className="num">{fn(cVal, 2, displayUnit)}</td>
+                    {compare && <td className="num" style={{ color: 'var(--text2)' }}>{fn(pVal, 2, displayUnit)}</td>}
+                    {compare && <td className={`num ${numTone(chg)}`}>{formatChg(chg, 2, displayUnit)}</td>}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div>
       <DownloadBar title={`Notes to Accounts · ${fyFullLabel}`} subtitle={`Notes 1–26 · ${unitLabel} · ${period_label}`} section="notes" compareEnabled={showComparison} />
 
+      <CustomizableTabPanel tabKey="notes" defaultWidgets={NOTES_DEFAULT_WIDGETS} fixedView={supplementaryView} />
+
+      {/* ── Fixed zone (never a widget, never wrapped, never swapped out) ──
+          The mandated Schedule III note schedule — every individual note
+          card, every ledger line, every Sparkline, byte-identical to how it
+          always rendered, whether or not the supplementary zone above is
+          being customized right now. */}
       <ConfirmModal
         open={!!pendingReclassify}
         title="Reclassify Ledger"

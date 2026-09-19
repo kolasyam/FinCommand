@@ -3,11 +3,16 @@
 import { useEffect, useState } from 'react';
 import { DashboardProvider, useDashboard } from '@/lib/dashboard/DashboardContext';
 import { ToastProvider } from '@/lib/dashboard/ToastContext';
+import { TabCustomizationsProvider } from '@/lib/dashboard/TabCustomizationsContext';
+import { CustomTabsProvider } from '@/lib/dashboard/CustomTabsContext';
 import { TopBar } from '@/components/dashboard/TopBar';
 import { PeriodBar } from '@/components/dashboard/PeriodBar';
 import { SidebarNav } from '@/components/dashboard/SidebarNav';
 import { LoginModal } from '@/components/dashboard/LoginModal';
 import { AddFyModal } from '@/components/dashboard/AddFyModal';
+import { ManageCustomTabsModal } from '@/components/dashboard/ManageCustomTabsModal';
+import { ManageCustomMetricsModal } from '@/components/dashboard/ManageCustomMetricsModal';
+import { CustomTab } from '@/components/dashboard/tabs/CustomTab';
 import { LoadingBar, ErrorBanner } from '@/components/ui/StatusBanners';
 import { OverviewTab } from '@/components/dashboard/tabs/OverviewTab';
 import { CashFlowTab } from '@/components/dashboard/tabs/CashFlowTab';
@@ -25,6 +30,7 @@ import { AlertsTab } from '@/components/dashboard/tabs/AlertsTab';
 import { ComplianceTab } from '@/components/dashboard/tabs/ComplianceTab';
 import { BoardPackTab } from '@/components/dashboard/tabs/BoardPackTab';
 import { ReportBuilderTab } from '@/components/dashboard/tabs/ReportBuilderTab';
+import { MyDashboardTab } from '@/components/dashboard/tabs/MyDashboardTab';
 import { UploadTab } from '@/components/dashboard/tabs/UploadTab';
 import { exportAllPdf } from '@/lib/exports/pdf';
 import { exportAllXlsx } from '@/lib/exports/xlsx';
@@ -128,6 +134,8 @@ function DashboardShell() {
   const [loginOpen, setLoginOpen] = useState(false);
   const [addFyOpen, setAddFyOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [manageCustomTabsOpen, setManageCustomTabsOpen] = useState(false);
+  const [manageCustomMetricsOpen, setManageCustomMetricsOpen] = useState(false);
   const toast = useToast();
 
   // On initial mount, respect query parameters (e.g. ?tab=upload or ?zoho=connected)
@@ -222,8 +230,13 @@ function DashboardShell() {
       case 'alerts': return <AlertsTab />;
       case 'compliance': return <ComplianceTab />;
       case 'boardpack': return <BoardPackTab />;
+      case 'my-dashboard': return <MyDashboardTab />;
       case 'report-builder': return <ReportBuilderTab />;
-      default: return null;
+      // A user-created custom tab (see lib/db/queries/custom-tabs.ts) — its
+      // id always carries this prefix (mandatory, server-generated, never
+      // user-edited — see custom_tabs' own schema.sql comment), so this
+      // routes without needing the tab list loaded yet.
+      default: return activeTab.startsWith('custom-') ? <CustomTab tabKey={activeTab} /> : null;
     }
   }
 
@@ -231,6 +244,15 @@ function DashboardShell() {
     <div>
       <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
       <AddFyModal open={addFyOpen} onClose={() => setAddFyOpen(false)} />
+      <ManageCustomTabsModal
+        open={manageCustomTabsOpen}
+        onClose={() => setManageCustomTabsOpen(false)}
+        onOpenTab={setActiveTab}
+      />
+      <ManageCustomMetricsModal
+        open={manageCustomMetricsOpen}
+        onClose={() => setManageCustomMetricsOpen(false)}
+      />
       <TopBar
         onNavigate={setActiveTab}
         onOpenLogin={() => setLoginOpen(true)}
@@ -245,6 +267,8 @@ function DashboardShell() {
           onChange={setActiveTab}
           mobileOpen={sidebarOpen}
           onCloseMobile={() => setSidebarOpen(false)}
+          onManageCustomTabs={() => setManageCustomTabsOpen(true)}
+          onManageCustomMetrics={() => setManageCustomMetricsOpen(true)}
         />
         <div className="dash-main">
           <PeriodBar />
@@ -265,7 +289,11 @@ export default function DashboardPage() {
   return (
     <ToastProvider>
       <DashboardProvider>
-        <DashboardShell />
+        <TabCustomizationsProvider>
+          <CustomTabsProvider>
+            <DashboardShell />
+          </CustomTabsProvider>
+        </TabCustomizationsProvider>
       </DashboardProvider>
     </ToastProvider>
   );

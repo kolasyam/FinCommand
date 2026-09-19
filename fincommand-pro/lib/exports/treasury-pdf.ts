@@ -13,7 +13,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { ReportBundle } from '@/lib/dashboard/types';
 import type { TreasuryEntry, TreasuryResult } from '@/lib/financial/tb-engine';
-import { fl, fn, fcPdf, pct, signedPct, getFyLabel, getFyShortLabel, getUnitHeaderPdf, unitSuffix, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
+import { fl, fn, fcUnitPdf, pct, signedPct, getFyLabel, getFyShortLabel, getUnitHeaderPdf, unitSuffix, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
 import { getCurrencyMeta } from '@/lib/services/currency';
 import {
   NAVY, NAVY_DARK, SLATE, BORDER, AMBER, PAGE_W, MARGIN, CONTENT_W, DEFAULT_COMPANY_NAME,
@@ -109,10 +109,10 @@ export function buildTreasuryPdf(bundle: ReportBundle, companyName = DEFAULT_COM
   doc.line(MARGIN, 44, PAGE_W - MARGIN, 44);
 
   let y = drawKpiCards(doc, [
-    { label: 'Cash & Bank', value: fcPdf(t.total_cash_and_bank, currency), sub: hasPrev ? `${yoy(t.total_cash_and_bank, prevT.total_cash_and_bank) != null ? signedPct(yoy(t.total_cash_and_bank, prevT.total_cash_and_bank)! * 100) : '—'} vs ${prevFyShort}` : 'Liquid balances', tone: 0 },
-    { label: 'Fixed Deposits', value: fcPdf(t.total_fd, currency), sub: hasPrev ? `${yoy(t.total_fd, prevT.total_fd) != null ? signedPct(yoy(t.total_fd, prevT.total_fd)! * 100) : '—'} vs ${prevFyShort}` : 'Invested', tone: 0 },
-    { label: 'Mutual Funds', value: fcPdf(t.total_mf, currency), sub: hasPrev ? `${yoy(t.total_mf, prevT.total_mf) != null ? signedPct(yoy(t.total_mf, prevT.total_mf)! * 100) : '—'} vs ${prevFyShort}` : 'Invested', tone: 0 },
-    { label: 'Total Treasury', value: fcPdf(t.total, currency), sub: hasPrev ? `${yoy(t.total, prevT.total) != null ? signedPct(yoy(t.total, prevT.total)! * 100) : '—'} vs ${prevFyShort}` : 'All instruments', tone: 0 },
+    { label: 'Cash & Bank', value: fcUnitPdf(t.total_cash_and_bank, unit, currency), sub: hasPrev ? `${yoy(t.total_cash_and_bank, prevT.total_cash_and_bank) != null ? signedPct(yoy(t.total_cash_and_bank, prevT.total_cash_and_bank)! * 100) : '—'} vs ${prevFyShort}` : 'Liquid balances', tone: 0 },
+    { label: 'Fixed Deposits', value: fcUnitPdf(t.total_fd, unit, currency), sub: hasPrev ? `${yoy(t.total_fd, prevT.total_fd) != null ? signedPct(yoy(t.total_fd, prevT.total_fd)! * 100) : '—'} vs ${prevFyShort}` : 'Invested', tone: 0 },
+    { label: 'Mutual Funds', value: fcUnitPdf(t.total_mf, unit, currency), sub: hasPrev ? `${yoy(t.total_mf, prevT.total_mf) != null ? signedPct(yoy(t.total_mf, prevT.total_mf)! * 100) : '—'} vs ${prevFyShort}` : 'Invested', tone: 0 },
+    { label: 'Total Treasury', value: fcUnitPdf(t.total, unit, currency), sub: hasPrev ? `${yoy(t.total, prevT.total) != null ? signedPct(yoy(t.total, prevT.total)! * 100) : '—'} vs ${prevFyShort}` : 'All instruments', tone: 0 },
   ], 49);
 
   y += 8;

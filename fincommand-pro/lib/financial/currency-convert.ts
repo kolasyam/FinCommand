@@ -220,6 +220,7 @@ export function convertReportBundle(bundle: ReportBundle, rate: number): ReportB
     cashflow: convertCashFlow(bundle.cashflow, rate),
     prev_cashflow: bundle.prev_cashflow ? convertCashFlow(bundle.prev_cashflow, rate) : bundle.prev_cashflow,
     ratios: convertRatios(bundle.ratios, rate),
+    prev_ratios: bundle.prev_ratios ? convertRatios(bundle.prev_ratios, rate) : bundle.prev_ratios,
     top_customers: convertTopCustomers(bundle.top_customers, rate),
   };
 }
