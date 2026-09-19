@@ -24,10 +24,15 @@ Initiating a Zoho OAuth connection (`GET /api/v1/zoho/auth-url`) requires `ROLE_
 Never swallow database, auth, or Zoho API exceptions silently. The existing pattern (`withErrorHandling` wrapper, explicit `error` fields returned to the client, `console.warn`/`console.error` on partial failures like COA fetch or foreign-currency skips) should be followed for any new route — a caught-and-ignored exception is a regression, not a simplification.
 
 ### ⛔ Double-entry balance (Σ Dr = Σ Cr) — recorded and warned, never blocking (DB Phase 0, 2026-09-19)
-Every trial-balance batch stores `total_dr`, `total_cr`, `balance_diff`, `is_balanced` and a `validation` breakdown: the opening difference plus each of the 12 months. This happens for Excel uploads (`app/api/v1/tb/upload/route.ts`) and Zoho syncs (`lib/services/zoho.ts`), using one function, `summarizeTrialBalance()` in `lib/financial/tb-validation.ts`. "Balanced" means the opening and every month are each within ₹1.
+Every trial-balance batch stores `total_dr`, `total_cr`, `balance_diff`, `is_balanced` and a `validation` breakdown: the opening difference plus each of the 12 months. This happens for Excel uploads and Zoho syncs alike, in the one ingestion pipeline (`lib/ingestion/trial-balance.ts`, since DB Phase 1), using one function, `summarizeTrialBalance()` in `lib/financial/tb-validation.ts`. "Balanced" means the opening and every month are each within ₹1.
 - An unbalanced file is **saved and flagged** ("warn and record", the owner's decision), not rejected. The uploader sees the warning.
 - Existing batches were backfilled by migration `0001`; `DB-PHASE-0.md` §5 has the counts. The Zoho batches were off only in the opening balance and month 1. The cause was a one-day-early opening snapshot plus a missing "earnings brought forward" line. Both are fixed in the sync (`DB-PHASE-0.md` §3.6) and take effect on each year's next sync.
-- The Balance Sheet's own "balanced" check will still fail until the period's profit is carried into equity. That is a pending `tb-engine.ts` change awaiting approval (`DB-PHASE-0.md` §6).
+- **The Balance Sheet carries the period's profit** (DB Phase 1, approved by the owner). For a trial balance that balances, the statements add one line in Note 2 Other Equity: "Surplus — profit for the period (as booked)" (`withPeriodSurplus()` in `tb-engine.ts`, code `SYS-PL-SURPLUS`).
+  - It is the **only** addition to the statutory layout. Don't add others without the owner's approval.
+  - It is **never** added to an unbalanced trial balance, so a real difference stays visible as "Out of Balance".
+  - It is **never** stored. Custom metrics, Report Builder and the raw ledger APIs don't see it (`loadStatementLedgers()` vs `loadLedgers()`).
+  - Cash Flow ignores it, so profit isn't counted twice.
+  - See `DB-PHASE-1.md` §3.5.
 
 ### ⛔ Trial-balance writes — one writer, locked years untouchable, first source owns the year
 - **One writer per company + year.** Excel upload, Zoho sync, reclassify and batch delete each take `lockTrialBalanceWrite()` (`lib/db/queries/tb-batches.ts`) inside their transaction. A second writer waits up to 15 s, then gets a 409 "in progress".
@@ -38,6 +43,9 @@ Every trial-balance batch stores `total_dr`, `total_cr`, `balance_diff`, `is_bal
   - no overlapping years, and every year's start is before its end
   - every ledger row carries its company, year and batch
 - **Whichever source (Excel or Zoho) loads a year first owns it** (`financial_years.data_source`). Switching needs a person's confirmation. The scheduled sync never switches a year.
+- **One write path** (DB Phase 1). Every source writes through `ingestTrialBalance()` (`lib/ingestion/trial-balance.ts`). A new source must not write `tb_uploads` / `tb_ledgers` itself.
+- **Every ledger row has a stable account** (`tb_ledgers.account_id`, NOT NULL, set by a trigger). Don't bypass or disable `trg_tb_ledgers_assign_account`.
+- **Old data is deleted only through an approved list.** `db/scripts/retention.ts` and `clear-raw-zoho-months.ts` apply only a dry-run list id the owner approved. Never delete batches or raw payloads by hand.
 
 ### ⛔ Secrets and tenancy (DB Phase 0)
 - Zoho tokens are **encrypted at rest** (`lib/security/token-crypto.ts`, `TOKEN_ENCRYPTION_KEY`), and no API response ever includes them.

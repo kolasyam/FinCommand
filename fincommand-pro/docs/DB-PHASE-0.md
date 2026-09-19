@@ -231,7 +231,7 @@ The ledger building moved into a pure, unit-tested function, `assembleZohoLedger
   - Saving the Zoho config returns no tokens.
   - `auth-url` issues a signed state, and a forged state is refused.
   - The cron refuses a call without the secret.
-| `npm run build` | ⏳ needs the leftover `next start` on :4000 stopped first (a second server can now use `NEXT_DIST_DIR`, see `next.config.js`) |
+| `npm run build` | ✅ verified after Phase 1 (`DB-PHASE-1.md` §5), built into a separate `NEXT_DIST_DIR` so the running :4000 server was untouched |
 
 ### 5.1 Incident: migrations reached production before the branch test (2026-09-19)
 
@@ -261,6 +261,14 @@ The ledger building moved into a pure, unit-tested function, `assembleZohoLedger
 The test branch is untouched and holds the exact pre-migration state for comparison.
 
 ## 6. Known leftovers (not in this phase)
+
+> [!NOTE]
+> **Update:** Phase 1 (`DB-PHASE-1.md`) has since dealt with:
+> - the Balance Sheet profit line (approved);
+> - raw payloads and skipping unchanged syncs;
+> - stable account ids;
+> - retention deletes.
+
 - **The Balance Sheet doesn't include the period's profit in equity** (`computeBS()` sums ledger balances only). Every Balance Sheet view today, for every company, shows "Out of Balance". After §3.6, the Zoho years' difference is exactly −profit.
   - The fix is a "Profit for the period" line in Other Equity, i.e. Surplus in the Statement of P&L under Schedule III.
   - It changes `tb-engine.ts` and the Balance Sheet presentation, so it **needs the owner's approval** first.

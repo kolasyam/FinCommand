@@ -100,3 +100,14 @@ The tree-only, no-`eval()` rule below is unchanged. Ledger metrics (`definition_
 6. **Signed OAuth state, not a bare company id.** The Zoho callback can't authenticate the user, so the state it trusts must come from our own authenticated auth-url route and must be recent.
 7. **The report cache key includes a data version.** The cache is per server instance. Without the version, one instance could serve another's stale numbers for 15 minutes after an upload.
 8. **The Zoho opening-balance imbalance is a separate change**, made right after this phase, because it is the one fix that is *meant* to change numbers.
+
+## 11. Database Phase 1 — one pipeline, stable identities, a balancing Balance Sheet
+
+**Decision** (2026-09-19, by the owner; implementation log in `DB-PHASE-1.md`). The approval covers Phase 1 only. Report numbers are unchanged on today's data (parity 84/84).
+
+1. **One write path for every source** (`lib/ingestion/trial-balance.ts`). Sources only parse and map. Locking, validation, supersede and insert happen once, in one transaction, for Excel, Zoho and future sources alike.
+2. **Unchanged data writes nothing.** A content hash (amounts to the paisa, order-independent) is compared with the current batch. Zoho records `no_change`; Excel gets 409 `NO_CHANGE`. 79% of past syncs were identical copies.
+3. **Raw source responses are kept, but stored once** (`raw_payloads` + `upload_raw_payloads`). They are the proof of what Zoho returned, so they aren't dropped; they just stop being duplicated inside every batch.
+4. **Every ledger row has a stable account** (`ledger_accounts`): the Zoho account id, else the code, else the name. It is assigned by a database trigger, so no writer can skip it. The identity is **per source**, because Zoho ids and Excel codes can't be matched safely. The CY merge and the contact joins deliberately stay as they were (`DB-PHASE-1.md` §6).
+5. **The Balance Sheet carries the period's profit** as one Other Equity line, "Surplus — profit for the period (as booked)". The line is added only when the trial balance itself balances, so a genuinely broken upload still shows "Out of Balance". It is the only `tb-engine.ts` change, and Cash Flow ignores it, so profit isn't counted twice.
+6. **Old copies go only through an approved list.** The retention policy keeps the current batch, the newest 5 superseded, anything current in the last 90 days, and locked years. A dry run prints the exact list and its id, and only that id can be applied. The same gate covers emptying the old raw column.

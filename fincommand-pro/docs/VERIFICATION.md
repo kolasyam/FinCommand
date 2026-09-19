@@ -15,15 +15,17 @@ Must pass with **0 errors**. This repo uses `npm run typecheck` as the equivalen
 ```bash
 npm test
 ```
-Must pass all suites. **Verified 2026-09-19** (after DB Phase 0, see `DB-PHASE-0.md`):
+Must pass all suites. **Verified 2026-09-19** (after DB Phase 1, see `DB-PHASE-1.md`):
 ```
-Test Suites: 17 passed, 17 total
-Tests:       434 passed, 434 total
+Test Suites: 21 passed, 21 total
+Tests:       470 passed, 470 total
 ```
-Phase 0 added `migrate-core`, `tb-validation`, `security` (token encryption + OAuth state), `report-cache-key` and `zoho-assembly`.
+Phase 0 added `migrate-core`, `tb-validation`, `security` (token encryption + OAuth state), `report-cache-key` and `zoho-assembly`. Phase 1 added `ingestion`, `content-hash`, `period-surplus` and `script-support`.
+
+On a machine short of memory, run `npx jest --runInBand`.
 
 > [!NOTE]
-> If a future run shows a different suite/test count than 17/434, that's a signal the codebase has moved on since this doc was written — update this section rather than treating the old numbers as ground truth.
+> If a future run shows a different suite/test count than 21/470, that's a signal the codebase has moved on since this doc was written — update this section rather than treating the old numbers as ground truth.
 
 ## Step 3 — Root diagnostic script protocol (DB / financial-calculation changes only)
 
@@ -56,6 +58,8 @@ npm run db:migrate:main                      # 3. only then production
 > Always read a `--status` / `--dry-run` output **before** running the apply command, never chained in the same step.
 
 Test every migration on a Neon branch first. A migration that changes or deletes existing data needs the owner's explicit approval, and it must back up whatever it removes (see `0002`, which keeps the removed rows in `ledger_master_dedupe_backup`).
+
+**Data clean-up scripts** (`db/scripts/retention.ts`, `db/scripts/clear-raw-zoho-months.ts`, since DB Phase 1): run `--dry-run` first and on its own. Take the printed **list id** to the owner. Only an approved id goes to `--apply --confirm=<list id>`. The script refuses if the list has changed since. Branch first, then main. See `DB-PHASE-1.md` §3.6.
 
 **Deploy order:** apply migrations to main *before* deploying code that uses them. The old code keeps working on the new schema; the new code does not work on the old schema.
 
