@@ -101,10 +101,47 @@ pool.on('error', (err) => {
 
 // Schema changes are never made from here. There used to be a startup
 // ALTER TABLE for dashboard_widgets' widget_type CHECK (it drifted out of
-// sync with schema.sql once and broke layout saves) and a 3-minute
-// `SELECT 1` keep-alive that stopped Neon from ever scaling to zero. Both are
-// gone: schema lives in db/migrations (`npm run db:migrate`), and the 30s
-// connectionTimeoutMillis above absorbs a Neon cold start.
+// sync with schema.sql once and broke layout saves): gone — schema lives in
+// db/migrations (`npm run db:migrate`).
+//
+// The 3-minute `SELECT 1` keep-alive was removed in DB Phase 0 so Neon could
+// scale to zero (cost). On 2026-09-20 the owner chose the other side of that
+// trade: keep the compute awake, and pay its hours, so the first request after
+// a quiet spell doesn't wait seconds for the database to wake (docs/LATENCY.md
+// §5). A long-lived server pings from here; on Vercel, where nothing lives
+// between requests, a cron does it (/api/v1/internal/keepalive, vercel.json).
+// The 30 s connectionTimeoutMillis above still absorbs a genuine cold start.
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __fcPgKeepAlive: ReturnType<typeof setInterval> | undefined;
+}
+
+/** How often this process pings the database, in ms; 0 = not at all (tests, Vercel, or DB_KEEPALIVE_MS=0). */
+export function keepAliveIntervalMs(env: NodeJS.ProcessEnv = process.env): number {
+  if (env.NODE_ENV === 'test') return 0;
+  if (env.DB_KEEPALIVE_MS !== undefined) {
+    const ms = parseInt(env.DB_KEEPALIVE_MS, 10);
+    return Number.isFinite(ms) && ms > 0 ? ms : 0;
+  }
+  return env.VERCEL ? 0 : 240000; // under Neon's 5-minute suspend window
+}
+
+/**
+ * Pings `p` with a trivial query every `everyMs`. The timer is unref'd, so it
+ * never keeps a script or a shutting-down server alive, and a previous timer
+ * (a dev hot reload builds a new pool) is replaced, never stacked.
+ */
+export function startKeepAlive(p: Pick<Pool, 'query'>, everyMs: number): ReturnType<typeof setInterval> {
+  if (global.__fcPgKeepAlive) clearInterval(global.__fcPgKeepAlive);
+  const timer = setInterval(() => { Promise.resolve(p.query('SELECT 1')).catch(() => {}); }, everyMs);
+  timer.unref?.();
+  global.__fcPgKeepAlive = timer;
+  return timer;
+}
+
+const keepAliveMs = keepAliveIntervalMs();
+if (keepAliveMs > 0) startKeepAlive(pool, keepAliveMs);
 
 export function query<T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]) {
   return pool.query<T>(text, params);

@@ -146,7 +146,7 @@ npx tsx db/scripts/clear-raw-zoho-months.ts --target=main --dry-run
 | Script | Dry-run result on main | Next step |
 |---|---|---|
 | Retention | Nothing is due. Everything is from Aug–Sep 2026, so the first deletions become possible from late November 2026. | Nothing to apply today. |
-| Old-column clear | 31 batches (2 current), 1,158 entries, all verified. List id `426d3108cea5`. | **Awaiting the owner's approval.** |
+| Old-column clear | 31 batches (2 current), 1,158 entries, all verified. List id `426d3108cea5`. | ✅ **Approved by the owner and applied on 2026-09-20** (re-checked first: the dry run still gave exactly that id). All 37 batches read back identical raw responses afterwards; `tb_uploads` 4.7 MB → 232 kB. See `LATENCY.md` §5.4. |
 
 ## 4. Deploying
 
@@ -157,9 +157,8 @@ npx tsx db/scripts/clear-raw-zoho-months.ts --target=main --dry-run
    2. Deploy.
    3. Encrypt the stored token on main (`encrypt-existing-zoho-tokens.ts --target=main`, dry run first).
    4. Reconnect Zoho, so each year re-syncs with the Phase 0 opening fix. From then on, the Surplus line balances those years' Balance Sheets.
-3. Clear the old raw column on main **once the owner approves** list `426d3108cea5`.
-   - It's safe before or after the deploy; after is tidier.
-   - If the list has changed by then, run the dry run again and approve the new id.
+3. ~~Clear the old raw column on main~~ — **done 2026-09-20** with the owner's approval of list `426d3108cea5` (`LATENCY.md` §5.4).
+4. **Added by the latency pass** (`LATENCY.md` §5): `vercel.json` now pins the function region to `iad1` and runs a keep-alive cron every 4 minutes (needs a Vercel plan that allows it, and costs Neon compute hours). It uses the same `CRON_SECRET` as the Zoho cron.
 
 ## 5. Verification
 

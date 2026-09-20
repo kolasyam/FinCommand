@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import { query } from '@/lib/db/neon';
+import { checkCronSecret } from '@/lib/auth/cron-auth';
 import { syncFromZoho } from '@/lib/services/zoho';
 
 export const runtime = 'nodejs';
@@ -20,15 +21,8 @@ export const runtime = 'nodejs';
  * company. Vercel Cron sends `Authorization: Bearer $CRON_SECRET` itself.
  */
 export const GET = withErrorHandling(async (req: NextRequest) => {
-  const secret = req.headers.get('authorization');
-  if (!process.env.CRON_SECRET) {
-    if (process.env.NODE_ENV === 'production') {
-      console.error('[zoho-cron] CRON_SECRET is not set — refusing to run.');
-      return json({ error: 'Cron is not configured' }, { status: 503 });
-    }
-  } else if (secret !== `Bearer ${process.env.CRON_SECRET}`) {
-    return json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const denied = checkCronSecret(req, 'zoho-cron');
+  if (denied) return denied;
 
   const results: { company_id: string; status: string; error?: string; skipped?: string }[] = [];
   // sync_frequency gates *which* companies are due, not just whether cron

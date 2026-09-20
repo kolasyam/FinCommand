@@ -66,6 +66,35 @@ export function claimedCompanyId(req: NextRequest): string | null {
 }
 
 /**
+ * A short-lived in-memory copy of the user record authenticate() loads, so a
+ * burst of API calls (a page load makes about six) doesn't repeat the same
+ * lookup — one database round trip saved on each.
+ *
+ * The trade-off, accepted by the owner (2026-09-20): a user who is deactivated
+ * or given another role on a DIFFERENT server instance keeps their old access
+ * for up to the TTL (30 s by default). On the instance that handles the change
+ * it is cleared at once (invalidateAuthCache). The token is still verified on
+ * every request, and a failed lookup (unknown or inactive user) is never
+ * cached. AUTH_CACHE_TTL_MS=0 turns it off; it is off in development, like
+ * the report caches, so a role change shows immediately there.
+ */
+const authCache = new Map<string, { user: AuthUser; expiresAt: number }>();
+const MAX_AUTH_CACHE_ENTRIES = 500;
+
+function authCacheTtlMs(): number {
+  if (process.env.NODE_ENV === 'development') return 0;
+  const raw = process.env.AUTH_CACHE_TTL_MS;
+  const ms = raw === undefined ? 30000 : parseInt(raw, 10);
+  return Number.isFinite(ms) && ms > 0 ? ms : 0;
+}
+
+/** Forget one user (call after changing their role, name or active flag), or everyone. */
+export function invalidateAuthCache(userId?: string): void {
+  if (userId) authCache.delete(userId);
+  else authCache.clear();
+}
+
+/**
  * Verifies the bearer JWT and loads the user from the DB — the Next.js
  * equivalent of the `authenticate` Express middleware. Throws ApiError(401)
  * on any failure so callers can just `await authenticate(req)` and let
@@ -86,6 +115,13 @@ export async function authenticate(req: NextRequest): Promise<AuthUser> {
     throw new ApiError(401, name === 'TokenExpiredError' ? 'Session expired. Please sign in again.' : 'Invalid authentication token');
   }
 
+  const ttlMs = authCacheTtlMs();
+  if (ttlMs) {
+    const hit = authCache.get(payload.sub);
+    if (hit && hit.expiresAt > Date.now()) return structuredClone(hit.user); // a copy: callers may change what they get
+    if (hit) authCache.delete(payload.sub);
+  }
+
   const { rows } = await query<AuthUser>(
     `SELECT u.id, u.name, u.email, u.role, u.company_id,
             u.is_active, u.permissions, c.name AS company_name
@@ -95,6 +131,12 @@ export async function authenticate(req: NextRequest): Promise<AuthUser> {
   );
   if (!rows.length || !rows[0].is_active) {
     throw new ApiError(401, 'User not found or inactive');
+  }
+
+  if (ttlMs) {
+    authCache.delete(payload.sub); // re-insert last, so the eviction below drops the oldest
+    authCache.set(payload.sub, { user: structuredClone(rows[0]), expiresAt: Date.now() + ttlMs });
+    while (authCache.size > MAX_AUTH_CACHE_ENTRIES) authCache.delete(authCache.keys().next().value as string);
   }
   return rows[0];
 }

@@ -110,4 +110,16 @@ The tree-only, no-`eval()` rule below is unchanged. Ledger metrics (`definition_
 3. **Raw source responses are kept, but stored once** (`raw_payloads` + `upload_raw_payloads`). They are the proof of what Zoho returned, so they aren't dropped; they just stop being duplicated inside every batch.
 4. **Every ledger row has a stable account** (`ledger_accounts`): the Zoho account id, else the code, else the name. It is assigned by a database trigger, so no writer can skip it. The identity is **per source**, because Zoho ids and Excel codes can't be matched safely. The CY merge and the contact joins deliberately stay as they were (`DB-PHASE-1.md` §6).
 5. **The Balance Sheet carries the period's profit** as one Other Equity line, "Surplus — profit for the period (as booked)". The line is added only when the trial balance itself balances, so a genuinely broken upload still shows "Out of Balance". It is the only `tb-engine.ts` change, and Cash Flow ignores it, so profit isn't counted twice.
-6. **Old copies go only through an approved list.** The retention policy keeps the current batch, the newest 5 superseded, anything current in the last 90 days, and locked years. A dry run prints the exact list and its id, and only that id can be applied. The same gate covers emptying the old raw column.
+6. **Old copies go only through an approved list.** The retention policy keeps the current batch, the newest 5 superseded, anything current in the last 90 days, and locked years. A dry run prints the exact list and its id, and only that id can be applied. The same gate covers emptying the old raw column (done on 2026-09-20 with the owner's approval — §12).
+
+## 12. Latency — round trips are the cost (2026-09-20)
+
+**Decision** (by the owner; measurements and proofs in `LATENCY.md`). Report content does not change: 84/84 `/reports/all` and 28/28 `/reports/threeyear` responses are identical before and after.
+
+1. **Fewer sequential database round trips, not faster queries.** Queries take under 1 ms and the engine 33–44 ms; one round trip from India to Neon `us-east-1` is ~247 ms. So: one wave of independent reads, the user lookup alongside the data-version check, and the 3-Year view in one wave.
+2. **The database reads behind a bundle are cached per data version** (clone on read, 12 entries), so switching Annual → Q1 → H2 doesn't re-read them. It has the same contract as the bundle cache: a change shows when the data version changes, which every application write path does; hand-run SQL doesn't.
+3. **Idle database connections are kept for 5 minutes** (was 30 s): opening one costs ~5 round trips.
+4. **Keep the Neon compute awake — accepted, costs compute hours.** A first request after a quiet spell no longer waits for the database to wake. Ping in long-lived servers, cron on Vercel; `DB_KEEPALIVE_MS=0` undoes it.
+5. **A 30-second cache of the user lookup — accepted security trade-off.** A user deactivated or re-roled on another server instance keeps the old access for up to 30 s. Cleared at once on the instance that changes it; failed lookups are never cached; the token is verified every time. `AUTH_CACHE_TTL_MS=0` undoes it.
+6. **Functions pinned to `iad1`**, next to the database. Moving the database and the functions both to Mumbai is faster for Indian users but a migration project of its own, not started.
+7. **The old raw-data column was emptied on production** (list `426d3108cea5`, approved), after each entry was verified in the new store. Nothing was lost.

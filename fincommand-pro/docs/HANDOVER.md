@@ -69,20 +69,24 @@
   - **Raw Zoho responses are stored once** (`raw_payloads`, migration `0004`).
   - **Stable account ids** (`ledger_accounts`, migration `0005`). Report Builder links survive a Zoho rename, and reclassify works by account.
   - **The Balance Sheet carries the period's profit**, as "Surplus — profit for the period (as booked)" in Other Equity. It shows only for a trial balance that balances, so it takes effect for Zoho years once Zoho is reconnected and re-syncs.
-  - **Retention and old-column clean-up scripts** sit behind a dry-run list the owner approves. On main, retention has nothing due. Clearing the old raw column (31 batches, list `426d3108cea5`) awaits approval.
+  - **Retention and old-column clean-up scripts** sit behind a dry-run list the owner approves. On main, retention has nothing due (the first deletions become possible around late November 2026). The old raw column was emptied on main on 2026-09-20 with the owner's approval (list `426d3108cea5`; nothing lost — every response is in `raw_payloads`).
 
 - **Latency pass** (2026-09-20, see `LATENCY.md`): a report load is dominated by database round trips (~247 ms each from India to Neon `us-east-1`; the queries themselves take < 1 ms). `/reports/all` now makes 1 round trip on a cache hit (was 2) and 2–3 on a miss (was 6); idle database connections are kept for 5 minutes (`DB_IDLE_TIMEOUT_MS`), which removed a ~3 s penalty on the first click after a short pause; the browser asks `/auth/me` and `/fy` together; the 3-Year view reads everything in one wave; and the database reads behind a bundle are kept per data version, so switching Annual → Q1 → H2 no longer re-reads them (a new period of an already-viewed year: ~1.5 s → ~0.27 s from India). Report content unchanged (84/84 `/reports/all` and 28/28 `/reports/threeyear` responses identical).
   - **The cache contract:** a change shows once the data version changes (every app write path does that). Hand-run SQL and `db/init.ts`'s `note_no` updates don't, and would show after up to 15 min or on `refresh=true`.
-  - **Open, needs the owner:** where the Vercel functions run versus Neon, Neon's scale-to-zero cold start, and a short cache of the user lookup. All three are decisions, not code (`LATENCY.md` §5).
+  - **Owner decisions carried out 2026-09-20** (`LATENCY.md` §5), each a trade-off:
+    - **Neon kept awake** (costs compute hours): a 4-minute ping in long-lived servers (`DB_KEEPALIVE_MS`) and a Vercel cron (`/api/v1/internal/keepalive`, needs a plan that allows it). `DB_KEEPALIVE_MS=0` / removing the cron line undoes it.
+    - **The user lookup is remembered for 30 s** (`AUTH_CACHE_TTL_MS`): a user deactivated or re-roled on another server instance keeps the old access for up to 30 s. Cleared at once on the instance that changes it.
+    - **Functions pinned to `iad1`** (next to Neon `us-east-1`). Moving both the database and the functions to Mumbai would be faster for Indian users but is a migration project of its own — not started.
+  - **Still to check on the Vercel side:** that the plan allows a 4-minute cron (Hobby limits crons to daily), or turn off "suspend compute after inactivity" in the Neon console instead.
   - `npm run dev` never uses the report cache (`NODE_ENV=development`), so it always feels slower than a production build.
 
 ## 4. Current Test & Build State (verified 2026-09-20)
 
 ```
-Test Suites: 23 passed, 23 total
-Tests:       481 passed, 481 total
+Test Suites: 26 passed, 26 total
+Tests:       500 passed, 500 total
 ```
-Run via `npm test` (Jest; `npx jest --runInBand` on a low-memory machine). Suites: `note-catalog`, `report-builder-engine`, `custom-metric-engine`, `custom-metrics-v2`, `ledger-metric`, `dashboard-builder-engine`, `dashboard-templates`, `dashboard-layout-export`, `tab-access`, `tab-customization-audit`, `tb-engine`, `format`, `migrate-core`, `tb-validation`, `security`, `report-cache-key`, `zoho-assembly`, `ingestion`, `content-hash`, `period-surplus`, `script-support`, `auth-claims`, `report-inputs-cache`. `npm run typecheck` and `npm run build` also verified clean the same session — see `CUSTOM-METRICS-UPGRADE.md` §4 and `QA-AUDIT-LATENCY-FIX.md` §7.
+Run via `npm test` (Jest; `npx jest --runInBand` on a low-memory machine). Suites: `note-catalog`, `report-builder-engine`, `custom-metric-engine`, `custom-metrics-v2`, `ledger-metric`, `dashboard-builder-engine`, `dashboard-templates`, `dashboard-layout-export`, `tab-access`, `tab-customization-audit`, `tb-engine`, `format`, `migrate-core`, `tb-validation`, `security`, `report-cache-key`, `zoho-assembly`, `ingestion`, `content-hash`, `period-surplus`, `script-support`, `auth-claims`, `report-inputs-cache`, `auth-cache`, `cron-auth`, `neon-keepalive`. `npm run typecheck` and `npm run build` also verified clean the same session — see `CUSTOM-METRICS-UPGRADE.md` §4 and `QA-AUDIT-LATENCY-FIX.md` §7.
 
 ## 5. What's explicitly deferred / out of scope
 

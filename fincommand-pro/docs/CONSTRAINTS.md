@@ -50,7 +50,8 @@ Every trial-balance batch stores `total_dr`, `total_cr`, `balance_diff`, `is_bal
 ### ⛔ Secrets and tenancy (DB Phase 0)
 - Zoho tokens are **encrypted at rest** (`lib/security/token-crypto.ts`, `TOKEN_ENCRYPTION_KEY`), and no API response ever includes them.
 - The Zoho connect `state` is **signed and expires** (`lib/security/oauth-state.ts`).
-- `/internal/zoho-cron` **refuses to run in production without `CRON_SECRET`**.
+- `/internal/zoho-cron` and `/internal/keepalive` **refuse to run in production without `CRON_SECRET`**, and compare the bearer token in constant time (`lib/auth/cron-auth.ts`, the one shared check — don't copy it into a new route).
+- **The user lookup in `authenticate()` is cached for 30 s** (`AUTH_CACHE_TTL_MS`; owner-accepted trade-off, 2026-09-20). Rules that must keep holding: the token is verified on every request; a failed lookup (unknown or inactive user) is **never** cached; every caller gets a copy; and any new route that changes a user's role, name or active flag must call `invalidateAuthCache(userId)` after the update. Until it expires, a user deactivated or re-roled on a *different* server instance keeps the old access.
 - Every report loader filters on `company_id` **and** the company's own current batch id.
 
 ## 2. Principle, not (yet) an enforced check — verify before assuming

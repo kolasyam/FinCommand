@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server';
-import { authenticate, requireRole, ROLE_SETS, type Role } from '@/lib/auth/permissions';
+import { authenticate, invalidateAuthCache, requireRole, ROLE_SETS, type Role } from '@/lib/auth/permissions';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import { query } from '@/lib/db/neon';
 import { isIn, ValidationCollector } from '@/lib/validations/common';
@@ -91,6 +91,10 @@ export const PATCH = withErrorHandling(async (req: NextRequest, { params }: { pa
      RETURNING id, name, email, role, is_active, last_login, created_at`,
     [name ?? null, (role as Role) ?? null, hasActive ? isActive : null, id, user.company_id]
   );
+
+  // Access changed: forget the cached copy on this instance at once (other
+  // instances pick it up within AUTH_CACHE_TTL_MS — see lib/auth/permissions.ts).
+  invalidateAuthCache(id);
 
   const oldValues: Record<string, unknown> = {};
   const newValues: Record<string, unknown> = {};

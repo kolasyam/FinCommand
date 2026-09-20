@@ -3,7 +3,7 @@
 > [!NOTE]
 > Measured, not guessed. Everything below was timed against the production database (read-only) from a developer machine in India, with Neon in `us-east-1`. Report numbers are unchanged: all 84 responses of the real `/reports/all` handler (6 company-years × 14 period views) hash identically before and after.
 >
-> **What this does not tell you:** how fast the *deployed* app is. The Vercel project's function region isn't visible from the repo (`vercel.json` sets none). See §5.
+> **What this does not tell you:** how fast the *deployed* app is — that was never measured. The function region is now pinned in `vercel.json` (§5.3), but the Vercel plan and the deployed timings are not visible from here.
 
 ## 1. The finding: it's round trips, not compute
 
@@ -46,6 +46,9 @@ The browser adds its own chain on page load (live mode): `/auth/me` → `/fy` �
    - **The contract** (same as the bundle cache): a change is picked up when the data version changes. Every application write path does that — ingestion creates a new batch, reclassify bumps `data_changed_at` and clears the company's caches. The exceptions are hand-run SQL and `db/init.ts`'s `note_no` updates, which change ledger rows without a version bump and would not show until the entry expires (15 min) or someone refreshes.
 6. **The 3-Year view (`/reports/threeyear`) reads everything in one wave.** It was strictly sequential: user → years → company → audit → then each year's ledgers one after another (about 7 round trips, and it has no cache). Now, after the user lookup, the years, company, audit summary and every requested year's ledgers go out together (2 round trips). Ledgers are preloaded only for canonical UUIDs; any other id format still takes the original per-year path, so behaviour is unchanged. Proved on 28 responses (both companies, FY and CY, one/three/duplicate/foreign/missing years, and invalid ids): 0 differ.
 
+7. **The user lookup is remembered for 30 s** (`lib/auth/permissions.ts`, `AUTH_CACHE_TTL_MS`) — one round trip less on every API call except `/reports/all`. A security trade-off the owner accepted; details and the invalidation proof in §5.2.
+8. **The database is kept awake** — an in-process ping on long-lived servers and a Vercel cron (`/api/v1/internal/keepalive`) — so the first request after a quiet spell doesn't wait for Neon to wake. Costs compute hours; §5.1.
+9. **Vercel functions are pinned to `iad1`**, next to Neon `us-east-1` (`vercel.json`); §5.3.
 ## 3. Results
 
 **Whole route, real handler, 84 views, cache on (`NODE_ENV=production`), same machine and database:**
@@ -97,7 +100,9 @@ Real Variable gains less: a wave of several large result sets in parallel over t
 
 **Browser startup (live, Acme CFO, dev server on the Neon test branch, warm routes):** `/auth/me` and `/fy` now start 1 ms apart (they took 701 ms and 1,066 ms, so the old chain would have cost about their sum, ~1.8 s; now ~1.1 s). The dashboard loads with its years and figures, with no console errors or warnings and no `undefined`/`NaN` in the rendered text. `/reports/all` still starts after `/fy` (§5.7).
 
-**Verification:** `npx tsc --noEmit` 0 errors · `npx jest --runInBand` 23 suites / 481 tests (added `auth-claims` and `report-inputs-cache`) · 84/84 `/reports/all` responses and 28/28 `/reports/threeyear` responses identical before/after · pool test after a 130 s pause with 0 errors · cache invalidation proved on the test branch.
+**Verification:** `npx tsc --noEmit` 0 errors · `npx jest --runInBand` 26 suites / 500 tests (added `auth-claims`, `report-inputs-cache`, `auth-cache`, `cron-auth` and `neon-keepalive`) · 84/84 `/reports/all` responses and 28/28 `/reports/threeyear` responses identical before/after · pool test after a 130 s pause with 0 errors · cache invalidation proved on the test branch · user-cache invalidation through the real user-update route proved on the test branch.
+
+**Final regression after every change above (real handlers, against the original baselines):** `/reports/all` — all 84 responses identical in every section except Real Variable's `audit_summary` (172 → 173 events, latest event 2026-09-20 12:24:55): that is the one audit row written by the approved raw-column clear, made after the baseline was taken; Acme (no new audit rows) is identical in full. `/reports/threeyear` — the original route and the new route, both in production mode, 28/28 identical (`audit_summary` excluded for the same reason; an earlier mismatch on the error cases was only the app masking 500 messages in production mode, not a code change).
 
 ## 4. How to re-measure
 
@@ -106,16 +111,37 @@ Throwaway scripts (repo convention `_diag_*.ts`, deleted after use; copies in th
 - Round-trip baseline: `SELECT 1` × 15 on a warm pool. Anything above ~5 ms means the app and database are far apart.
 - Plans: `EXPLAIN (ANALYZE, BUFFERS)` inside `BEGIN READ ONLY … ROLLBACK`.
 
-## 5. Not changed — decisions and unknowns for the owner
+## 5. The owner's decisions (2026-09-20), and what was done
 
-1. **Where the app runs versus where Neon is.** This is the biggest lever and can't be decided from the repo.
-   - Neon is in `us-east-1`. `vercel.json` sets no `regions`, so unless the Vercel dashboard says otherwise, functions run in Vercel's default region (`iad1`, Washington D.C.), which is next to `us-east-1`. If so, each round trip in production is a few ms, and the changes above matter mainly for cold starts and for local work.
-   - If the Vercel project was set to another region, or the app is run locally, every round trip is what was measured here (~247 ms from India).
-   - Users in India → US servers still pay the browser↔server round trip (~250–300 ms) on each of the sequential calls a page load makes.
-   - A Neon project's region can't be changed in place; moving means a new project and a migration. Not done, and not recommended without knowing where the users and the deployment are.
-2. **Neon scale-to-zero.** Phase 0 removed the 3-minute keep-alive ping so Neon can suspend when idle (a cost decision). The first request after a suspension waits for the database to wake (the pool allows up to 30 s). Bringing the ping back trades compute cost for that first-request latency.
-3. **A short in-memory cache of the user lookup** would remove one round trip from *every* API call (each route starts with `authenticate()`). The cost is that a deactivated user or changed role would still work for the cache's lifetime (say 30 s). A security trade-off; not done.
-4. ~~Caching the loaded ledgers per data version~~ — **done**, §2 item 5.
-5. **`SELECT l.*` returns 43 columns**; the engine uses about 34. Measured (interleaved, three parallel queries like a real wave, Real Variable FY 2025-26): engine columns only sends **36% fewer bytes** (228 → 145 kB) but saves only **≈ 41 ms** (the minimums are equal, 248 vs 247 ms). Not done: too little gain for the risk of dropping a column another consumer reads.
-6. **Other routes** each start with their own `authenticate()` and some make sequential queries. Only `/reports/all`, the dominant call, was reworked.
-7. **Browser-side:** report loading still waits for `/fy` to learn the current year. Starting `/reports/all` with the stored year id in parallel would save another round trip, at the cost of restructuring the loading effect.
+The owner approved all four open points. Each is a trade-off, so each is spelled out.
+
+### 5.1 Keep the Neon compute awake — done (costs compute hours)
+- **What it costs:** the database no longer suspends, so it bills for every hour. At Neon's smallest size (0.25 CU) that is roughly 180 compute-hours a month. Check that against your plan's allowance and price; this is the price of the first request after a quiet spell no longer waiting seconds for the database to wake.
+- **How it works:**
+  - **Long-lived servers** (a local `next start`, any container or VM) ping from `lib/db/neon.ts` every 4 minutes (`DB_KEEPALIVE_MS`, default 240000, under Neon's 5-minute window). The timer is unref'd, so it can't keep a script or a shutting-down server alive; a hot reload replaces it instead of stacking a second one. Off in tests and on Vercel; `DB_KEEPALIVE_MS=0` turns it off.
+  - **Vercel** has no long-lived process, so `vercel.json` now runs `/api/v1/internal/keepalive` every 4 minutes. It does a `SELECT 1` and returns how long the database took to answer (a wake-up shows as seconds). Same `CRON_SECRET` guard as the Zoho cron, now one shared, constant-time check (`lib/auth/cron-auth.ts`); production without the secret refuses (503).
+- **Needs a Vercel plan that allows it.** Vercel Hobby limits cron jobs to once a day and rejects a more frequent schedule when deploying. The existing Zoho cron (every 6 hours) already needs Pro, so this is probably fine; if the project is on Hobby, remove the keep-alive line from `vercel.json`.
+- **A simpler alternative, if the plan allows it:** in the Neon console, turn off "suspend compute after inactivity" for the production compute. Then the cron and the in-process ping are redundant (delete the cron line and set `DB_KEEPALIVE_MS=0`). It could not be done from here: the Neon tools available to the assistant can't see this project, so nothing was changed in the Neon console.
+- **Verified:** the route's guard and its `SELECT 1` against production; the ping starting, reaching the database (3 pings in 3.6 s, 0 failures) and not holding the process open; the timer logic in unit tests.
+
+### 5.2 A short cache of the user lookup — done (a security trade-off, accepted)
+- Every route starts with `authenticate()`, which read the user from the database on every request. Now the record is remembered for **30 s** (`AUTH_CACHE_TTL_MS`; 0 turns it off; always off in development). Measured on the real `/fy` route from here: **≈ 510–610 ms → ≈ 230–300 ms** after the first call, one round trip saved.
+- **The accepted cost:** a user who is deactivated or given another role on a *different server instance* keeps the old access for up to 30 s.
+- **What does not change:** the token's signature and expiry are checked on every request; a failed lookup (unknown or inactive user) is never cached, so a refusal always reaches the database and a reactivated user works at once; every caller gets its own copy.
+- **On the instance that makes the change it takes effect immediately:** `PATCH /companies/users/:id`, the only route that changes a user's role, name or active flag, clears that user (`invalidateAuthCache`). Proved on the test branch through the real routes: after an admin deactivated a user through the route, the user's very next request was refused although they had just been cached; reactivating worked at once. A control showed a direct-SQL deactivation is still served inside the window, as documented.
+- **Where it helps:** every API call except `/reports/all`, which already looks the user up in the same round trip as its data-version check, so it gains nothing there.
+
+### 5.3 Where the functions run — pinned to `iad1` (done); moving further is a separate project
+- `vercel.json` now pins `"regions": ["iad1"]` (Washington D.C.), next to Neon `us-east-1`, so the choice no longer depends on a dashboard default. If the project already ran there, this changes nothing; if it ran elsewhere, deploying moves it next to the database.
+- **Why `iad1` and not Mumbai:** after the round-trip reductions above, a request needs one or two database round trips. With the database in `us-east-1`, functions in Mumbai would pay ~250 ms on each of those, whereas functions in `iad1` pay a few milliseconds and the browser pays one ~250–300 ms trip from India. For a hit or a cached period switch that is the same total, and for anything that reads the database it is better.
+- **Still open, not done:** if most users are in India, the fastest arrangement is **both** the database and the functions in Mumbai (Neon `aws-ap-south-1`, Vercel `bom1`): browser ↔ server ~30 ms and database in milliseconds. A Neon project's region can't be changed in place; it means a new project, a migration of the data, and a cutover. That is a project of its own and needs its own plan and approval.
+
+### 5.4 Emptying the old raw-data column on production — done
+- Approved list `426d3108cea5` was re-checked before applying (the dry run still produced exactly that id) and applied on 2026-09-20: 31 batches, 1,158 entries, each verified field by field against the new store first. `tb_uploads` went from 4.7 MB to 232 kB.
+- **Proved after:** all 37 batches read back exactly the same raw responses as before; all 1,024 stored responses remain, none orphaned; every integrity check clean; recorded in the audit trail (`TB_RAW_JSON_CLEARED`). Nothing was lost: every response is still in `raw_payloads`, and the column itself remains (only emptied).
+- No Neon restore point was created (the Neon tools can't see the project); the copy in the new store is the safety net.
+
+## 6. Considered and not done
+1. **`SELECT l.*` returns 43 columns**; the engine uses about 34. Measured (interleaved, three parallel queries like a real wave, Real Variable FY 2025-26): engine columns only sends **36% fewer bytes** (228 → 145 kB) but saves only **≈ 41 ms** (the minimums are equal, 248 vs 247 ms). Not worth the risk of dropping a column another consumer reads.
+2. **Other routes** each make their own sequential queries. Only `/reports/all`, `/reports/threeyear` and the page-load pair were reworked; the user-lookup cache (§5.2) helps all the rest by one round trip.
+3. **Browser-side:** report loading still waits for `/fy` to learn the current year. Starting `/reports/all` with the stored year id in parallel would save another browser round trip (~250–300 ms from India), at the cost of restructuring the loading effect and handling a stale stored year.
