@@ -78,6 +78,8 @@
     - **The user lookup is remembered for 30 s** (`AUTH_CACHE_TTL_MS`): a user deactivated or re-roled on another server instance keeps the old access for up to 30 s. Cleared at once on the instance that changes it.
     - **Functions pinned to `iad1`** (next to Neon `us-east-1`). Moving both the database and the functions to Mumbai would be faster for Indian users but is a migration project of its own — not started.
   - **Still to check on the Vercel side:** that the plan allows a 4-minute cron (Hobby limits crons to daily), or turn off "suspend compute after inactivity" in the Neon console instead.
+  - **End-to-end test with the real Real Variable account** (`LATENCY.md` §7): 27/27 on the final build; every report view identical to the original baseline. Two things surfaced: the rate limiter (100 requests per 15 minutes per IP — easy to hit while testing, and possibly for several people behind one office IP; not changed) and leftover test data in Real Variable (two "QA temp …" custom tabs and a template "Test Management P&L" with odd links) that the owner may want to tidy.
+  - **`:4000` still runs the old build** — restarting it with the current code needs the owner to stop the old process (`npm run start`, its `cmd` and `node` children), then `npm run build` and `npm run start`.
   - `npm run dev` never uses the report cache (`NODE_ENV=development`), so it always feels slower than a production build.
 
 ## 4. Current Test & Build State (verified 2026-09-20)

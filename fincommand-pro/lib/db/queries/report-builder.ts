@@ -71,7 +71,8 @@ export async function loadLineLedgerMap(templateId: string): Promise<LineLedgerM
     `SELECT rll.line_id, ${LINKED_NAME} FROM report_line_ledgers rll
      JOIN report_lines rl ON rl.id = rll.line_id
      LEFT JOIN ledger_accounts la ON la.id = rll.account_id
-     WHERE rl.template_id=$1`, [templateId]
+     WHERE rl.template_id=$1
+     ORDER BY COALESCE(la.name, rll.ledger_name), rll.id`, [templateId]   // links have no sequence column, so their order was whatever plan the database picked; now defined (by current name), so it can't change between runs or plans
   );
   const map: LineLedgerMap = {};
   rows.forEach((r) => {
@@ -87,7 +88,8 @@ export async function loadAllLineLedgerMaps(companyId: string): Promise<LineLedg
      JOIN report_lines rl ON rl.id = rll.line_id
      JOIN report_templates rt ON rt.id = rl.template_id
      LEFT JOIN ledger_accounts la ON la.id = rll.account_id
-     WHERE rt.company_id=$1`, [companyId]
+     WHERE rt.company_id=$1
+     ORDER BY COALESCE(la.name, rll.ledger_name), rll.id`, [companyId]
   );
   const map: LineLedgerMap = {};
   rows.forEach((r) => {

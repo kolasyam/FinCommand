@@ -95,6 +95,7 @@ The ~250 lines of Zoho insert code are gone.
   - A link is resolved to an account when exactly one of the company's accounts has that name. Ambiguous names stay name-only, as before.
   - A link is read back as the account's **current** name, so a renamed Zoho account keeps its report line.
   - On main: all 4 existing links were resolved.
+  - **Link order is now defined** (found in the 2026-09-20 end-to-end test, `LATENCY.md` §7). The links table has no sequence column, so the order of a line's ledgers was always whatever plan the database picked, and the `LEFT JOIN` above changed it by accident. Both loaders now order by the ledger's current name, then id. Verified on main: the same links as the old query (as a set, duplicates included), identical order on repeated runs, and the Report Builder run's numbers unchanged.
 - **Reclassify** targets rows by `account_id` instead of `ledger_code`. That also covers Excel ledgers without a code.
 
 ### 3.5 Balance Sheet: "Surplus — profit for the period (as booked)"
