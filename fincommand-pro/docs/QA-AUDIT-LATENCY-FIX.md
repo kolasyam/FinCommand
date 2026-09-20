@@ -34,6 +34,8 @@ Removed the hardcoded `nocache: 'true'` from the query string `DashboardContext.
 Measured via the browser's own `performance.getEntriesByType('resource')` resource-timing entries for the `/api/v1/reports/all` request, not a stopwatch — see §5 for the exact method. This is roughly an **8–24× improvement** on the common case (a signed-in user switching FY, toggling the period view, or simply reloading the page within the same 15-minute window), which was previously always paying the full 9–10s cold-compute cost.
 
 > [!NOTE]
+> **Update (2026-09-20):** the cold figure was later profiled and the inference below was confirmed — it is network round trips to Neon, not compute. See `LATENCY.md` for the measurements and what was changed.
+>
 > The 9.9s **cold** figure was not separately investigated further in this pass — `app/api/v1/reports/all/route.ts` already parallelizes its DB reads and its seven `compute*()` calls via `Promise.all` (only one, low-risk improvement was made there — see §2). The 9.9s most plausibly reflects real Neon network round-trip time across ~8 sequential-ish query waves rather than JS compute cost (a demo-sized ledger set computes in low tens of milliseconds in Node). This is a reasonable inference from the request shape, not an independently profiled number — flagging it as inferred, not measured, matching this repo's own established discipline (see `HANDOVER.md`'s Zoho-sync-speedup caveat) for not overclaiming a root cause that wasn't directly instrumented.
 
 ---

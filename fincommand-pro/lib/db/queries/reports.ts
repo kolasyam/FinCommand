@@ -206,6 +206,77 @@ export async function getNextFY(companyId: string, currentFy: FinancialYearRow):
   return rows[0] || null;
 }
 
+/**
+ * The by-id variants below return exactly what getPreviousFY()/getNextFY() +
+ * loadStatementLedgers() do, but find the neighbouring year from the year's id
+ * in SQL. That lets /reports/all ask for them in the SAME round trip as the
+ * year itself instead of after it — on a slow link every sequential step is a
+ * full network round trip (see docs/LATENCY.md). Parameters: $1 company, $2 year.
+ */
+const PREVIOUS_FY_ID = `(SELECT pf.id FROM financial_years pf WHERE pf.company_id = $1
+  AND pf.start_date < (SELECT cf.start_date FROM financial_years cf WHERE cf.id = $2 AND cf.company_id = $1)
+  ORDER BY pf.start_date DESC LIMIT 1)`;
+
+export async function loadPreviousFYOf(companyId: string, fyId: string): Promise<FinancialYearRow | null> {
+  const { rows } = await query<FinancialYearRow>(
+    `SELECT y.id, y.company_id, y.label, y.short_label, y.start_date::text AS start_date, y.end_date::text AS end_date, y.year_type, y.is_locked
+     FROM financial_years y WHERE y.id = ${PREVIOUS_FY_ID}`,
+    [companyId, fyId]
+  );
+  return rows[0] || null;
+}
+
+export async function loadNextFYOf(companyId: string, fyId: string): Promise<FinancialYearRow | null> {
+  const { rows } = await query<FinancialYearRow>(
+    `SELECT y.id, y.company_id, y.label, y.short_label, y.start_date::text AS start_date, y.end_date::text AS end_date, y.year_type, y.is_locked
+     FROM financial_years y
+     WHERE y.company_id = $1
+       AND y.start_date > (SELECT cf.end_date FROM financial_years cf WHERE cf.id = $2 AND cf.company_id = $1)
+     ORDER BY y.start_date ASC LIMIT 1`,
+    [companyId, fyId]
+  );
+  return rows[0] || null;
+}
+
+/** Statement ledgers (loadStatementLedgers) of the year before `fyId`'s year; [] when there is none. */
+export async function loadPreviousStatementLedgers(companyId: string, fyId: string): Promise<TbLedgerRow[]> {
+  const { rows } = await query<TbLedgerRow>(
+    `SELECT l.* FROM tb_ledgers l
+     WHERE l.upload_id = (SELECT t.id FROM tb_uploads t
+                          WHERE t.company_id = $1 AND t.is_current = TRUE AND t.financial_year_id = ${PREVIOUS_FY_ID})
+       AND l.company_id = $1
+     ORDER BY l.ledger_name`,
+    [companyId, fyId]
+  );
+  return withPeriodSurplus(rows);
+}
+
+/**
+ * The company-level facts a report bundle carries, in ONE query instead of
+ * three: currency settings, the audit-trail summary (Compliance tab), and the
+ * year's own batch currency (see loadBatchCurrency). Same values as before.
+ */
+export interface ReportContext {
+  currency: string | null;
+  presentation_currency: string | null;
+  audit_count: string;
+  audit_last_at: string | null;
+  batch_currency: string | null;
+}
+
+export async function loadReportContext(companyId: string, fyId: string): Promise<ReportContext | null> {
+  const { rows } = await query<ReportContext>(
+    `SELECT c.currency, c.presentation_currency,
+            (SELECT COUNT(*) FROM audit_trail WHERE company_id = c.id) AS audit_count,
+            (SELECT MAX(created_at) FROM audit_trail WHERE company_id = c.id) AS audit_last_at,
+            (SELECT t.currency FROM tb_uploads t
+              WHERE t.company_id = c.id AND t.financial_year_id = $2 AND t.is_current = TRUE) AS batch_currency
+     FROM companies c WHERE c.id = $1`,
+    [companyId, fyId]
+  );
+  return rows[0] ?? null;
+}
+
 /** Parses common period params from a URLSearchParams — mirrors reports.js parsePeriodParams(). */
 export function parsePeriodParams(searchParams: URLSearchParams): PeriodParams {
   return {

@@ -39,6 +39,32 @@ export const ROLE_SETS = {
   canRead: ['admin', 'cfo', 'ceo', 'auditor', 'manager', 'viewer'] as Role[],
 };
 
+/** The bearer token (or session cookie) of a request, if any. */
+function readAccessToken(req: NextRequest): string | undefined {
+  const header = req.headers.get('authorization');
+  if (header?.startsWith('Bearer ')) return header.slice(7);
+  return req.cookies.get('fc_token')?.value || req.cookies.get('token')?.value;
+}
+
+/**
+ * The company a request's SIGNED token was issued for — no DB access, never
+ * throws (null when there is no token or it doesn't verify).
+ *
+ * Only for starting company-scoped READS in parallel with authenticate(), to
+ * save a database round trip. It does not authenticate anything: authenticate()
+ * still decides whether the request is allowed, and the caller must throw the
+ * early reads away unless authenticate() then returns the same company.
+ */
+export function claimedCompanyId(req: NextRequest): string | null {
+  const token = readAccessToken(req);
+  if (!token) return null;
+  try {
+    return verifyAccessToken(token).company_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Verifies the bearer JWT and loads the user from the DB — the Next.js
  * equivalent of the `authenticate` Express middleware. Throws ApiError(401)
@@ -46,14 +72,7 @@ export const ROLE_SETS = {
  * withErrorHandling() turn it into a JSON error response.
  */
 export async function authenticate(req: NextRequest): Promise<AuthUser> {
-  const header = req.headers.get('authorization');
-  let token: string | undefined;
-
-  if (header?.startsWith('Bearer ')) {
-    token = header.slice(7);
-  } else {
-    token = req.cookies.get('fc_token')?.value || req.cookies.get('token')?.value;
-  }
+  const token = readAccessToken(req);
 
   if (!token) {
     throw new ApiError(401, 'Authentication required. Please sign in to continue.');

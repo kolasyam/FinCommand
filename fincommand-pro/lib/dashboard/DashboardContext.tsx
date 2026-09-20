@@ -144,11 +144,15 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         setLoading(true);
 
         try {
-          const freshUser = await apiFetch<StoredUser>('/auth/me');
+          // /auth/me and /fy don't depend on each other, so they go out
+          // together — one full browser↔server round trip less on every page
+          // load. (A token refresh racing between the two is harmless: the
+          // refresh token isn't rotated, so both refreshes succeed.)
+          const [freshUser, list] = await Promise.all([apiFetch<StoredUser>('/auth/me'), apiFetch<FyLike[]>('/fy')]);
           if (!cancelled) {
             setUser(freshUser);
             if (typeof window !== 'undefined') window.localStorage.setItem('fc_user', JSON.stringify(freshUser));
-            await loadFyList();
+            applyFyList(list);
           }
         } catch {
           if (!cancelled) {
@@ -178,8 +182,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadFyList = useCallback(async () => {
-    const list = await apiFetch<FyLike[]>('/fy');
+  /** Applies an already-fetched year list: keeps the selected year if it still exists, else picks the newest. */
+  const applyFyList = useCallback((list: FyLike[]) => {
     setFyList(list);
     if (list.length) {
       setCurrentFyId(prev => {
@@ -193,6 +197,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     }
     return list;
   }, []);
+
+  const loadFyList = useCallback(async () => applyFyList(await apiFetch<FyLike[]>('/fy')), [applyFyList]);
 
   const login = useCallback(async (email: string, password: string) => {
     const res = await fetch('/api/v1/auth/login', {

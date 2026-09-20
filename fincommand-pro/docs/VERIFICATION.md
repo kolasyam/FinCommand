@@ -17,15 +17,15 @@ npm test
 ```
 Must pass all suites. **Verified 2026-09-19** (after DB Phase 1, see `DB-PHASE-1.md`):
 ```
-Test Suites: 21 passed, 21 total
-Tests:       470 passed, 470 total
+Test Suites: 22 passed, 22 total
+Tests:       473 passed, 473 total
 ```
-Phase 0 added `migrate-core`, `tb-validation`, `security` (token encryption + OAuth state), `report-cache-key` and `zoho-assembly`. Phase 1 added `ingestion`, `content-hash`, `period-surplus` and `script-support`.
+Phase 0 added `migrate-core`, `tb-validation`, `security` (token encryption + OAuth state), `report-cache-key` and `zoho-assembly`. Phase 1 added `ingestion`, `content-hash`, `period-surplus` and `script-support`. The latency pass (`LATENCY.md`) added `auth-claims`.
 
 On a machine short of memory, run `npx jest --runInBand`.
 
 > [!NOTE]
-> If a future run shows a different suite/test count than 21/470, that's a signal the codebase has moved on since this doc was written — update this section rather than treating the old numbers as ground truth.
+> If a future run shows a different suite/test count than 22/473, that's a signal the codebase has moved on since this doc was written — update this section rather than treating the old numbers as ground truth.
 
 ## Step 3 — Root diagnostic script protocol (DB / financial-calculation changes only)
 
@@ -62,6 +62,8 @@ Test every migration on a Neon branch first. A migration that changes or deletes
 **Data clean-up scripts** (`db/scripts/retention.ts`, `db/scripts/clear-raw-zoho-months.ts`, since DB Phase 1): run `--dry-run` first and on its own. Take the printed **list id** to the owner. Only an approved id goes to `--apply --confirm=<list id>`. The script refuses if the list has changed since. Branch first, then main. See `DB-PHASE-1.md` §3.6.
 
 **Deploy order:** apply migrations to main *before* deploying code that uses them. The old code keeps working on the new schema; the new code does not work on the old schema.
+
+**Measuring latency:** the report cache is off whenever `NODE_ENV=development`, and the local `.env` sets that, so a dev server (or a script that loads `.env`) times every request as a cache miss. Measure with a production build, or set `NODE_ENV=production` for the script. Method and numbers: `LATENCY.md` §4.
 
 ## Step 4 — Live visual check
 

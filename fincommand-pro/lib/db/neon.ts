@@ -31,6 +31,17 @@ declare global {
 const STATEMENT_TIMEOUT_MS = parseInt(process.env.DB_STATEMENT_TIMEOUT_MS || '30000');
 const IDLE_IN_TRANSACTION_TIMEOUT_MS = parseInt(process.env.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS || '15000');
 
+// How long an unused pooled connection is kept open (beyond DB_POOL_MIN). It
+// was 30 s. Opening a connection is the most expensive thing a request can
+// do — TCP + TLS + login is about 5 round trips, so ~1.3-2 s from India to a
+// us-east-1 Neon — and a page load asks for ~10 at once. Measured with the
+// old value: the first page load after a 35 s pause took 3.4 s, against 0.34 s
+// with connections kept (docs/LATENCY.md). 5 minutes matches Neon's own
+// scale-to-zero window, and TCP keep-alive lets a connection the network
+// dropped meanwhile be detected instead of reused.
+const IDLE_TIMEOUT_MS = parseInt(process.env.DB_IDLE_TIMEOUT_MS || '300000');
+const KEEP_ALIVE = { keepAlive: true, keepAliveInitialDelayMillis: 10000 };
+
 function buildPool(): Pool {
   const ssl = process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false;
 
@@ -39,7 +50,8 @@ function buildPool(): Pool {
       connectionString: process.env.DATABASE_URL,
       min: parseInt(process.env.DB_POOL_MIN || '2'),
       max: parseInt(process.env.DB_POOL_MAX || '10'),
-      idleTimeoutMillis: 30000,
+      idleTimeoutMillis: IDLE_TIMEOUT_MS,
+      ...KEEP_ALIVE,
       // Neon's serverless compute auto-suspends when idle and can take up
       // to ~20-30s to resume on the next connection ("cold start") — 5s
       // (the original backend/db/connection.js value) was timing out the
@@ -61,7 +73,8 @@ function buildPool(): Pool {
     password: process.env.DB_PASSWORD,
     min: parseInt(process.env.DB_POOL_MIN || '2'),
     max: parseInt(process.env.DB_POOL_MAX || '10'),
-    idleTimeoutMillis: 30000,
+    idleTimeoutMillis: IDLE_TIMEOUT_MS,
+    ...KEEP_ALIVE,
     // Same cold-start allowance as the DATABASE_URL branch above — Neon is
     // allowed to scale to zero now that there's no keep-alive ping.
     connectionTimeoutMillis: 30000,

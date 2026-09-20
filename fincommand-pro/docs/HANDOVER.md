@@ -71,13 +71,17 @@
   - **The Balance Sheet carries the period's profit**, as "Surplus — profit for the period (as booked)" in Other Equity. It shows only for a trial balance that balances, so it takes effect for Zoho years once Zoho is reconnected and re-syncs.
   - **Retention and old-column clean-up scripts** sit behind a dry-run list the owner approves. On main, retention has nothing due. Clearing the old raw column (31 batches, list `426d3108cea5`) awaits approval.
 
-## 4. Current Test & Build State (verified 2026-09-19)
+- **Latency pass** (2026-09-20, see `LATENCY.md`): a report load is dominated by database round trips (~247 ms each from India to Neon `us-east-1`; the queries themselves take < 1 ms). `/reports/all` now makes 1 round trip on a cache hit (was 2) and 2–3 on a miss (was 6); idle database connections are kept for 5 minutes (`DB_IDLE_TIMEOUT_MS`), which removed a ~3 s penalty on the first click after a short pause; the browser asks `/auth/me` and `/fy` together. Report content unchanged (84/84 responses identical).
+  - **Open, needs the owner:** where the Vercel functions run versus Neon, Neon's scale-to-zero cold start, and a short cache of the user lookup. All three are decisions, not code (`LATENCY.md` §5).
+  - `npm run dev` never uses the report cache (`NODE_ENV=development`), so it always feels slower than a production build.
+
+## 4. Current Test & Build State (verified 2026-09-20)
 
 ```
-Test Suites: 21 passed, 21 total
-Tests:       470 passed, 470 total
+Test Suites: 22 passed, 22 total
+Tests:       473 passed, 473 total
 ```
-Run via `npm test` (Jest; `npx jest --runInBand` on a low-memory machine). Suites: `note-catalog`, `report-builder-engine`, `custom-metric-engine`, `custom-metrics-v2`, `ledger-metric`, `dashboard-builder-engine`, `dashboard-templates`, `dashboard-layout-export`, `tab-access`, `tab-customization-audit`, `tb-engine`, `format`, `migrate-core`, `tb-validation`, `security`, `report-cache-key`, `zoho-assembly`, `ingestion`, `content-hash`, `period-surplus`, `script-support`. `npm run typecheck` and `npm run build` also verified clean the same session — see `CUSTOM-METRICS-UPGRADE.md` §4 and `QA-AUDIT-LATENCY-FIX.md` §7.
+Run via `npm test` (Jest; `npx jest --runInBand` on a low-memory machine). Suites: `note-catalog`, `report-builder-engine`, `custom-metric-engine`, `custom-metrics-v2`, `ledger-metric`, `dashboard-builder-engine`, `dashboard-templates`, `dashboard-layout-export`, `tab-access`, `tab-customization-audit`, `tb-engine`, `format`, `migrate-core`, `tb-validation`, `security`, `report-cache-key`, `zoho-assembly`, `ingestion`, `content-hash`, `period-surplus`, `script-support`, `auth-claims`. `npm run typecheck` and `npm run build` also verified clean the same session — see `CUSTOM-METRICS-UPGRADE.md` §4 and `QA-AUDIT-LATENCY-FIX.md` §7.
 
 ## 5. What's explicitly deferred / out of scope
 
