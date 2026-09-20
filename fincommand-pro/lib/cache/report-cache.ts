@@ -69,15 +69,68 @@ export function setCachedReport(key: string, data: unknown, ttlMs = DEFAULT_TTL_
   cache.set(key, { data, expiresAt: now + ttlMs });
 }
 
+/**
+ * The database reads a report bundle is computed from (ledgers, customers,
+ * contacts, …), kept under the same data version as the bundles so that
+ * switching the PERIOD view of a year (Annual → Q1 → H2 …) doesn't read the
+ * same rows from the database again — none of them depend on the period.
+ * Same version, same TTL, same invalidation as the bundle cache above.
+ *
+ * A private copy is stored and a fresh copy handed out on every read, so
+ * nothing that computes from the inputs can ever alter what the next request
+ * sees. At most MAX_INPUT_ENTRIES are kept (oldest dropped first) to bound
+ * memory: one entry is roughly 1–2 MB for a year of ~250 ledgers.
+ */
+const inputs = new Map<string, CacheEntry>();
+const MAX_INPUT_ENTRIES = 12;
+
+export function buildReportInputsKey(companyId: string, fyId: string, isCY: boolean, dataVersion: string): string {
+  return `${companyId}:inputs:${fyId}:${isCY ? 'CY' : 'FY'}:${dataVersion}`;
+}
+
+export function getCachedReportInputs<T>(key: string): T | null {
+  if (process.env.NODE_ENV === 'development') return null; // dev always reads fresh, like the bundle cache
+  const entry = inputs.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    inputs.delete(key);
+    return null;
+  }
+  return structuredClone(entry.data) as T;
+}
+
+export function setCachedReportInputs(key: string, data: unknown, ttlMs = DEFAULT_TTL_MS): void {
+  if (process.env.NODE_ENV === 'development') return;
+  try {
+    const copy = structuredClone(data);
+    const now = Date.now();
+    for (const [k, entry] of inputs) {
+      if (now > entry.expiresAt) inputs.delete(k);
+    }
+    inputs.delete(key); // re-insert last, so eviction below drops the oldest
+    inputs.set(key, { data: copy, expiresAt: now + ttlMs });
+    while (inputs.size > MAX_INPUT_ENTRIES) inputs.delete(inputs.keys().next().value as string);
+  } catch (err) {
+    // A cache that can't store must never break the request that filled it.
+    console.error('[report-cache] inputs not cached:', (err as Error).message);
+  }
+}
+
 export function invalidateReportCache(companyId?: string): void {
   if (!companyId) {
     cache.clear();
+    inputs.clear();
     return;
   }
   const prefix = `${companyId}:`;
   for (const key of cache.keys()) {
     if (key.startsWith(prefix)) {
       cache.delete(key);
+    }
+  }
+  for (const key of inputs.keys()) {
+    if (key.startsWith(prefix)) {
+      inputs.delete(key);
     }
   }
 }

@@ -4,6 +4,7 @@ import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import {
   getFY, loadStatementLedgers, bookedRowsOnly, loadCustomerRevenue, loadVendorExpense, loadCustomerCost, parsePeriodParams,
   loadReportDataVersion, loadReportContext, loadPreviousFYOf, loadNextFYOf, loadPreviousStatementLedgers,
+  type FinancialYearRow, type ReportContext,
 } from '@/lib/db/queries/reports';
 import { loadZohoContacts, type ZohoContactRow } from '@/lib/db/queries/zoho-contacts';
 import {
@@ -14,13 +15,39 @@ import {
   type VendorExpense, type CustomerMarginResult, type ContactInfo, type RatiosResult,
 } from '@/lib/financial/tb-engine';
 import { mergeCyLedgers, mergeCyCustomerRevenue, mergeCyVendorExpense } from '@/lib/financial/cy-merge';
-import { getCachedReport, setCachedReport, buildReportCacheKey, hashReportDataVersion } from '@/lib/cache/report-cache';
+import {
+  getCachedReport, setCachedReport, buildReportCacheKey, hashReportDataVersion,
+  getCachedReportInputs, setCachedReportInputs, buildReportInputsKey,
+} from '@/lib/cache/report-cache';
 import { loadCustomMetricDefinitions } from '@/lib/db/queries/custom-metrics';
 import { computeLedgerMetric, priorPeriodOf, type PeriodParams, type LedgerMetricSpec } from '@/lib/financial/tb-engine';
 import type { CustomMetricDefinition } from '@/lib/financial/custom-metric-engine';
 import type { CustomMetricValue, PriorPeriodBundle } from '@/lib/dashboard/types';
 
 export const runtime = 'nodejs';
+
+/**
+ * Everything a bundle is computed from that does NOT depend on the period
+ * (Annual / Q1 / H2 …): only on the year and on FY-vs-CY. That is what makes
+ * it cacheable per data version (see getCachedReportInputs), so switching the
+ * period view doesn't read the same rows from the database again.
+ */
+interface ReportInputs {
+  /** FY mode: this year's ledgers. CY mode: the two years' ledgers merged into one calendar year. */
+  computeLedgers: TbLedgerRow[];
+  computeCustomerRev: CustomerRevenueInput[];
+  computeVendorExp: VendorExpenseInput[];
+  computeCustomerCost: CustomerRevenueInput[];
+  cyNextFy: FinancialYearRow | null;
+  /** Which FY's end_date determines the displayed "CYyyyy" label — see the note in loadReportInputs(). */
+  cyLabelFy: FinancialYearRow;
+  /** FY mode only: the previous year and its ledgers, for the prior-year comparatives. */
+  prevFyRow: FinancialYearRow | null;
+  prevYearLedgers: TbLedgerRow[];
+  reportContext: ReportContext | null;
+  zohoContacts: ZohoContactRow[];
+  customMetricDefs: CustomMetricDefinition[];
+}
 
 export const GET = withErrorHandling(async (req: NextRequest) => {
   // Round trips are the cost here, not compute (docs/LATENCY.md): the data
@@ -52,66 +79,21 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
 
   const isCY = params.yearType === 'CY';
 
-  // ONE wave of reads for everything this bundle needs that doesn't depend on
-  // another read's result: the year, its ledgers, real per-customer revenue/
-  // cost and per-vendor spend (Zoho-sourced; [] for Excel uploads), the
-  // company facts, contacts and custom-metric definitions — and the
-  // neighbouring years, found from the year's id in SQL. Before, these were
-  // three or four sequential waves, each a full round trip to the database.
-  const [
-    fy, ledgers, customerRevRows, vendorExpenseRows, customerCostRows,
-    reportContext, zohoContacts, customMetricDefs, prevFyRow, nextFyRow, prevYearLedgers,
-  ] = await Promise.all([
-    getFY(user.company_id, fyId),
-    loadStatementLedgers(user.company_id, fyId),
-    loadCustomerRevenue(user.company_id, fyId),
-    loadVendorExpense(user.company_id, fyId),
-    loadCustomerCost(user.company_id, fyId),
-    loadReportContext(user.company_id, fyId),
-    // Real Zoho contact directory (customer AND vendor master data — email,
-    // phone, GSTIN, live outstanding balance) — joined in below by name onto
-    // the already-computed vendor spend / customer margin, rather than
-    // threaded through computeVendorExpense()/computeCustomerMargin()
-    // themselves, so those stay pure functions with no DB dependency (same
-    // reasoning as every other compute* function in tb-engine.ts). A vendor/
-    // customer with no matching contact record (Excel-uploaded TB, or a name
-    // that doesn't exactly match Zoho's contact directory) just keeps
-    // `contact` undefined — never a fabricated placeholder.
-    loadZohoContacts(user.company_id),
-    // This company's custom metric definitions — only ledger-kind ones are
-    // computed here (they need raw ledgers, which never leave the server).
-    // A failure here must never take down the statutory reports: it's
-    // logged and the bundle simply carries no custom metric values.
-    loadCustomMetricDefinitions(user.company_id).catch((err: Error): CustomMetricDefinition[] => {
-      console.error('[reports/all] custom metric definitions unavailable:', err.message);
-      return [];
-    }),
-    loadPreviousFYOf(user.company_id, fyId),
-    isCY ? loadNextFYOf(user.company_id, fyId) : Promise.resolve(null),
-    // FY mode compares with the previous year; CY mode has no comparative.
-    isCY ? Promise.resolve([] as TbLedgerRow[]) : loadPreviousStatementLedgers(user.company_id, fyId),
-  ]);
-
-  if (!fy) return json({ error: 'Financial year not found' }, { status: 404 });
-  if (!ledgers.length) return json({ error: 'No Trial Balance data found.' }, { status: 404 });
-
-  let computeLedgers: TbLedgerRow[] = ledgers;
-  let computeCustomerRev: CustomerRevenueInput[] = customerRevRows;
-  let computeVendorExp: VendorExpenseInput[] = vendorExpenseRows;
-  let computeCustomerCost: CustomerRevenueInput[] = customerCostRows;
-  let cyNextFy = null;
-  // Which FY's end_date determines the displayed "CYyyyy" label (cyYearFromFy
-  // reads end_date's year) — normally the selected `fy` (it plays the
-  // Jan–Mar/"prevFY" role, and CY year = its own end year). The `else if
-  // (prevFy)` fallback below reassigns this: when there's no later FY to
-  // supply Apr–Dec, it instead merges the *selected* fy in as the Apr–Dec
-  // side of the *prior* calendar year (prevFy's), so the label must switch
-  // to prevFy too — otherwise the response would return e.g. Jan–Dec 2025's
-  // merged data while every "CYyyyy" label in the UI (built from this field)
-  // still read "CY 2026", a confusing, confirmed mismatch since this exact
-  // fallback fires by default for any company whose latest FY has no
-  // successor uploaded yet (the common case right after onboarding).
-  let cyLabelFy = fy;
+  // The database reads, kept per data version: a different PERIOD of the same
+  // year (the common click) reuses them and only recomputes. A refresh
+  // (nocache/refresh) always reads fresh and re-stores.
+  const inputsKey = buildReportInputsKey(user.company_id, fyId, isCY, dataVersion);
+  let inputs = nocache ? null : getCachedReportInputs<ReportInputs>(inputsKey);
+  if (!inputs) {
+    const loaded = await loadReportInputs(user.company_id, fyId, isCY);
+    if ('error' in loaded) return json({ error: loaded.error }, { status: loaded.status });
+    inputs = loaded.inputs;
+    if (loaded.cacheable) setCachedReportInputs(inputsKey, inputs);
+  }
+  const {
+    computeLedgers, computeCustomerRev, computeVendorExp, computeCustomerCost,
+    cyNextFy, cyLabelFy, prevFyRow, prevYearLedgers, reportContext, zohoContacts, customMetricDefs,
+  } = inputs;
 
   let prev_cashflow = null;
   let prev_bs = null;
@@ -126,44 +108,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   // comparative anywhere in this bundle).
   let prevLedgersForMetrics: TbLedgerRow[] | null = null;
 
-  if (isCY) {
-    // Found in the first wave (by year id); same results as getNextFY()/getPreviousFY().
-    const nextFy = nextFyRow;
-    const prevFy = prevFyRow;
-
-    if (nextFy) {
-      cyNextFy = nextFy;
-      const [nextFyLedgers, nextFyCustomerRev, nextFyVendorExp, nextFyCustomerCost] = await Promise.all([
-        loadStatementLedgers(user.company_id, nextFy.id),
-        loadCustomerRevenue(user.company_id, nextFy.id),
-        loadVendorExpense(user.company_id, nextFy.id),
-        loadCustomerCost(user.company_id, nextFy.id),
-      ]);
-      computeLedgers = mergeCyLedgers(ledgers, nextFyLedgers);
-      computeCustomerRev = mergeCyCustomerRevenue(customerRevRows, nextFyCustomerRev);
-      computeVendorExp = mergeCyVendorExpense(vendorExpenseRows, nextFyVendorExp);
-      computeCustomerCost = mergeCyCustomerRevenue(customerCostRows, nextFyCustomerCost);
-    } else if (prevFy) {
-      const [prevLedgers, prevCustomerRev, prevVendorExp, prevCustomerCost] = await Promise.all([
-        loadStatementLedgers(user.company_id, prevFy.id),
-        loadCustomerRevenue(user.company_id, prevFy.id),
-        loadVendorExpense(user.company_id, prevFy.id),
-        loadCustomerCost(user.company_id, prevFy.id),
-      ]);
-      computeLedgers = mergeCyLedgers(prevLedgers, ledgers);
-      computeCustomerRev = mergeCyCustomerRevenue(prevCustomerRev, customerRevRows);
-      computeVendorExp = mergeCyVendorExpense(prevVendorExp, vendorExpenseRows);
-      computeCustomerCost = mergeCyCustomerRevenue(prevCustomerCost, customerCostRows);
-      cyLabelFy = prevFy;
-      cyNextFy = fy; // `fy` is now supplying Apr–Dec, i.e. playing the "next FY" role relative to cyLabelFy
-    } else {
-      computeLedgers = mergeCyLedgers(ledgers, []);
-      computeCustomerRev = mergeCyCustomerRevenue(customerRevRows, []);
-      computeVendorExp = mergeCyVendorExpense(vendorExpenseRows, []);
-      computeCustomerCost = mergeCyCustomerRevenue(customerCostRows, []);
-    }
-  } else if (prevFyRow && prevYearLedgers.length) {
-    // Previous year and its ledgers came with the first wave.
+  if (!isCY && prevFyRow && prevYearLedgers.length) {
     const prevLedgers = prevYearLedgers;
     prev_cashflow = computeCashFlow(prevLedgers, params);
     prev_bs = computeBS(prevLedgers, params);
@@ -273,6 +218,126 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   setCachedReport(cacheKey, responseData);
   return json(responseData);
 });
+
+/**
+ * The period-independent database reads for one year, as ONE wave of queries
+ * for everything that doesn't depend on another read's result: the year, its
+ * ledgers, real per-customer revenue/cost and per-vendor spend (Zoho-sourced;
+ * [] for Excel uploads), the company facts, contacts and custom-metric
+ * definitions — and the neighbouring years, found from the year's id in SQL.
+ * Before, these were three or four sequential waves, each a full round trip.
+ * CY mode then reads the neighbouring year's data (it needs that year's id)
+ * and merges the two into one calendar year.
+ *
+ * `cacheable` is false when the custom-metric definitions failed to load:
+ * that empty list must not be remembered as if it were the truth.
+ */
+async function loadReportInputs(
+  companyId: string, fyId: string, isCY: boolean,
+): Promise<{ inputs: ReportInputs; cacheable: boolean } | { error: string; status: number }> {
+  let metricsLoaded = true;
+  const [
+    fy, ledgers, customerRevRows, vendorExpenseRows, customerCostRows,
+    reportContext, zohoContacts, customMetricDefs, prevFyRow, nextFyRow, prevYearLedgers,
+  ] = await Promise.all([
+    getFY(companyId, fyId),
+    loadStatementLedgers(companyId, fyId),
+    loadCustomerRevenue(companyId, fyId),
+    loadVendorExpense(companyId, fyId),
+    loadCustomerCost(companyId, fyId),
+    loadReportContext(companyId, fyId),
+    // Real Zoho contact directory (customer AND vendor master data — email,
+    // phone, GSTIN, live outstanding balance) — joined in by name onto the
+    // already-computed vendor spend / customer margin, rather than threaded
+    // through computeVendorExpense()/computeCustomerMargin() themselves, so
+    // those stay pure functions with no DB dependency (same reasoning as
+    // every other compute* function in tb-engine.ts). A vendor/customer with
+    // no matching contact record (Excel-uploaded TB, or a name that doesn't
+    // exactly match Zoho's contact directory) just keeps `contact`
+    // undefined — never a fabricated placeholder.
+    loadZohoContacts(companyId),
+    // This company's custom metric definitions — only ledger-kind ones are
+    // computed here (they need raw ledgers, which never leave the server).
+    // A failure here must never take down the statutory reports: it's
+    // logged and the bundle simply carries no custom metric values.
+    loadCustomMetricDefinitions(companyId).catch((err: Error): CustomMetricDefinition[] => {
+      console.error('[reports/all] custom metric definitions unavailable:', err.message);
+      metricsLoaded = false;
+      return [];
+    }),
+    loadPreviousFYOf(companyId, fyId),
+    isCY ? loadNextFYOf(companyId, fyId) : Promise.resolve(null),
+    // FY mode compares with the previous year; CY mode has no comparative.
+    isCY ? Promise.resolve([] as TbLedgerRow[]) : loadPreviousStatementLedgers(companyId, fyId),
+  ]);
+
+  if (!fy) return { error: 'Financial year not found', status: 404 };
+  if (!ledgers.length) return { error: 'No Trial Balance data found.', status: 404 };
+
+  let computeLedgers: TbLedgerRow[] = ledgers;
+  let computeCustomerRev: CustomerRevenueInput[] = customerRevRows;
+  let computeVendorExp: VendorExpenseInput[] = vendorExpenseRows;
+  let computeCustomerCost: CustomerRevenueInput[] = customerCostRows;
+  let cyNextFy: FinancialYearRow | null = null;
+  // Which FY's end_date determines the displayed "CYyyyy" label (cyYearFromFy
+  // reads end_date's year) — normally the selected `fy` (it plays the
+  // Jan–Mar/"prevFY" role, and CY year = its own end year). The `else if
+  // (prevFy)` fallback below reassigns this: when there's no later FY to
+  // supply Apr–Dec, it instead merges the *selected* fy in as the Apr–Dec
+  // side of the *prior* calendar year (prevFy's), so the label must switch
+  // to prevFy too — otherwise the response would return e.g. Jan–Dec 2025's
+  // merged data while every "CYyyyy" label in the UI (built from this field)
+  // still read "CY 2026", a confusing, confirmed mismatch since this exact
+  // fallback fires by default for any company whose latest FY has no
+  // successor uploaded yet (the common case right after onboarding).
+  let cyLabelFy: FinancialYearRow = fy;
+
+  if (isCY) {
+    // Found in the first wave (by year id); same results as getNextFY()/getPreviousFY().
+    const nextFy = nextFyRow;
+    const prevFy = prevFyRow;
+
+    if (nextFy) {
+      cyNextFy = nextFy;
+      const [nextFyLedgers, nextFyCustomerRev, nextFyVendorExp, nextFyCustomerCost] = await Promise.all([
+        loadStatementLedgers(companyId, nextFy.id),
+        loadCustomerRevenue(companyId, nextFy.id),
+        loadVendorExpense(companyId, nextFy.id),
+        loadCustomerCost(companyId, nextFy.id),
+      ]);
+      computeLedgers = mergeCyLedgers(ledgers, nextFyLedgers);
+      computeCustomerRev = mergeCyCustomerRevenue(customerRevRows, nextFyCustomerRev);
+      computeVendorExp = mergeCyVendorExpense(vendorExpenseRows, nextFyVendorExp);
+      computeCustomerCost = mergeCyCustomerRevenue(customerCostRows, nextFyCustomerCost);
+    } else if (prevFy) {
+      const [prevLedgers, prevCustomerRev, prevVendorExp, prevCustomerCost] = await Promise.all([
+        loadStatementLedgers(companyId, prevFy.id),
+        loadCustomerRevenue(companyId, prevFy.id),
+        loadVendorExpense(companyId, prevFy.id),
+        loadCustomerCost(companyId, prevFy.id),
+      ]);
+      computeLedgers = mergeCyLedgers(prevLedgers, ledgers);
+      computeCustomerRev = mergeCyCustomerRevenue(prevCustomerRev, customerRevRows);
+      computeVendorExp = mergeCyVendorExpense(prevVendorExp, vendorExpenseRows);
+      computeCustomerCost = mergeCyCustomerRevenue(prevCustomerCost, customerCostRows);
+      cyLabelFy = prevFy;
+      cyNextFy = fy; // `fy` is now supplying Apr–Dec, i.e. playing the "next FY" role relative to cyLabelFy
+    } else {
+      computeLedgers = mergeCyLedgers(ledgers, []);
+      computeCustomerRev = mergeCyCustomerRevenue(customerRevRows, []);
+      computeVendorExp = mergeCyVendorExpense(vendorExpenseRows, []);
+      computeCustomerCost = mergeCyCustomerRevenue(customerCostRows, []);
+    }
+  }
+
+  return {
+    inputs: {
+      computeLedgers, computeCustomerRev, computeVendorExp, computeCustomerCost,
+      cyNextFy, cyLabelFy, prevFyRow, prevYearLedgers, reportContext, zohoContacts, customMetricDefs,
+    },
+    cacheable: metricsLoaded,
+  };
+}
 
 /** Every statement for one earlier period, plus its ledger-metric values. Notes carry totals only — the ledger detail is never read from a prior period and would double the payload. */
 function buildPriorPeriod(

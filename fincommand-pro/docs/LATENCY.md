@@ -39,7 +39,12 @@ The browser adds its own chain on page load (live mode): `/auth/me` → `/fy` �
    - The calendar-year merge logic itself is untouched.
 3. **Idle connections are kept for 5 minutes, not 30 s** (`lib/db/neon.ts`, `DB_IDLE_TIMEOUT_MS`), with TCP keep-alive. A page load asks for ~10 connections at once. With the old timeout, the first load after a 35 s pause opened all the ones the pool had dropped.
 4. **The browser asks `/auth/me` and `/fy` together** (`lib/dashboard/DashboardContext.tsx`), saving one browser round trip on every page load. Safe with expiring tokens: refresh doesn't rotate the refresh token, so two refreshes racing both succeed.
-5. **The 3-Year view (`/reports/threeyear`) reads everything in one wave.** It was strictly sequential: user → years → company → audit → then each year's ledgers one after another (about 7 round trips, and it has no cache). Now, after the user lookup, the years, company, audit summary and every requested year's ledgers go out together (2 round trips). Ledgers are preloaded only for canonical UUIDs; any other id format still takes the original per-year path, so behaviour is unchanged. Proved on 28 responses (both companies, FY and CY, one/three/duplicate/foreign/missing years, and invalid ids): 0 differ.
+5. **Switching the period view no longer re-reads the database** (`lib/cache/report-cache.ts`, `loadReportInputs()` in `app/api/v1/reports/all/route.ts`). Annual → Q1 → H2 is a report-cache miss every time (the key includes the period), yet none of what it reads depends on the period. The reads (ledgers, customers, vendors, contacts, metric definitions, neighbouring years, company facts) are now kept per **data version** — the same version, TTL (15 min) and invalidation that already guard the report cache — so the second and later period views of a year cost the user + version check plus about 40 ms of compute.
+   - **Never shared by reference.** A private copy is stored and a fresh clone handed out on every read, so nothing that computes from the inputs can alter what the next request sees.
+   - **Bounded:** at most 12 entries (roughly 1–2 MB each), oldest dropped first. Off in development, like the bundle cache. A failure to store is logged and never breaks the request. `refresh=true` / `nocache=true` read the database and re-store.
+   - **Not cached when the custom-metric definitions failed to load**, so a transient error can't be remembered as "no metrics".
+   - **The contract** (same as the bundle cache): a change is picked up when the data version changes. Every application write path does that — ingestion creates a new batch, reclassify bumps `data_changed_at` and clears the company's caches. The exceptions are hand-run SQL and `db/init.ts`'s `note_no` updates, which change ledger rows without a version bump and would not show until the entry expires (15 min) or someone refreshes.
+6. **The 3-Year view (`/reports/threeyear`) reads everything in one wave.** It was strictly sequential: user → years → company → audit → then each year's ledgers one after another (about 7 round trips, and it has no cache). Now, after the user lookup, the years, company, audit summary and every requested year's ledgers go out together (2 round trips). Ledgers are preloaded only for canonical UUIDs; any other id format still takes the original per-year path, so behaviour is unchanged. Proved on 28 responses (both companies, FY and CY, one/three/duplicate/foreign/missing years, and invalid ids): 0 differ.
 
 ## 3. Results
 
@@ -71,6 +76,16 @@ The 130 s result is not quite the warm 250 ms: a few of the idle connections had
 > [!IMPORTANT]
 > `getCachedReport()` returns nothing when `NODE_ENV=development`, and the local `.env` sets `NODE_ENV=development`. So `npm run dev` (and any script that loads `.env`) **never uses the report cache** and pays the full miss cost on every request. That is deliberate (see `report-cache.ts`), but it makes a dev server feel 2–5× slower than a production build. Measure latency with `npm run build && npm start`.
 
+**Switching period views of a year (item 5), the whole 84-response run with the inputs cache on:**
+
+| | Original | After the one-wave change | + inputs cache |
+|---|---|---|---|
+| A new period of a year already viewed, median over all views | 1,540 ms | 770 ms | **269 ms** |
+| The first view of a year (reads the database) | same as above | same as above | same as before: 1.3–1.7 s for the larger company, ≈ 0.5–0.8 s for the small one |
+| **Content of the 84 responses vs the original baseline** | | 0 differ | **0 differ** |
+
+**Invalidation, proved end to end on the Neon test branch** through the real handler (`NODE_ENV=production`): filling the cache, then a silent edit (no version bump) is still served from the cache — by design and as a control that the cache is really in use — `refresh=true` reads the new value, and once the data version changes both Annual and Q1 (served from the new version's cached inputs) show the edit. The edited value was restored afterwards.
+
 **3-Year view, real handler, steady state on a warm pool (median of repeats):**
 
 | | Before | After |
@@ -82,7 +97,7 @@ Real Variable gains less: a wave of several large result sets in parallel over t
 
 **Browser startup (live, Acme CFO, dev server on the Neon test branch, warm routes):** `/auth/me` and `/fy` now start 1 ms apart (they took 701 ms and 1,066 ms, so the old chain would have cost about their sum, ~1.8 s; now ~1.1 s). The dashboard loads with its years and figures, with no console errors or warnings and no `undefined`/`NaN` in the rendered text. `/reports/all` still starts after `/fy` (§5.7).
 
-**Verification:** `npx tsc --noEmit` 0 errors · `npx jest --runInBand` 22 suites / 473 tests (added `auth-claims`) · 84/84 route responses identical before/after · pool test after a 130 s pause with 0 errors.
+**Verification:** `npx tsc --noEmit` 0 errors · `npx jest --runInBand` 23 suites / 481 tests (added `auth-claims` and `report-inputs-cache`) · 84/84 `/reports/all` responses and 28/28 `/reports/threeyear` responses identical before/after · pool test after a 130 s pause with 0 errors · cache invalidation proved on the test branch.
 
 ## 4. How to re-measure
 
@@ -100,7 +115,7 @@ Throwaway scripts (repo convention `_diag_*.ts`, deleted after use; copies in th
    - A Neon project's region can't be changed in place; moving means a new project and a migration. Not done, and not recommended without knowing where the users and the deployment are.
 2. **Neon scale-to-zero.** Phase 0 removed the 3-minute keep-alive ping so Neon can suspend when idle (a cost decision). The first request after a suspension waits for the database to wake (the pool allows up to 30 s). Bringing the ping back trades compute cost for that first-request latency.
 3. **A short in-memory cache of the user lookup** would remove one round trip from *every* API call (each route starts with `authenticate()`). The cost is that a deactivated user or changed role would still work for the cache's lifetime (say 30 s). A security trade-off; not done.
-4. **Caching the loaded ledgers per data version.** Toggling Annual → Q1 → Q2 is a report-cache miss each time (different period), and each one re-reads the same 200 kB of ledgers. Keyed by the same data version that already guards the report cache, those rows could be served from memory. Not done: it adds a second cache to keep correct, and it only helps where the database is far away.
+4. ~~Caching the loaded ledgers per data version~~ — **done**, §2 item 5.
 5. **`SELECT l.*` returns 43 columns**; the engine uses about 34. Measured (interleaved, three parallel queries like a real wave, Real Variable FY 2025-26): engine columns only sends **36% fewer bytes** (228 → 145 kB) but saves only **≈ 41 ms** (the minimums are equal, 248 vs 247 ms). Not done: too little gain for the risk of dropping a column another consumer reads.
 6. **Other routes** each start with their own `authenticate()` and some make sequential queries. Only `/reports/all`, the dominant call, was reworked.
 7. **Browser-side:** report loading still waits for `/fy` to learn the current year. Starting `/reports/all` with the stored year id in parallel would save another round trip, at the cost of restructuring the loading effect.

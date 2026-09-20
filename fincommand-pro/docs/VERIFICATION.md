@@ -17,15 +17,15 @@ npm test
 ```
 Must pass all suites. **Verified 2026-09-19** (after DB Phase 1, see `DB-PHASE-1.md`):
 ```
-Test Suites: 22 passed, 22 total
-Tests:       473 passed, 473 total
+Test Suites: 23 passed, 23 total
+Tests:       481 passed, 481 total
 ```
-Phase 0 added `migrate-core`, `tb-validation`, `security` (token encryption + OAuth state), `report-cache-key` and `zoho-assembly`. Phase 1 added `ingestion`, `content-hash`, `period-surplus` and `script-support`. The latency pass (`LATENCY.md`) added `auth-claims`.
+Phase 0 added `migrate-core`, `tb-validation`, `security` (token encryption + OAuth state), `report-cache-key` and `zoho-assembly`. Phase 1 added `ingestion`, `content-hash`, `period-surplus` and `script-support`. The latency pass (`LATENCY.md`) added `auth-claims` and `report-inputs-cache`.
 
 On a machine short of memory, run `npx jest --runInBand`.
 
 > [!NOTE]
-> If a future run shows a different suite/test count than 22/473, that's a signal the codebase has moved on since this doc was written — update this section rather than treating the old numbers as ground truth.
+> If a future run shows a different suite/test count than 23/481, that's a signal the codebase has moved on since this doc was written — update this section rather than treating the old numbers as ground truth.
 
 ## Step 3 — Root diagnostic script protocol (DB / financial-calculation changes only)
 
