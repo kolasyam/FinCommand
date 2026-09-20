@@ -39,6 +39,7 @@ The browser adds its own chain on page load (live mode): `/auth/me` → `/fy` �
    - The calendar-year merge logic itself is untouched.
 3. **Idle connections are kept for 5 minutes, not 30 s** (`lib/db/neon.ts`, `DB_IDLE_TIMEOUT_MS`), with TCP keep-alive. A page load asks for ~10 connections at once. With the old timeout, the first load after a 35 s pause opened all the ones the pool had dropped.
 4. **The browser asks `/auth/me` and `/fy` together** (`lib/dashboard/DashboardContext.tsx`), saving one browser round trip on every page load. Safe with expiring tokens: refresh doesn't rotate the refresh token, so two refreshes racing both succeed.
+5. **The 3-Year view (`/reports/threeyear`) reads everything in one wave.** It was strictly sequential: user → years → company → audit → then each year's ledgers one after another (about 7 round trips, and it has no cache). Now, after the user lookup, the years, company, audit summary and every requested year's ledgers go out together (2 round trips). Ledgers are preloaded only for canonical UUIDs; any other id format still takes the original per-year path, so behaviour is unchanged. Proved on 28 responses (both companies, FY and CY, one/three/duplicate/foreign/missing years, and invalid ids): 0 differ.
 
 ## 3. Results
 
@@ -70,6 +71,15 @@ The 130 s result is not quite the warm 250 ms: a few of the idle connections had
 > [!IMPORTANT]
 > `getCachedReport()` returns nothing when `NODE_ENV=development`, and the local `.env` sets `NODE_ENV=development`. So `npm run dev` (and any script that loads `.env`) **never uses the report cache** and pays the full miss cost on every request. That is deliberate (see `report-cache.ts`), but it makes a dev server feel 2–5× slower than a production build. Measure latency with `npm run build && npm start`.
 
+**3-Year view, real handler, steady state on a warm pool (median of repeats):**
+
+| | Before | After |
+|---|---|---|
+| Acme (3 years with data) | ≈ 1,565 ms | **≈ 500 ms** |
+| Real Variable (2 years of larger ledgers) | ≈ 1,400 ms | **≈ 1,000 ms** |
+
+Real Variable gains less: a wave of several large result sets in parallel over this link is not always one round trip (jitter, extra connections, transfer time), and its steady-state runs varied between about 0.9 and 2.6 s. Phase timing of that route: user lookup ≈ 250 ms, engine for 3 years 40–80 ms, the read wave the rest.
+
 **Browser startup (live, Acme CFO, dev server on the Neon test branch, warm routes):** `/auth/me` and `/fy` now start 1 ms apart (they took 701 ms and 1,066 ms, so the old chain would have cost about their sum, ~1.8 s; now ~1.1 s). The dashboard loads with its years and figures, with no console errors or warnings and no `undefined`/`NaN` in the rendered text. `/reports/all` still starts after `/fy` (§5.7).
 
 **Verification:** `npx tsc --noEmit` 0 errors · `npx jest --runInBand` 22 suites / 473 tests (added `auth-claims`) · 84/84 route responses identical before/after · pool test after a 130 s pause with 0 errors.
@@ -91,6 +101,6 @@ Throwaway scripts (repo convention `_diag_*.ts`, deleted after use; copies in th
 2. **Neon scale-to-zero.** Phase 0 removed the 3-minute keep-alive ping so Neon can suspend when idle (a cost decision). The first request after a suspension waits for the database to wake (the pool allows up to 30 s). Bringing the ping back trades compute cost for that first-request latency.
 3. **A short in-memory cache of the user lookup** would remove one round trip from *every* API call (each route starts with `authenticate()`). The cost is that a deactivated user or changed role would still work for the cache's lifetime (say 30 s). A security trade-off; not done.
 4. **Caching the loaded ledgers per data version.** Toggling Annual → Q1 → Q2 is a report-cache miss each time (different period), and each one re-reads the same 200 kB of ledgers. Keyed by the same data version that already guards the report cache, those rows could be served from memory. Not done: it adds a second cache to keep correct, and it only helps where the database is far away.
-5. **`SELECT l.*` returns 43 columns**; the engine uses about 34. Trimming would save perhaps a quarter of the bytes. Not done: modest gain, and several other consumers read the same rows.
+5. **`SELECT l.*` returns 43 columns**; the engine uses about 34. Measured (interleaved, three parallel queries like a real wave, Real Variable FY 2025-26): engine columns only sends **36% fewer bytes** (228 → 145 kB) but saves only **≈ 41 ms** (the minimums are equal, 248 vs 247 ms). Not done: too little gain for the risk of dropping a column another consumer reads.
 6. **Other routes** each start with their own `authenticate()` and some make sequential queries. Only `/reports/all`, the dominant call, was reworked.
 7. **Browser-side:** report loading still waits for `/fy` to learn the current year. Starting `/reports/all` with the stored year id in parallel would save another round trip, at the cost of restructuring the loading effect.

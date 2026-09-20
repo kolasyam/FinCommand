@@ -31,28 +31,37 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     return json({ error: 'Provide at most 3 fy_ids for comparison' }, { status: 400 });
   }
 
-  const { rows: fys } = await query<FinancialYearRow>(
-    `SELECT * FROM financial_years WHERE id = ANY($1) AND company_id = $2 ORDER BY start_date`,
-    [fyIds, user.company_id]
-  );
+  // Everything below depends only on the user or on the requested ids, not on
+  // each other, so it goes out as ONE wave instead of four steps plus a
+  // one-year-at-a-time loop — each of which is a full round trip to the
+  // database (docs/LATENCY.md). Ledgers are preloaded for every id that is a
+  // canonical UUID; anything else (odd casing/format) still goes through the
+  // original per-year load in the loop below, so behaviour is unchanged.
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const preloadIds = [...new Set(fyIds.filter(id => UUID.test(id)).map(id => id.toLowerCase()))];
+  const [{ rows: fys }, { rows: companyRows }, { rows: auditRows }, preloaded] = await Promise.all([
+    query<FinancialYearRow>(
+      `SELECT * FROM financial_years WHERE id = ANY($1) AND company_id = $2 ORDER BY start_date`,
+      [fyIds, user.company_id]
+    ),
+    // Source Currency — same fact as /reports/all's source_currency, needed
+    // here too: DashboardContext has no ReportBundle to read it from while
+    // viewing the 3-Year Frame (rawBundle is null in that mode), so without
+    // this its FX conversion would silently assume 'INR' regardless of what
+    // this company's books are actually recorded in.
+    query<{ currency: string }>(`SELECT currency FROM companies WHERE id=$1`, [user.company_id]),
+    // Same real, company-wide signal as /reports/all's audit_summary — needed
+    // here too since the Compliance tab's 3-Year view has no ReportBundle to
+    // read it from (see ReportBundle.audit_summary's comment).
+    query<{ count: string; last_at: string | null }>(
+      `SELECT COUNT(*) AS count, MAX(created_at) AS last_at FROM audit_trail WHERE company_id=$1`, [user.company_id]
+    ),
+    Promise.all(preloadIds.map(async id => [id, await loadStatementLedgers(user.company_id, id)] as const))
+      .then(entries => new Map(entries)),
+  ]);
   if (fys.length === 0) return json({ error: 'Financial years not found' }, { status: 404 });
 
-  // Source Currency — same fact as /reports/all's source_currency, needed
-  // here too: DashboardContext has no ReportBundle to read it from while
-  // viewing the 3-Year Frame (rawBundle is null in that mode), so without
-  // this its FX conversion would silently assume 'INR' regardless of what
-  // this company's books are actually recorded in.
-  const { rows: companyRows } = await query<{ currency: string }>(
-    `SELECT currency FROM companies WHERE id=$1`, [user.company_id]
-  );
   const source_currency = (companyRows[0]?.currency || 'INR').toUpperCase();
-
-  // Same real, company-wide signal as /reports/all's audit_summary — needed
-  // here too since the Compliance tab's 3-Year view has no ReportBundle to
-  // read it from (see ReportBundle.audit_summary's comment).
-  const { rows: auditRows } = await query<{ count: string; last_at: string | null }>(
-    `SELECT COUNT(*) AS count, MAX(created_at) AS last_at FROM audit_trail WHERE company_id=$1`, [user.company_id]
-  );
   const audit_summary = {
     total_events: parseInt(auditRows[0]?.count || '0', 10),
     last_event_at: auditRows[0]?.last_at || null,
@@ -83,7 +92,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   const results: YearResult[] = [];
 
   for (const fy of fys) {
-    const ledgers = await loadStatementLedgers(user.company_id, fy.id);
+    const ledgers = preloaded.get(fy.id) ?? await loadStatementLedgers(user.company_id, fy.id);
     if (!ledgers.length) {
       results.push({ financial_year: fy, no_data: true });
       continue;
