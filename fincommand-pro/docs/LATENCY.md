@@ -100,6 +100,20 @@ Real Variable gains less: a wave of several large result sets in parallel over t
 
 **Browser startup (live, Acme CFO, dev server on the Neon test branch, warm routes):** `/auth/me` and `/fy` now start 1 ms apart (they took 701 ms and 1,066 ms, so the old chain would have cost about their sum, ~1.8 s; now ~1.1 s). The dashboard loads with its years and figures, with no console errors or warnings and no `undefined`/`NaN` in the rendered text. `/reports/all` still starts after `/fy` (§5.7).
 
+**Side by side in Chrome on the real Real Variable data (2026-09-20):** the pre-Phase-0 build the owner had running on `:4000` versus a production build of the current code on `:4001`, both on the same database, same browser session type, measured with `fetch` timings (first call / repeat), the report content compared section by section by hash.
+
+| View | Old build | New build |
+|---|---|---|
+| FY 2025-26, a new period (Q1) | 4,793 / 293 ms | **395** / 311 ms |
+| FY 2025-26, a new period (H1) | 5,406 / 311 ms | **420** / 304 ms |
+| FY 2025-26, calendar-year view | 4,428 / 284 ms | **1,816** / 290 ms |
+| FY 2024-25, Q3 | 1,631 / 284 ms | **355** / 292 ms |
+| 3-Year view | 4,320 / 2,837 ms | **1,089** / 1,116 ms |
+| Page load: data on screen | ≈ 1,075 ms (`/fy` waits for `/auth/me`; tab-setup calls ≈ 2.3 s while reconnecting) | **≈ 615 ms** (`/auth/me` and `/fy` start 1 ms apart) |
+| **Report content, 7 views** | | **identical, every section** |
+
+The old build's first-call figures include reconnecting to the database after a short pause (its 30 s idle timeout). The first view of a year or of the calendar-year mode still reads the database, hence 1.4–1.8 s on the new build. Also on the new build with the real data: all 21 tabs render, the browser console stays clean, the keep-alive and Zoho cron endpoints refuse a caller without the secret (401), and the batch list is 25 kB with no raw-data column. Steady-state cost per API call from the browser: `/auth/me` ≈ 15 ms (user cache), single-query endpoints ≈ 272 ms (one round trip), `/custom-tabs`, `/dashboard-layout/all` and `/audit` ≈ 530 ms (two sequential queries), `/report-builder/templates` ≈ 800 ms (three) — the last four are not on the page-load critical path and are the next candidates.
+
 **Verification:** `npx tsc --noEmit` 0 errors · `npx jest --runInBand` 26 suites / 500 tests (added `auth-claims`, `report-inputs-cache`, `auth-cache`, `cron-auth` and `neon-keepalive`) · 84/84 `/reports/all` responses and 28/28 `/reports/threeyear` responses identical before/after · pool test after a 130 s pause with 0 errors · cache invalidation proved on the test branch · user-cache invalidation through the real user-update route proved on the test branch.
 
 **Final regression after every change above (real handlers, against the original baselines):** `/reports/all` — all 84 responses identical in every section except Real Variable's `audit_summary` (172 → 173 events, latest event 2026-09-20 12:24:55): that is the one audit row written by the approved raw-column clear, made after the baseline was taken; Acme (no new audit rows) is identical in full. `/reports/threeyear` — the original route and the new route, both in production mode, 28/28 identical (`audit_summary` excluded for the same reason; an earlier mismatch on the error cases was only the app masking 500 messages in production mode, not a code change).
