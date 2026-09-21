@@ -97,7 +97,7 @@ And one design gap: as-at reports (ageing) were only read as at each year's end;
 
 **Tests:** 36 suites / 669 tests (was 27 / 519); the Zoho record suites add 175 (registry and extraction, the write path with a fake database, the reading engine with a fake store/HTTP/clock, the cron, the quota and back-off arithmetic, `callZoho` limits, the usage counter, state normalisation). Type-check of every file this feature touches is clean.
 
-**Not verified here:** the Upload-tab panel in a browser, and a full `next build` / whole-project `tsc` — the machine ran out of memory (a webpack allocation failed; the compile step itself had passed once earlier). Re-run both when memory is free (`VERIFICATION.md`).
+**Build:** the whole-project `tsc --noEmit` is clean, and `next build` compiles successfully (78 s, with Next's own type validation). It then ran out of memory in the last step, "Generating static pages (0/53)", because the machine had under 0.1 GB of RAM free — a machine limit, not a code error, but the build has therefore not run to completion. **Not verified here:** the Upload-tab panel in a browser (no server could be built to serve it). Do both when memory is free (`VERIFICATION.md`).
 
 ## Not done here (next plan)
 
