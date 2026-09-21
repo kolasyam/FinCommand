@@ -82,13 +82,16 @@
   - **`:4000` still runs the old build** — restarting it with the current code needs the owner to stop the old process (`npm run start`, its `cmd` and `node` children), then `npm run build` and `npm run start`.
   - `npm run dev` never uses the report cache (`NODE_ENV=development`), so it always feels slower than a production build.
 
-## 4. Current Test & Build State (verified 2026-09-20)
+- **Zoho data audit** (2026-09-21, see `ZOHO-DATA-AUDIT.md`): the platform reads Zoho's **financial statements plus customer/vendor summaries**, not every record (invoices, bills, journals, bank transactions, GST, fixed assets … are not read). The statements reconcile exactly to Zoho's own totals (24 P&L months, 26 Balance Sheet snapshots). Three defects found and fixed in code: **(1)** customers invoiced in another currency were skipped, hiding the dominant USD customer (84–94% of revenue) from Top Customers and Customer Margin — Zoho's report amounts are already in the base currency, proved against 10/10 invoices; **(2)** vendor spend was empty in every batch because the old build sent Zoho a timestamp it rejects (HTTP 400), silently — fixed in Phase 0, live test 187 bills → 32 vendors; **(3)** the chart of accounts was read one page only (200 of 299+). Non-fatal sync problems are now recorded on the sync log and returned as `warning`; the year's bills and expenses are stored with each batch.
+  - **Urgent, 2026-09-21:** Zoho was reconnected at 06:37 UTC and the Upload tab auto-synced FY 2025-26 on the **old build still running on `:4000`**, so the current FY 2025-26 batch carries the old defects. Restart `:4000` on the current code, then run "Sync Trial Balance" for each year (`ZOHO-DATA-AUDIT.md` §6).
+
+## 4. Current Test & Build State (verified 2026-09-21)
 
 ```
-Test Suites: 26 passed, 26 total
-Tests:       500 passed, 500 total
+Test Suites: 27 passed, 27 total
+Tests:       519 passed, 519 total
 ```
-Run via `npm test` (Jest; `npx jest --runInBand` on a low-memory machine). Suites: `note-catalog`, `report-builder-engine`, `custom-metric-engine`, `custom-metrics-v2`, `ledger-metric`, `dashboard-builder-engine`, `dashboard-templates`, `dashboard-layout-export`, `tab-access`, `tab-customization-audit`, `tb-engine`, `format`, `migrate-core`, `tb-validation`, `security`, `report-cache-key`, `zoho-assembly`, `ingestion`, `content-hash`, `period-surplus`, `script-support`, `auth-claims`, `report-inputs-cache`, `auth-cache`, `cron-auth`, `neon-keepalive`. `npm run typecheck` and `npm run build` also verified clean the same session — see `CUSTOM-METRICS-UPGRADE.md` §4 and `QA-AUDIT-LATENCY-FIX.md` §7.
+Run via `npm test` (Jest; `npx jest --runInBand` on a low-memory machine). Suites: `note-catalog`, `report-builder-engine`, `custom-metric-engine`, `custom-metrics-v2`, `ledger-metric`, `dashboard-builder-engine`, `dashboard-templates`, `dashboard-layout-export`, `tab-access`, `tab-customization-audit`, `tb-engine`, `format`, `migrate-core`, `tb-validation`, `security`, `report-cache-key`, `zoho-assembly`, `ingestion`, `content-hash`, `period-surplus`, `script-support`, `auth-claims`, `report-inputs-cache`, `auth-cache`, `cron-auth`, `neon-keepalive`, `zoho-people`. `npm run typecheck` and `npm run build` also verified clean the same session — see `CUSTOM-METRICS-UPGRADE.md` §4 and `QA-AUDIT-LATENCY-FIX.md` §7.
 
 ## 5. What's explicitly deferred / out of scope
 

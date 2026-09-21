@@ -11,6 +11,9 @@ import { sanitizeSection, sanitizeTreasuryType } from './classify';
 import { mapZohoLedgers, type LedgerMasterMapping } from './map';
 import { FY_MONTHS_DR, assembleZohoLedgers, dayBeforeISO, monthEndISO } from './assemble';
 import { syncZohoContacts } from './contacts';
+import {
+  aggregateSalesByCustomer, aggregateVendorBills, aggregateCustomerCost, fetchAllPages, buildSyncNotes,
+} from './people';
 
 export interface SyncResult {
   ledgers_synced: number;
@@ -166,13 +169,21 @@ async function runZohoSync(
   // 1. Fetch Chart of Accounts
   const coaMap = new Map<string, { account_type: string; account_code?: string }>();
   let coaError: string | null = null;
+  let coaTruncated = false;
   try {
-    const coaRes = await callZoho(companyId, (token) => axios.get(`${apiBase}/chartofaccounts`, {
-      headers: { Authorization: `Zoho-oauthtoken ${token}` },
-      params: { organization_id: orgId },
-      timeout: ZOHO_TIMEOUT_MS,
-    }));
-    const accounts = coaRes.data?.chartofaccounts || coaRes.data?.accounts || [];
+    // Every page: this used to be ONE unpaged request, which Zoho answers with
+    // the first 200 accounts — Real Variable's chart has 299+.
+    const coaPages = await fetchAllPages<Record<string, unknown>>(async (page) => {
+      const res = await callZoho(companyId, (token) => axios.get(`${apiBase}/chartofaccounts`, {
+        headers: { Authorization: `Zoho-oauthtoken ${token}` },
+        params: { organization_id: orgId, per_page: 200, page },
+        timeout: ZOHO_TIMEOUT_MS,
+      }));
+      const items = res.data?.chartofaccounts || res.data?.accounts || [];
+      return { items: Array.isArray(items) ? items as Record<string, unknown>[] : [], hasMore: Boolean(res.data?.page_context?.has_more_page) };
+    });
+    coaTruncated = coaPages.truncated;
+    const accounts = coaPages.items;
     accounts.forEach((acct: Record<string, unknown>) => {
       const n = String(acct.account_name || acct.name || '').toLowerCase().trim();
       const t = String(acct.account_type || acct.type || '').toLowerCase().trim();
@@ -222,18 +233,6 @@ async function runZohoSync(
 
   const lastMonth = FY_MONTHS_DR[FY_MONTHS_DR.length - 1];
   const fyEndDate = fyMonthEnd(lastMonth);
-
-  function getFyMonthIndex(dateStr: string | null | undefined, fyStartDate: string): number {
-    if (!dateStr) return -1;
-    const d = new Date(dateStr);
-    const fyStart = new Date(fyStartDate);
-    if (isNaN(d.getTime()) || isNaN(fyStart.getTime())) return -1;
-    const yearDiff = d.getUTCFullYear() - fyStart.getUTCFullYear();
-    const monthDiff = d.getUTCMonth() - fyStart.getUTCMonth();
-    const idx = yearDiff * 12 + monthDiff;
-    if (idx < 0 || idx >= 12) return -1;
-    return idx;
-  }
 
   // Launch full-year Vendor Bills and Expenses fetches in parallel with monthly financial reports
   const fullYearBillsPromise = (async () => {
@@ -374,147 +373,57 @@ async function runZohoSync(
       raw_response: r.rawResponse,
     }));
 
-  interface ZohoCustomerLeaf { customer_id?: string; customer_name: string; total: number; currency_code?: string }
-  function extractSalesByCustomer(rawResponse: unknown): ZohoCustomerLeaf[] {
-    const data = rawResponse as Record<string, unknown> | null;
-    if (!data) return [];
-    const candidates = [
-      data.sales, data.sales_by_customers, data.salesbycustomer, data.sales_by_customer, data.customers, data.customer_summary,
-    ];
-    const arr = candidates.find(c => Array.isArray(c)) as Record<string, unknown>[] | undefined;
-    if (!arr) return [];
-    return arr
-      .map((item) => {
-        const name = String(item.customer_name ?? item.contact_name ?? item.name ?? '').trim();
-        const idRaw = item.customer_id ?? item.contact_id ?? item.entity_id;
-        const totalRaw = item.sales ?? item.total ?? item.invoiced_amount ?? item.sales_with_tax ?? item.amount ?? 0;
-        const currency = item.currency_code ?? item.currency ?? undefined;
-        return {
-          customer_id: idRaw != null ? String(idRaw) : undefined,
-          customer_name: name,
-          total: parseFloat(String(totalRaw)) || 0,
-          currency_code: currency != null ? String(currency).toUpperCase() : undefined,
-        };
-      })
-      .filter((c) => c.customer_name);
-  }
-
-  const customerRevMap = new Map<string, { customer_id?: string; name: string; m: number[] }>();
-  let custFetchErrors = 0;
-  let custSkippedForeignCurrency = 0;
-  const foreignCurrenciesSeen = new Set<string>();
-  custResults.forEach((res) => {
-    if (res.error) { custFetchErrors++; return; }
-    extractSalesByCustomer(res.rawResponse).forEach((leaf) => {
-      if (leaf.currency_code && leaf.currency_code !== baseCurrency) {
-        custSkippedForeignCurrency++;
-        foreignCurrenciesSeen.add(`${leaf.customer_name} (${leaf.currency_code})`);
-        return;
-      }
-      if (!customerRevMap.has(leaf.customer_name)) {
-        customerRevMap.set(leaf.customer_name, { customer_id: leaf.customer_id, name: leaf.customer_name, m: Array(12).fill(0) });
-      }
-      const entry = customerRevMap.get(leaf.customer_name)!;
-      entry.m[res.key] += leaf.total;
-      if (leaf.customer_id && !entry.customer_id) entry.customer_id = leaf.customer_id;
-    });
-  });
-  if (custSkippedForeignCurrency > 0) {
-    console.warn(
-      `Sales by Customer: skipped ${custSkippedForeignCurrency} customer-month row(s) in a currency other than the org's base currency (${baseCurrency}) — no conversion rate available from this report. Affected: ${[...foreignCurrenciesSeen].join(', ')}`
-    );
+  // ── Customers, vendors and customer-tagged cost — pure, see ./people.ts ──
+  // Customer amounts are ALREADY in the base currency whatever the customer's
+  // own currency is (proved against Zoho's invoices — people.ts explains); they
+  // used to be skipped when the currency differed, dropping the largest customer.
+  const customerAgg = aggregateSalesByCustomer(custResults, baseCurrency);
+  const customerRevMap = customerAgg.rows;
+  if (customerAgg.otherCurrency.length > 0) {
+    console.log(`Sales by Customer: ${customerAgg.otherCurrency.length} customer(s) invoice in another currency (${customerAgg.otherCurrency.join(', ')}); their amounts are already in ${baseCurrency} and are included.`);
   }
   if (customerRevMap.size === 0) {
     console.warn(
-      custFetchErrors === custResults.length
+      customerAgg.fetchErrors === custResults.length
         ? `Sales by Customer: all ${custResults.length} month(s) failed — Top Customers will show "not available" for this sync.`
         : 'Sales by Customer: report returned no customer rows for this period.'
     );
   }
 
-  // ── Vendor Bills (processed from full-year single fetch) ──
-  const vendorExpenseMap = new Map<string, { vendor_id?: string; name: string; m: number[] }>();
-  let billFetchErrors = 0;
-  let billSkippedForeignCurrency = 0;
-  const billForeignCurrenciesSeen = new Set<string>();
-
-  if (fullYearBillsRes.error) {
-    billFetchErrors = 12;
-  } else {
-    fullYearBillsRes.bills.forEach((item) => {
-      const vendor_id = item.vendor_id != null ? String(item.vendor_id) : undefined;
-      const vendor_name = String(item.vendor_name ?? '').trim();
-      const total = parseFloat(String(item.total ?? 0)) || 0;
-      const currency_code = item.currency_code != null ? String(item.currency_code).toUpperCase() : undefined;
-      const dateStr = String(item.date ?? item.bill_date ?? '');
-      if (!vendor_name) return;
-
-      if (currency_code && currency_code !== baseCurrency) {
-        billSkippedForeignCurrency++;
-        billForeignCurrenciesSeen.add(`${vendor_name} (${currency_code})`);
-        return;
-      }
-
-      const mi = getFyMonthIndex(dateStr, fy.start_date);
-      if (mi >= 0 && mi < 12) {
-        if (!vendorExpenseMap.has(vendor_name)) {
-          vendorExpenseMap.set(vendor_name, { vendor_id, name: vendor_name, m: Array(12).fill(0) });
-        }
-        const entry = vendorExpenseMap.get(vendor_name)!;
-        entry.m[mi] += total;
-        if (vendor_id && !entry.vendor_id) entry.vendor_id = vendor_id;
-      }
-    });
-  }
-
-  if (billSkippedForeignCurrency > 0) {
-    console.warn(
-      `Vendor Bills: skipped ${billSkippedForeignCurrency} bill(s) in a currency other than the org's base currency (${baseCurrency}). Affected: ${[...billForeignCurrenciesSeen].join(', ')}`
-    );
+  // Vendor bills (processed from the full-year single fetch).
+  const vendorAgg = aggregateVendorBills(fullYearBillsRes.error ? [] : fullYearBillsRes.bills, fy.start_date, baseCurrency);
+  const vendorExpenseMap = vendorAgg.rows;
+  if (vendorAgg.skippedForeign > 0) {
+    console.warn(`Vendor Bills: left out ${vendorAgg.skippedForeign} bill(s) in a currency other than ${baseCurrency} that carried no base-currency amount. Affected: ${vendorAgg.skippedNames.join(', ')}`);
   }
   if (vendorExpenseMap.size === 0) {
     console.warn(
-      billFetchErrors > 0
+      fullYearBillsRes.error
         ? `Vendor Bills: fetch failed — Vendor Expense Report will show "not available" for this sync.`
         : 'Vendor Bills: no bills found for this period.'
     );
   }
 
-  // ── Customer-tagged direct cost (processed from full-year single fetch) ──
-  const customerCostMap = new Map<string, { customer_id?: string; name: string; m: number[] }>();
-  let expFetchErrors = 0;
-
-  if (fullYearExpensesRes.error) {
-    expFetchErrors = 12;
-  } else {
-    fullYearExpensesRes.expenses.forEach((item) => {
-      if (item.customer_id != null && String(item.customer_id).trim() !== '') {
-        const customer_id = String(item.customer_id);
-        const customer_name = String(item.customer_name ?? '').trim();
-        const total = parseFloat(String(item.bcy_total ?? item.total ?? 0)) || 0;
-        const dateStr = String(item.date ?? item.expense_date ?? '');
-        if (!customer_name) return;
-
-        const mi = getFyMonthIndex(dateStr, fy.start_date);
-        if (mi >= 0 && mi < 12) {
-          if (!customerCostMap.has(customer_name)) {
-            customerCostMap.set(customer_name, { customer_id, name: customer_name, m: Array(12).fill(0) });
-          }
-          const entry = customerCostMap.get(customer_name)!;
-          entry.m[mi] += total;
-          if (customer_id && !entry.customer_id) entry.customer_id = customer_id;
-        }
-      }
-    });
-  }
-
+  // Customer-tagged direct cost (processed from the full-year single fetch).
+  const customerCostMap = aggregateCustomerCost(fullYearExpensesRes.error ? [] : fullYearExpensesRes.expenses, fy.start_date);
   if (customerCostMap.size === 0) {
     console.warn(
-      expFetchErrors > 0
+      fullYearExpensesRes.error
         ? `Expenses: fetch failed — Customer Margin Report will show direct cost as unavailable for this sync.`
         : 'Expenses: no expense was billable-and-customer-tagged for this period — this Zoho org does not appear to track direct per-customer cost. Customer Margin Report will show real revenue with direct cost disclosed as "not tracked", not a fabricated figure.'
     );
   }
+
+  // Anything non-fatal that limits this sync, in plain words (stored on the
+  // sync log and returned as `warning`): before, a failed bills fetch left the
+  // Vendor Expense report silently empty.
+  const syncNotes = buildSyncNotes({
+    coaTruncated, coaError,
+    customers: { fetchErrors: customerAgg.fetchErrors, totalMonths: custResults.length, count: customerRevMap.size },
+    bills: { error: fullYearBillsRes.error, agg: vendorAgg },
+    expensesError: fullYearExpensesRes.error,
+  });
+  const syncWarning = syncNotes.length ? syncNotes.join(' | ') : null;
 
   const { ledgerMap, errors: assemblyErrors } = assembleZohoLedgers({
     pl: plResults, openingBs: openingResult, monthBs: bsMonthResults,
@@ -563,12 +472,18 @@ async function runZohoSync(
     uploadedBy: triggeredBy,
     options,
     ledgers,
-    customerRevenue: Array.from(customerRevMap.values()).map((c) => ({ externalId: c.customer_id || null, name: c.name, m: c.m })),
-    vendorExpense: Array.from(vendorExpenseMap.values()).map((v) => ({ externalId: v.vendor_id ?? null, name: v.name, m: v.m })),
-    customerCost: Array.from(customerCostMap.values()).map((c) => ({ externalId: c.customer_id ?? null, name: c.name, m: c.m })),
+    customerRevenue: Array.from(customerRevMap.values()).map((c) => ({ externalId: c.id || null, name: c.name, m: c.m })),
+    vendorExpense: Array.from(vendorExpenseMap.values()).map((v) => ({ externalId: v.id ?? null, name: v.name, m: v.m })),
+    customerCost: Array.from(customerCostMap.values()).map((c) => ({ externalId: c.id ?? null, name: c.name, m: c.m })),
     batch: {
       currency: baseCurrency, mappedCount: mapped, hasMonthlyCols: true,
-      rawPayloads: rawZohoMonths.map((r) => ({ label: r.month, periodFrom: r.from_date, periodTo: r.to_date, fetchedAt: r.fetched_at, payload: r.raw_response })),
+      rawPayloads: [
+        ...rawZohoMonths.map((r) => ({ label: r.month, periodFrom: r.from_date, periodTo: r.to_date, fetchedAt: r.fetched_at, payload: r.raw_response })),
+        // The year's bills and expenses as Zoho returned them (stored once, deduplicated).
+        // They were not kept before, so a vendor report that came out empty could not be explained afterwards.
+        ...(fullYearBillsRes.error ? [] : [{ label: 'Vendor Bills', periodFrom: fy.start_date, periodTo: fyEndDate, fetchedAt: new Date().toISOString(), payload: { bills: fullYearBillsRes.bills } }]),
+        ...(fullYearExpensesRes.error ? [] : [{ label: 'Expenses', periodFrom: fy.start_date, periodTo: fyEndDate, fetchedAt: new Date().toISOString(), payload: { expenses: fullYearExpensesRes.expenses } }]),
+      ],
     },
     inTransaction: async (client) => {
       for (const lm of autoMappings) {
@@ -592,9 +507,11 @@ async function runZohoSync(
       synced_ledgers=$1, updated_at=NOW() WHERE company_id=$2`,
     [tbRows.length, companyId]
   );
+  // A success can still carry notes (e.g. bills could not be fetched); they go
+  // in error_message, which the Recent Syncs list shows as the row's tooltip.
   await query(
-    `UPDATE sync_logs SET status=$1,ledgers_synced=$2,duration_ms=$3,error_message=NULL,completed_at=NOW() WHERE id=$4`,
-    [unchanged ? 'no_change' : 'success', unchanged ? 0 : tbRows.length, duration, logId]
+    `UPDATE sync_logs SET status=$1,ledgers_synced=$2,duration_ms=$3,error_message=$5,completed_at=NOW() WHERE id=$4`,
+    [unchanged ? 'no_change' : 'success', unchanged ? 0 : tbRows.length, duration, logId, syncWarning]
   );
 
   // Nothing new was written when unchanged — every cached report is still right.
@@ -619,7 +536,7 @@ async function runZohoSync(
   }
 
   return {
-    ledgers_synced: tbRows.length, mapped, upload_id: uploadId, duration_ms: duration, warning: null,
+    ledgers_synced: tbRows.length, mapped, upload_id: uploadId, duration_ms: duration, warning: syncWarning,
     unchanged, is_balanced: summary.is_balanced, balance_diff: summary.balance_diff,
   };
 }

@@ -47,6 +47,9 @@ Every trial-balance batch stores `total_dr`, `total_cr`, `balance_diff`, `is_bal
 - **Every ledger row has a stable account** (`tb_ledgers.account_id`, NOT NULL, set by a trigger). Don't bypass or disable `trg_tb_ledgers_assign_account`.
 - **Old data is deleted only through an approved list.** `db/scripts/retention.ts` and `clear-raw-zoho-months.ts` apply only a dry-run list id the owner approved. Never delete batches or raw payloads by hand.
 
+### ⛔ Zoho customer figures are base-currency amounts — never skip a customer for its currency
+Zoho's Sales by Customer report gives every amount already in the organisation's base currency; `currency_code` only names the customer's own invoicing currency (proved against Zoho's invoices, `ZOHO-DATA-AUDIT.md` §3). A foreign-currency customer must be counted, not skipped. Skipping one hid the company's largest customer from Top Customers and Customer Margin. Bills are the opposite case: a foreign-currency bill's `total` is in its own currency, so it is counted only through Zoho's `bcy_total`, never a guessed rate. Anything non-fatal that limits a sync must be reported (`buildSyncNotes`), never silent.
+
 ### ⛔ Secrets and tenancy (DB Phase 0)
 - Zoho tokens are **encrypted at rest** (`lib/security/token-crypto.ts`, `TOKEN_ENCRYPTION_KEY`), and no API response ever includes them.
 - The Zoho connect `state` is **signed and expires** (`lib/security/oauth-state.ts`).

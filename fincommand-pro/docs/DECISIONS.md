@@ -112,6 +112,15 @@ The tree-only, no-`eval()` rule below is unchanged. Ledger metrics (`definition_
 5. **The Balance Sheet carries the period's profit** as one Other Equity line, "Surplus — profit for the period (as booked)". The line is added only when the trial balance itself balances, so a genuinely broken upload still shows "Out of Balance". It is the only `tb-engine.ts` change, and Cash Flow ignores it, so profit isn't counted twice.
 6. **Old copies go only through an approved list.** The retention policy keeps the current batch, the newest 5 superseded, anything current in the last 90 days, and locked years. A dry run prints the exact list and its id, and only that id can be applied. The same gate covers emptying the old raw column (done on 2026-09-20 with the owner's approval — §12).
 
+## 13. Zoho data audit — what we read, and whether it is right (2026-09-21)
+
+**Decision** (audit requested by the owner; full write-up and evidence in `ZOHO-DATA-AUDIT.md`).
+1. **The platform reads Zoho's financial statements plus customer and vendor summaries, not every record.** That is intentional for the Ind AS statements; the list of what is not read is in the audit, each a separately planned addition.
+2. **The statements are proven complete against Zoho's own totals** (24 P&L months and 26 Balance Sheet snapshots reconcile). Zoho's own Balance Sheet summary row ("Current Year Earnings") is unreliable and is deliberately not used.
+3. **Customer amounts are base-currency and every customer counts** (the old rule dropped the dominant USD customer). Fixed; takes effect on each year's next sync.
+4. **A limited sync must say so.** Non-fatal problems (bills not fetched, no bills, skipped foreign bills, failed customer months, a partial chart of accounts) are recorded on the sync log and returned as the sync's warning; the year's bills and expenses are kept with the batch. (The empty vendor report was exactly such a silent failure: the old build's timestamp `date_start` was rejected by Zoho with HTTP 400 and swallowed.)
+5. **The chart of accounts is read in full** (all pages).
+
 ## 12. Latency — round trips are the cost (2026-09-20)
 
 **Decision** (by the owner; measurements and proofs in `LATENCY.md`). Report content does not change: 84/84 `/reports/all` and 28/28 `/reports/threeyear` responses are identical before and after.
