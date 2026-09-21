@@ -99,6 +99,10 @@ And one design gap: as-at reports (ageing) were only read as at each year's end;
 
 **Build:** the whole-project `tsc --noEmit` is clean, and `next build` compiles successfully (78 s, with Next's own type validation). It then ran out of memory in the last step, "Generating static pages (0/53)", because the machine had under 0.1 GB of RAM free — a machine limit, not a code error, but the build has therefore not run to completion. **Not verified here:** the Upload-tab panel in a browser (no server could be built to serve it). Do both when memory is free (`VERIFICATION.md`).
 
+## On production
+
+The verified data was copied from the test branch to main on 2026-09-21 by a one-off script with the same gate as the retention scripts (dry run prints a list id; `--apply --confirm=<id>`; refuses unless main's tables are empty; one transaction under a table lock; a content fingerprint of every table compared on both sides before commit; an audit row). Result on main: 6,721 records, 2,935 lines, 12 snapshots, 35 module-state rows (so the next read is incremental) and the day's API-call count. Existing tables were untouched. Set the Zoho plan in the panel and reconnect Zoho; "Read new & changed" then brings it up to date.
+
 ## Not done here (next plan)
 
 Using the data: invoice/bill drill-down under customers and vendors, AR/AP ageing from balances, GST input/output summary, bank register, fixed-asset register, and reconciliation checks against the statements. Contacts remain joined to reports by name (`DB-PHASE-1.md`).
