@@ -37,6 +37,8 @@ export const ROLE_SETS = {
   isCFOorCEO: ['admin', 'cfo', 'ceo'] as Role[],
   canWrite: ['admin', 'cfo', 'manager'] as Role[],
   canRead: ['admin', 'cfo', 'ceo', 'auditor', 'manager', 'viewer'] as Role[],
+  /** Who may read the mirrored Zoho records (bank transactions, invoices, contacts' details). Starting a read is isCFO. */
+  zohoRecords: ['admin', 'cfo', 'ceo', 'auditor'] as Role[],
 };
 
 /** The bearer token (or session cookie) of a request, if any. */

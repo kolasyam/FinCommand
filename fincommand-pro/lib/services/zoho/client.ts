@@ -1,6 +1,7 @@
 import axios, { type AxiosError } from 'axios';
 import { query } from '@/lib/db/neon';
 import { encryptToken, decryptToken } from '@/lib/security/token-crypto';
+import { noteZohoCall } from './usage';
 
 /** Zoho Books connection: data-centre URLs, OAuth tokens (encrypted at rest), and the rate-limit/refresh-aware request wrapper. */
 
@@ -59,6 +60,15 @@ async function requestZohoTokenRefresh(config: ZohoConfigRow) {
 }
 
 /**
+ * True when Zoho's OAuth endpoint refused a refresh because of request volume ("Access Denied ... too many
+ * requests ... try again"), as opposed to rejecting the token itself (`invalid_code`, `invalid_client`).
+ */
+export function isTransientRefreshRefusal(data: { error?: unknown; error_description?: unknown } | null | undefined): boolean {
+  const s = `${data?.error ?? ''} ${data?.error_description ?? ''}`.toLowerCase();
+  return /too many requests|access denied|try again/.test(s);
+}
+
+/**
  * Refreshes the access token, deactivating the connection (is_active=FALSE)
  * only once a SECOND consecutive attempt also fails — confirmed in
  * production on this exact company: Zoho's OAuth endpoint returned an
@@ -94,6 +104,12 @@ async function refreshZohoToken(config: ZohoConfigRow): Promise<string> {
   }
 
   if (res.data.error || !res.data.access_token) {
+    // A refusal because Zoho is rate-limiting refresh requests says nothing about the token: keep the
+    // connection and let the next attempt (after a wait) succeed. On 2026-09-21 the app disconnected a healthy
+    // connection this way - Zoho still accepted the same refresh token minutes later.
+    if (isTransientRefreshRefusal(res.data)) {
+      throw new Error(`Zoho refused the token refresh for now (${res.data.error_description || res.data.error}); the connection was kept and will be retried.`);
+    }
     await query(
       `UPDATE zoho_config SET is_active=FALSE, last_sync_status='error',
         last_sync_error=$1, updated_at=NOW() WHERE company_id=$2`,
@@ -186,15 +202,19 @@ export async function callZoho<T>(
 
   let token = new Date(cfg.token_expiry) <= new Date() ? await refreshZohoTokenSingleFlight(cfg) : cfg.access_token;
 
+  // Every request to Zoho Books counts against the organisation's daily quota (see usage.ts).
+  const run = (t: string) => { noteZohoCall(companyId); return requestFn(t); };
+
   try {
-    return await requestFn(token);
+    return await run(token);
   } catch (err) {
     const axErr = err as AxiosError<{ code?: number }>;
     const status = axErr.response?.status;
     const zohoCode = axErr.response?.data?.code;
 
-    // Handle Zoho Rate Limit (Code 43 or HTTP 429) with automatic backoff retry
-    const isRateLimit = status === 429 || zohoCode === 43;
+    // Handle Zoho Rate Limit (Code 43 or HTTP 429) with automatic backoff retry. Code 45 is
+    // the DAILY limit: retrying within seconds cannot help, so it is thrown at once.
+    const isRateLimit = zohoCode !== 45 && (status === 429 || zohoCode === 43);
     if (isRateLimit && retriesLeft > 0) {
       const delayMs = (3 - retriesLeft) * 800; // 800ms, 1600ms backoff
       await new Promise(r => setTimeout(r, delayMs));
@@ -203,8 +223,9 @@ export async function callZoho<T>(
 
     const isAuthError = status === 401 || zohoCode === 57; /* INVALID_OAUTHTOKEN */
     if (!isAuthError) {
-      const e = new Error(zohoErrorMessage(err)) as Error & { status?: number };
+      const e = new Error(zohoErrorMessage(err)) as Error & { status?: number; zohoCode?: number };
       e.status = status;
+      e.zohoCode = zohoCode;
       throw e;
     }
     try {
@@ -218,16 +239,17 @@ export async function callZoho<T>(
       throw e;
     }
     try {
-      return await requestFn(token);
+      return await run(token);
     } catch (retryErr) {
       const retryAxErr = retryErr as AxiosError<{ code?: number }>;
       const retryZohoCode = retryAxErr.response?.data?.code;
-      if ((retryAxErr.response?.status === 429 || retryZohoCode === 43) && retriesLeft > 0) {
+      if (retryZohoCode !== 45 && (retryAxErr.response?.status === 429 || retryZohoCode === 43) && retriesLeft > 0) {
         await new Promise(r => setTimeout(r, 1000));
         return callZoho(companyId, requestFn, retriesLeft - 1, cfg);
       }
-      const e = new Error(zohoErrorMessage(retryErr)) as Error & { status?: number };
+      const e = new Error(zohoErrorMessage(retryErr)) as Error & { status?: number; zohoCode?: number };
       e.status = retryAxErr.response?.status;
+      e.zohoCode = retryZohoCode;
       throw e;
     }
   }

@@ -41,6 +41,9 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
      JOIN financial_years fy ON fy.company_id=zc.company_id
      WHERE zc.is_active=TRUE AND zc.org_id IS NOT NULL
        AND zc.sync_frequency != 'manual'
+       -- A company that keeps failing waits 15 min, 1 h, 6 h, 24 h between tries (health.ts) instead of
+       -- being retried on every tick, each try spending ~40 of its daily Zoho API calls.
+       AND (zc.next_attempt_at IS NULL OR zc.next_attempt_at <= NOW())
        AND fy.is_locked=FALSE
        -- "First source owns the year": never touch a year loaded from Excel
        -- (syncFromZoho's scheduled mode also skips one, if it changes mid-run).

@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { useDashboard } from '@/lib/dashboard/DashboardContext';
 import { useToast } from '@/lib/dashboard/ToastContext';
 import { apiFetch, getToken, getRefreshToken, ApiClientError } from '@/lib/dashboard/api-client';
+import ZohoDataPanel from '@/components/dashboard/ZohoDataPanel';
 import { CURRENCY_META, SUPPORTED_CURRENCIES, isCurrencyCode, type CurrencyCode } from '@/lib/services/currency';
 
 const FY_MONTHS = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
@@ -71,6 +72,7 @@ export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogi
     last_sync_error?: string;
     synced_ledgers?: number;
     token_valid?: boolean;
+    sync_frequency?: string;
   }>({});
   const [zohoLoading, setZohoLoading] = useState(false);
   const [zohoSyncing, setZohoSyncing] = useState(false);
@@ -760,7 +762,9 @@ export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogi
 
                 <div style={{ fontSize: 10, color: 'var(--text3)', lineHeight: 1.7, marginBottom: 10 }}>
                   {zohoStatus.connected ? (
-                    <>🟢 <strong>Live Sync Active</strong> · Connected via OAuth 2.0. Auto-sync runs every 15 mins via Cron.</>
+                    <>🟢 <strong>Live Sync Active</strong> · Connected via OAuth 2.0. {zohoStatus.sync_frequency === 'manual'
+                      ? 'Auto-sync is off; use "Sync Trial Balance".'
+                      : `Auto-sync runs ${({ '15min': 'every 15 minutes', hourly: 'hourly', daily: 'daily' } as Record<string, string>)[zohoStatus.sync_frequency ?? 'daily'] ?? 'on schedule'} via Cron.`}</>
                   ) : (
                     <>🔒 <strong>OAuth 2.0 Integration</strong> · Click "Connect Zoho Books" to authorize direct REST API sync.</>
                   )}
@@ -820,6 +824,8 @@ export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogi
                     )}
                   </div>
                 )}
+
+                {zohoStatus.connected && <ZohoDataPanel />}
               </>
             ) : (
               /* Coming Soon — no backend integration exists yet for this

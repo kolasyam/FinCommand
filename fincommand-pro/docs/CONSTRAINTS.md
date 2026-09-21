@@ -50,6 +50,15 @@ Every trial-balance batch stores `total_dr`, `total_cr`, `balance_diff`, `is_bal
 ### ⛔ Zoho customer figures are base-currency amounts — never skip a customer for its currency
 Zoho's Sales by Customer report gives every amount already in the organisation's base currency; `currency_code` only names the customer's own invoicing currency (proved against Zoho's invoices, `ZOHO-DATA-AUDIT.md` §3). A foreign-currency customer must be counted, not skipped. Skipping one hid the company's largest customer from Top Customers and Customer Margin. Bills are the opposite case: a foreign-currency bill's `total` is in its own currency, so it is counted only through Zoho's `bcy_total`, never a guessed rate. Anything non-fatal that limits a sync must be reported (`buildSyncNotes`), never silent.
 
+### ⛔ Mirrored Zoho records — read-only, additive, never guessed (2026-09-21, `ZOHO-RECORDS.md`)
+- **Reads only.** Nothing is ever written to Zoho, and nothing in the mirror (`zoho_records`, `zoho_record_lines`, `zoho_record_history`, `zoho_module_state`, `zoho_api_usage`, `zoho_report_snapshots`) feeds `tb-engine.ts`, a report loader or a statement. Keep it that way until a separate, approved plan says otherwise, with a before/after parity proof.
+- **`base_amount` is Zoho's own base-currency figure or the document's own amount in the base currency. Never `amount × exchange_rate`.** A foreign-currency document with no base figure keeps it empty.
+- **Removals are flagged (`deleted_at`), never deleted; a changed record's old version goes to `zoho_record_history`.** Only a *complete full* listing may flag removals, and never when Zoho returned nothing while records are stored.
+- **All Zoho calls go through `callZoho`** so they are counted against the day's allowance, and record reads stay within **80% of it** (`api_daily_limit`, owner decision). Zoho's daily-limit answer (code 45) is final: no retry, block for an hour.
+- **A failing sync is retried with back-off** (`health.ts`), not on every scheduler tick.
+- **Read access is `admin, cfo, ceo, auditor`; starting a read is `admin, cfo`.** The records include bank transactions and contact and user details. Every query filters on `company_id` taken from the authenticated user, never from the request.
+- The scheduler touches only companies whose admin already started a first read.
+
 ### ⛔ Secrets and tenancy (DB Phase 0)
 - Zoho tokens are **encrypted at rest** (`lib/security/token-crypto.ts`, `TOKEN_ENCRYPTION_KEY`), and no API response ever includes them.
 - The Zoho connect `state` is **signed and expires** (`lib/security/oauth-state.ts`).

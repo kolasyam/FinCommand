@@ -11,6 +11,8 @@ import { sanitizeSection, sanitizeTreasuryType } from './classify';
 import { mapZohoLedgers, type LedgerMasterMapping } from './map';
 import { FY_MONTHS_DR, assembleZohoLedgers, dayBeforeISO, monthEndISO } from './assemble';
 import { syncZohoContacts } from './contacts';
+import { flushZohoUsage } from './usage';
+import { recordZohoFailure, clearZohoFailures } from './health';
 import {
   aggregateSalesByCustomer, aggregateVendorBills, aggregateCustomerCost, fetchAllPages, buildSyncNotes,
 } from './people';
@@ -65,8 +67,12 @@ export async function syncFromZoho(
         `UPDATE sync_logs SET status='error', error_message=$1, completed_at=NOW() WHERE id=$2 AND status='running'`,
         [msg, logId]
       ).catch((e: Error) => console.error('[zoho] could not record sync failure on sync_logs:', e.message));
+      // The scheduler retries a failing company only after a growing wait (see health.ts).
+      await recordZohoFailure(companyId);
     }
     throw err;
+  } finally {
+    await flushZohoUsage(companyId);
   }
 }
 
@@ -507,6 +513,7 @@ async function runZohoSync(
       synced_ledgers=$1, updated_at=NOW() WHERE company_id=$2`,
     [tbRows.length, companyId]
   );
+  await clearZohoFailures(companyId);
   // A success can still carry notes (e.g. bills could not be fetched); they go
   // in error_message, which the Recent Syncs list shows as the row's tooltip.
   await query(

@@ -2,6 +2,7 @@
   "regions": ["iad1"],
   "crons": [
     { "path": "/api/v1/internal/zoho-cron", "schedule": "0 */6 * * *" },
+    { "path": "/api/v1/internal/zoho-records-cron", "schedule": "*/30 * * * *" },
     { "path": "/api/v1/internal/keepalive", "schedule": "*/4 * * * *" }
   ]
 }

@@ -15,17 +15,17 @@ Must pass with **0 errors**. This repo uses `npm run typecheck` as the equivalen
 ```bash
 npm test
 ```
-Must pass all suites. **Verified 2026-09-19** (after DB Phase 1, see `DB-PHASE-1.md`):
+Must pass all suites. **Verified 2026-09-21** (after the Zoho records mirror, see `ZOHO-RECORDS.md`):
 ```
-Test Suites: 27 passed, 27 total
-Tests:       519 passed, 519 total
+Test Suites: 36 passed, 36 total
+Tests:       669 passed, 669 total
 ```
-Phase 0 added `migrate-core`, `tb-validation`, `security` (token encryption + OAuth state), `report-cache-key` and `zoho-assembly`. Phase 1 added `ingestion`, `content-hash`, `period-surplus` and `script-support`. The latency pass (`LATENCY.md`) added `auth-claims`, `report-inputs-cache`, `auth-cache`, `cron-auth` and `neon-keepalive`; the Zoho audit added `zoho-people`.
+Phase 0 added `migrate-core`, `tb-validation`, `security` (token encryption + OAuth state), `report-cache-key` and `zoho-assembly`. Phase 1 added `ingestion`, `content-hash`, `period-surplus` and `script-support`. The latency pass (`LATENCY.md`) added `auth-claims`, `report-inputs-cache`, `auth-cache`, `cron-auth` and `neon-keepalive`; the Zoho audit added `zoho-people`. The Zoho records mirror added `zoho-modules`, `zoho-records-ingest`, `zoho-records-sync`, `zoho-records-state`, `zoho-records-cron`, `zoho-budget`, `zoho-health`, `zoho-usage` and `zoho-client-limits`.
 
-On a machine short of memory, run `npx jest --runInBand`.
+On a machine short of memory, run `npx jest --runInBand`. If `npx tsc --noEmit` or `next build` runs out of memory ("Zone out of memory", "Array buffer allocation failed"), close other programs and retry; a narrower `tsc -p` over the touched files is a partial substitute, not a replacement.
 
 > [!NOTE]
-> If a future run shows a different suite/test count than 27/519, that's a signal the codebase has moved on since this doc was written — update this section rather than treating the old numbers as ground truth.
+> If a future run shows a different suite/test count than 36/669, that's a signal the codebase has moved on since this doc was written — update this section rather than treating the old numbers as ground truth.
 
 ## Step 3 — Root diagnostic script protocol (DB / financial-calculation changes only)
 

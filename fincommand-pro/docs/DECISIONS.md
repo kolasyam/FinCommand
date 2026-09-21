@@ -121,6 +121,20 @@ The tree-only, no-`eval()` rule below is unchanged. Ledger metrics (`definition_
 4. **A limited sync must say so.** Non-fatal problems (bills not fetched, no bills, skipped foreign bills, failed customer months, a partial chart of accounts) are recorded on the sync log and returned as the sync's warning; the year's bills and expenses are kept with the batch. (The empty vendor report was exactly such a silent failure: the old build's timestamp `date_start` was rejected by Zoho with HTTP 400 and swallowed.)
 5. **The chart of accounts is read in full** (all pages).
 
+## 14. Reading every kind of Zoho record (2026-09-21)
+
+**Decision** (owner request: "read all data from Zoho whatever it will give"; design and evidence in `ZOHO-RECORDS.md`).
+1. **A read-only mirror in new tables, not a change to the statement pipeline.** Report numbers cannot change; using the data (ageing, GST summary, drill-downs) is a separate, later plan.
+2. **Everything Zoho returns is kept as JSON; typed columns exist only to filter on** (owner chose "full JSON + typed columns + a line table" over a typed table per module). A new Zoho field needs no migration; a new module is one registry entry.
+3. **GST data means the GST fields on each document plus the tax masters and the tax-summary report.** Zoho's API has no GSTR endpoints (measured), so a GSTR-style report would have to be computed from the stored lines later.
+4. **Incremental by `last_modified_time` where Zoho supports it** (proved on the big modules); modules without it are read in full, by the scheduler at most daily. A complete full listing (forced weekly) is the only thing that flags a record as removed in Zoho.
+5. **Time-boxed, resumable slices**, because a full first read (~1,000+ calls) does not fit one serverless request. The Upload tab drives it; a cron continues and refreshes it.
+6. **API budget: up to 80% of the day's allowance (owner choice)**, counting every Zoho call that day, with the rest reserved for a statement sync. The plan's real allowance is set on the Upload tab.
+7. **Access: admin, CFO, CEO and auditor read; admin and CFO start a read** (owner choice; the records include bank and contact details).
+8. **Two waste problems fixed on the way:** a failing statement sync used to retry on every scheduler tick (~40 calls each — up to ~3,800 a day of a 5,000 allowance); it now backs off 15 min → 1 h → 6 h → 24 h. And the 15-minute frequency costs ~4,300 calls a day, so the Upload tab shows each frequency's projected cost and warns from 50%.
+10. **A rate-limit refusal of a token refresh no longer disconnects the connection.** Only a rejected token (`invalid_code` …) deactivates it. A healthy production connection was deactivated this way on 2026-09-21 (Zoho accepted the same refresh token minutes later).
+9. **Expense line detail (GST/ITC per line) is opt-in**: it costs one call per expense (2,041 for the reference org); the list row already carries every amount.
+
 ## 12. Latency — round trips are the cost (2026-09-20)
 
 **Decision** (by the owner; measurements and proofs in `LATENCY.md`). Report content does not change: 84/84 `/reports/all` and 28/28 `/reports/threeyear` responses are identical before and after.
