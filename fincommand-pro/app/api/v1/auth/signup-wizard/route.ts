@@ -185,4 +185,4 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     },
     company,
   }, { status: 201 });
-});
+}, { system: true });

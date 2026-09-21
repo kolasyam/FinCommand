@@ -31,4 +31,4 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
 
   const newAccess = signAccessToken(rows[0].user_id, rows[0].role, rows[0].company_id);
   return json({ access_token: newAccess, token_type: 'Bearer', expires_in: 900 });
-});
+}, { system: true });

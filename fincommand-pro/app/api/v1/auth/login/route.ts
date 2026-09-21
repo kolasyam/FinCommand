@@ -90,4 +90,4 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       company_name: user.company_name,
     },
   });
-});
+}, { system: true });

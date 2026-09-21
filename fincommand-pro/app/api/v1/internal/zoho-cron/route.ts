@@ -3,6 +3,7 @@ import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import { query } from '@/lib/db/neon';
 import { checkCronSecret } from '@/lib/auth/cron-auth';
 import { syncFromZoho } from '@/lib/services/zoho';
+import { runAsCompany } from '@/lib/db/tenant-context';
 
 export const runtime = 'nodejs';
 
@@ -59,7 +60,9 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   );
   for (const row of rows) {
     try {
-      const r = await syncFromZoho(row.company_id, row.fy_id, null, { scheduled: true });
+      // The company list above is read on the system connection; each company's sync then runs AS that company,
+      // so under row-level security a bug in one sync cannot touch another company's rows.
+      const r = await runAsCompany(row.company_id, () => syncFromZoho(row.company_id, row.fy_id, null, { scheduled: true }));
       results.push(r.skipped ? { company_id: row.company_id, status: 'skipped', skipped: r.skipped } : { company_id: row.company_id, status: 'ok' });
     } catch (e) {
       results.push({ company_id: row.company_id, status: 'error', error: (e as Error).message });
@@ -67,4 +70,4 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   }
 
   return json({ ran_at: new Date().toISOString(), results });
-});
+}, { system: true });

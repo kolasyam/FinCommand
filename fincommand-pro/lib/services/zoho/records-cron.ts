@@ -3,6 +3,7 @@ import { ZOHO_MODULES, ZOHO_REPORTS } from './modules';
 import { DEFAULT_SLICE_MS, runModuleSlice } from './records-sync';
 import { recordRefreshIntervalMs } from './budget';
 import { recordZohoFailure } from './health';
+import { runAsCompany } from '@/lib/db/tenant-context';
 
 export interface ScheduledReadResult {
   company_id: string;
@@ -40,14 +41,15 @@ export async function runScheduledRecordReads(opts: { budgetMs: number; now?: ()
     const left = opts.budgetMs - (now() - started);
     if (left < 10_000) break;
     try {
-      const r = await runModuleSlice(row.company_id, {
+      // The company list is read on the system connection; each company's read runs AS that company.
+      const r = await runAsCompany(row.company_id, () => runModuleSlice(row.company_id, {
         modules: ZOHO_MODULES,
         reports: ZOHO_REPORTS,
         scheduled: true,
         mode: 'incremental',
         runStartedAt: new Date(now() - recordRefreshIntervalMs(row.sync_frequency)).toISOString(),
         sliceMs: Math.min(DEFAULT_SLICE_MS, left - 5_000),
-      });
+      }));
       if (r.stopped === 'auth') await recordZohoFailure(row.company_id);
       results.push({ company_id: row.company_id, status: r.stopped === 'auth' ? 'error' : 'ok', stopped: r.stopped, calls: r.callsMade, error: r.stopped === 'auth' ? r.errors[0] : undefined });
     } catch (e) {

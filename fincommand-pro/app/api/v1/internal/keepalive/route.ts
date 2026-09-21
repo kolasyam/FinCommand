@@ -23,4 +23,4 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   await query('SELECT 1');
   // `ms` is how long the database took to answer — a wake-up shows as seconds.
   return json({ ok: true, ms: Math.round(performance.now() - started) });
-});
+}, { system: true });

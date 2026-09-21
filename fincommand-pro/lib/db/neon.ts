@@ -1,4 +1,5 @@
-import { Pool, type PoolClient, type QueryResultRow } from 'pg';
+import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from 'pg';
+import { assertCompanyId, currentCompanyId } from './tenant-context';
 
 /**
  * Neon/PostgreSQL connection pool.
@@ -14,6 +15,8 @@ import { Pool, type PoolClient, type QueryResultRow } from 'pg';
 declare global {
   // eslint-disable-next-line no-var
   var __fcPgPool: Pool | undefined;
+  // eslint-disable-next-line no-var
+  var __fcTenantPool: Pool | undefined;
 }
 
 // Guards every connection the pool ever hands out, regardless of which
@@ -42,12 +45,32 @@ const IDLE_IN_TRANSACTION_TIMEOUT_MS = parseInt(process.env.DB_IDLE_IN_TRANSACTI
 const IDLE_TIMEOUT_MS = parseInt(process.env.DB_IDLE_TIMEOUT_MS || '300000');
 const KEEP_ALIVE = { keepAlive: true, keepAliveInitialDelayMillis: 10000 };
 
-function buildPool(): Pool {
+/** The same connection string, logging in as another role. */
+function withCredentials(url: string, creds?: { user: string; password: string }): string {
+  if (!creds) return url;
+  const u = new URL(url);
+  u.username = creds.user;
+  u.password = creds.password;
+  return u.toString();
+}
+
+/**
+ * The login of the RESTRICTED role (migration 0008) the app uses for company-scoped
+ * work, when both variables are set. Unset = no row-level security enforcement: the
+ * app keeps using the owner login exactly as before.
+ */
+export function tenantCredentials(env: NodeJS.ProcessEnv = process.env): { user: string; password: string } | null {
+  const user = env.DB_APP_USER?.trim();
+  const password = env.DB_APP_PASSWORD;
+  return user && password ? { user, password } : null;
+}
+
+function buildPool(creds?: { user: string; password: string }): Pool {
   const ssl = process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false;
 
   if (process.env.DATABASE_URL) {
     return new Pool({
-      connectionString: process.env.DATABASE_URL,
+      connectionString: withCredentials(process.env.DATABASE_URL, creds),
       min: parseInt(process.env.DB_POOL_MIN || '2'),
       max: parseInt(process.env.DB_POOL_MAX || '10'),
       idleTimeoutMillis: IDLE_TIMEOUT_MS,
@@ -69,8 +92,8 @@ function buildPool(): Pool {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '5432'),
     database: process.env.DB_NAME || 'fincommand',
-    user: process.env.DB_USER || 'fincommand_user',
-    password: process.env.DB_PASSWORD,
+    user: creds?.user ?? (process.env.DB_USER || 'fincommand_user'),
+    password: creds ? creds.password : process.env.DB_PASSWORD,
     min: parseInt(process.env.DB_POOL_MIN || '2'),
     max: parseInt(process.env.DB_POOL_MAX || '10'),
     idleTimeoutMillis: IDLE_TIMEOUT_MS,
@@ -90,14 +113,65 @@ if (process.env.NODE_ENV === 'development' && global.__fcPgPool) {
   global.__fcPgPool.end().catch(() => {});
   global.__fcPgPool = undefined;
 }
+if (process.env.NODE_ENV === 'development' && global.__fcTenantPool) {
+  global.__fcTenantPool.end().catch(() => {});
+  global.__fcTenantPool = undefined;
+}
 
 // Reuse a single pool across server invocations.
+// This is the SYSTEM connection: the owner login, which bypasses row-level security. Login, signup,
+// token refresh, the OAuth callback, cron, migrations and scripts use it.
 const pool: Pool = global.__fcPgPool || buildPool();
 global.__fcPgPool = pool;
 
 pool.on('error', (err) => {
   console.error('PostgreSQL pool error:', err.message);
 });
+
+// The TENANT connection: the restricted login (migration 0008). Company-scoped requests use it, inside a
+// transaction that names the company, so the database itself refuses any other company's rows. Only built
+// when DB_APP_USER and DB_APP_PASSWORD are set; otherwise everything runs on the system connection as before.
+const tenantCreds = tenantCredentials();
+const tenantPool: Pool | null = tenantCreds ? (global.__fcTenantPool || buildPool(tenantCreds)) : null;
+if (tenantPool) {
+  global.__fcTenantPool = tenantPool;
+  tenantPool.on('error', (err) => {
+    console.error('PostgreSQL tenant pool error:', err.message);
+  });
+}
+
+/** True when company-scoped work runs under row-level security. */
+export function rowLevelSecurityActive(): boolean {
+  return tenantPool !== null;
+}
+
+/** "BEGIN, then say which company this transaction is for" in one round trip. The id is a validated UUID. */
+export function scopedBeginSql(companyId: string): string {
+  return `BEGIN; SELECT set_config('app.company_id', '${assertCompanyId(companyId)}', true)`;
+}
+
+/**
+ * Runs one statement as `companyId`: BEGIN + scope, the statement, COMMIT. `set_config(..., true)` lasts for
+ * this transaction only, so nothing stays on the pooled server connection for the next client (safe behind
+ * PgBouncer's transaction mode). COMMIT is awaited: a write must be durable before the caller is told.
+ */
+export async function runScopedQuery<T extends QueryResultRow = QueryResultRow>(
+  p: Pick<Pool, 'connect'>, companyId: string, text: string, params?: unknown[],
+): Promise<QueryResult<T>> {
+  const client = await p.connect();
+  let destroy: Error | undefined;
+  try {
+    await client.query(scopedBeginSql(companyId));
+    const result = await client.query<T>(text, params);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK').catch((e: Error) => { destroy = e; });
+    throw err;
+  } finally {
+    client.release(destroy); // a connection that could not even roll back is discarded, not reused
+  }
+}
 
 // Schema changes are never made from here. There used to be a startup
 // ALTER TABLE for dashboard_widgets' widget_type CHECK (it drifted out of
@@ -143,20 +217,29 @@ export function startKeepAlive(p: Pick<Pool, 'query'>, everyMs: number): ReturnT
 const keepAliveMs = keepAliveIntervalMs();
 if (keepAliveMs > 0) startKeepAlive(pool, keepAliveMs);
 
-export function query<T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]) {
+export function query<T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]): Promise<QueryResult<T>> {
+  const companyId = currentCompanyId();
+  if (companyId && tenantPool) return runScopedQuery<T>(tenantPool, companyId, text, params);
   return pool.query<T>(text, params);
 }
 
+/** A client on the SYSTEM connection (bypasses row-level security). Nothing in the app uses this; scripts may. */
 export function getClient(): Promise<PoolClient> {
   return pool.connect();
 }
 
-/** Transaction helper — mirrors db.withTransaction() from the original connection.js. */
+/**
+ * Transaction helper — mirrors db.withTransaction() from the original connection.js.
+ * Inside a company's request (and with the restricted login configured) the transaction is scoped to that
+ * company from its first statement, at no extra round trip.
+ */
 export async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
-  const client = await pool.connect();
+  const companyId = currentCompanyId();
+  const scoped = Boolean(companyId && tenantPool);
+  const client = await (scoped ? tenantPool! : pool).connect();
   let released = false;
   try {
-    await client.query('BEGIN');
+    await client.query(scoped ? scopedBeginSql(companyId!) : 'BEGIN');
     const result = await fn(client);
     await client.query('COMMIT');
     return result;
@@ -174,5 +257,10 @@ export async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>)
   }
 }
 
-export { pool };
-export default { query, getClient, withTransaction, pool };
+/** Closes both pools (scripts and tests that must exit). */
+export async function endPools(): Promise<void> {
+  await Promise.all([pool.end(), tenantPool ? tenantPool.end() : Promise.resolve()]);
+}
+
+export { pool, tenantPool };
+export default { query, getClient, withTransaction, pool, tenantPool };

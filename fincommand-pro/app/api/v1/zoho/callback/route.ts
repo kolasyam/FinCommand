@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import axios from 'axios';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import { query } from '@/lib/db/neon';
+import { runAsCompany } from '@/lib/db/tenant-context';
 import { ZOHO_ACCOUNTS } from '@/lib/services/zoho';
 import { verifyOAuthState } from '@/lib/security/oauth-state';
 import { encryptToken } from '@/lib/security/token-crypto';
@@ -32,9 +33,10 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   if (!verified.ok) return fail(verified.error);
   const { companyId, dataCenter: dc, userId } = verified.value;
   // …and the person who started it can still manage this company's Zoho connection.
-  const { rows: starter } = await query<{ role: string }>(
+  // (The state is signed by us, so its company is trustworthy: from here the database work runs AS that company.)
+  const { rows: starter } = await runAsCompany(companyId, () => query<{ role: string }>(
     `SELECT role FROM users WHERE id=$1 AND company_id=$2 AND is_active=TRUE`, [userId, companyId]
-  );
+  ));
   if (!starter.length || !(ROLE_SETS.isCFO as string[]).includes(starter[0].role)) {
     return fail('Your account can no longer connect Zoho Books for this company.');
   }
@@ -71,7 +73,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
 
     // Tokens are stored encrypted (lib/security/token-crypto.ts); this throws
     // — and the user sees the error — if TOKEN_ENCRYPTION_KEY is missing.
-    await query(
+    await runAsCompany(companyId, () => query(
       `INSERT INTO zoho_config
         (company_id, access_token, refresh_token, token_expiry, data_center, is_active, last_sync_status, last_sync_error)
        VALUES ($1,$2,$3,$4,$5,TRUE,'never',NULL)
@@ -79,10 +81,10 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
          access_token=$2, refresh_token=$3, token_expiry=$4,
          data_center=$5, is_active=TRUE, last_sync_status='never', last_sync_error=NULL, updated_at=NOW()`,
       [companyId, encryptToken(access_token), encryptToken(refresh_token), expiry, dc]
-    );
+    ));
 
     return NextResponse.redirect(`${baseUrl}/dashboard?tab=upload&zoho=connected`);
   } catch (err) {
     return NextResponse.redirect(`${baseUrl}/dashboard?tab=upload&zoho_error=${encodeURIComponent((err as Error).message)}`);
   }
-});
+}, { system: true });

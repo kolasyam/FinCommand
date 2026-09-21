@@ -17,4 +17,4 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
 
   const results = await runScheduledRecordReads({ budgetMs: 55_000 });
   return json({ ran_at: new Date().toISOString(), results });
-});
+}, { system: true });

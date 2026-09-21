@@ -121,6 +121,16 @@ The tree-only, no-`eval()` rule below is unchanged. Ledger metrics (`definition_
 4. **A limited sync must say so.** Non-fatal problems (bills not fetched, no bills, skipped foreign bills, failed customer months, a partial chart of accounts) are recorded on the sync log and returned as the sync's warning; the year's bills and expenses are kept with the batch. (The empty vendor report was exactly such a silent failure: the old build's timestamp `date_start` was rejected by Zoho with HTTP 400 and swallowed.)
 5. **The chart of accounts is read in full** (all pages).
 
+## 15. The database enforces company separation — row-level security (2026-09-21)
+
+**Decision** (owner: "build my database at high level"; plan phases A–D, this is A; detail and proof in `ROW-LEVEL-SECURITY.md`).
+1. **The database, not only the app's queries, keeps companies apart.** A missed `WHERE company_id = …` can no longer leak another company's rows once the switch is on.
+2. **A new restricted login (`fincommand_app`), because the current one owns the tables and bypasses row-level security.** Two connections: the owner login stays the *system* connection; company-scoped requests use the restricted one.
+3. **Enforced in production only; local development keeps the owner login** (owner choice): the restricted path costs ~2 extra round trips per query — negligible in `iad1` next to Neon, ~0.5 s from India.
+4. **Inert until switched on and instantly reversible**: two environment variables (`DB_APP_USER`, `DB_APP_PASSWORD`); unset them and the app is back on the owner login. The password is set by the owner (clipboard, never printed).
+5. **Fails closed everywhere**: no company set = no rows; a malformed company id is an error; a new table is closed to the app role until a migration opens it (tested).
+6. **Proven before switching on**: 310/310 leak checks over all tables, 287/287 route responses identical, 28/28 write-path checks as the restricted role.
+
 ## 14. Reading every kind of Zoho record (2026-09-21)
 
 **Decision** (owner request: "read all data from Zoho whatever it will give"; design and evidence in `ZOHO-RECORDS.md`).

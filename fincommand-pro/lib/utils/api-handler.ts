@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ApiError } from '@/lib/auth/permissions';
+import { ApiError, claimedCompanyId } from '@/lib/auth/permissions';
+import { isCompanyId, runAsCompany } from '@/lib/db/tenant-context';
 
 interface PgError extends Error {
   code?: string;
@@ -18,10 +19,19 @@ interface PgError extends Error {
  * (e.g. `{ params: Promise<{ id: string }> }`) keep their exact param types.
  */
 export function withErrorHandling<C = { params: Promise<Record<string, never>> }>(
-  handler: (req: NextRequest, ctx: C) => Promise<Response>
+  handler: (req: NextRequest, ctx: C) => Promise<Response>,
+  options: { system?: boolean } = {},
 ): (req: NextRequest, ctx: C) => Promise<Response> {
   return async (req, ctx) => {
     try {
+      // The company this request is for, from its signature-verified token (no database access). Everything the
+      // handler awaits then runs as that company: with the restricted database login configured, the database
+      // itself shows and accepts only that company's rows (migration 0008, lib/db/tenant-context.ts).
+      //
+      // Routes that do not authenticate a company (login, signup, token refresh, the OAuth callback, cron) pass
+      // { system: true }: they must see across companies, and a stale token in the browser must not narrow them.
+      const companyId = options.system ? null : claimedCompanyId(req);
+      if (isCompanyId(companyId)) return await runAsCompany(companyId, () => handler(req, ctx));
       return await handler(req, ctx);
     } catch (err) {
       const e = err as PgError;

@@ -59,6 +59,12 @@ Zoho's Sales by Customer report gives every amount already in the organisation's
 - **Read access is `admin, cfo, ceo, auditor`; starting a read is `admin, cfo`.** The records include bank transactions and contact and user details. Every query filters on `company_id` taken from the authenticated user, never from the request.
 - The scheduler touches only companies whose admin already started a first read.
 
+### ⛔ The database keeps companies apart — row-level security (2026-09-21, `ROW-LEVEL-SECURITY.md`)
+- **Every new table** gets `ENABLE ROW LEVEL SECURITY`, a `company_id = app_company_id()` policy (with `WITH CHECK`) and a `GRANT` to `fincommand_app` in its own migration. No default privileges, on purpose. `tests/unit/rls-coverage.test.ts` fails otherwise.
+- **A route that does not authenticate a company** (login, signup, refresh, OAuth callback, cron) passes `{ system: true }` to `withErrorHandling`; server-started work for one company runs inside `runAsCompany(id, …)`. A company id placed into SQL must pass `assertCompanyId` (UUID only).
+- The restricted role is never given `BYPASSRLS`, ownership, `CREATE`, or DML on the audit trail beyond `INSERT`/`SELECT`. Its password is set with `db/scripts/set-app-role-password.ts` (clipboard, never printed) and lives only in Vercel's environment.
+- The app's own `company_id` filters stay; row-level security is the second line, not a replacement.
+
 ### ⛔ Secrets and tenancy (DB Phase 0)
 - Zoho tokens are **encrypted at rest** (`lib/security/token-crypto.ts`, `TOKEN_ENCRYPTION_KEY`), and no API response ever includes them.
 - The Zoho connect `state` is **signed and expires** (`lib/security/oauth-state.ts`).

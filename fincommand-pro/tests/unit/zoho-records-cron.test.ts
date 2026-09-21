@@ -11,6 +11,9 @@ import { ZOHO_MODULES, ZOHO_REPORTS } from '@/lib/services/zoho/modules';
 import { recordRefreshIntervalMs, isValidDailyLimit, ZOHO_PLAN_LIMITS } from '@/lib/services/zoho/budget';
 
 const T0 = Date.parse('2026-09-21T12:00:00Z');
+// Company ids are UUIDs (the database scope is built from them).
+const C1 = '11111111-1111-4111-8111-111111111111';
+const C2 = '22222222-2222-4222-8222-222222222222';
 const ok = (over: Record<string, unknown> = {}) => ({ done: true, stopped: 'complete', callsMade: 4, errors: [], ...over });
 
 beforeEach(() => { mockQuery.mockReset(); mockSlice.mockReset(); mockFail.mockReset(); });
@@ -30,15 +33,15 @@ describe('which companies a scheduled read touches', () => {
 
 describe('how a scheduled read runs', () => {
   test('reads all modules incrementally; what was read within the interval counts as fresh', async () => {
-    mockQuery.mockResolvedValue({ rows: [{ company_id: 'c1', sync_frequency: 'hourly' }, { company_id: 'c2', sync_frequency: 'daily' }] });
+    mockQuery.mockResolvedValue({ rows: [{ company_id: C1, sync_frequency: 'hourly' }, { company_id: C2, sync_frequency: 'daily' }] });
     mockSlice.mockResolvedValue(ok());
     const r = await runScheduledRecordReads({ budgetMs: 55_000, now: () => T0 });
     expect(r).toEqual([
-      { company_id: 'c1', status: 'ok', stopped: 'complete', calls: 4, error: undefined },
-      { company_id: 'c2', status: 'ok', stopped: 'complete', calls: 4, error: undefined },
+      { company_id: C1, status: 'ok', stopped: 'complete', calls: 4, error: undefined },
+      { company_id: C2, status: 'ok', stopped: 'complete', calls: 4, error: undefined },
     ]);
     const [c1, o1] = mockSlice.mock.calls[0]!;
-    expect(c1).toBe('c1');
+    expect(c1).toBe(C1);
     expect(o1.modules).toBe(ZOHO_MODULES);
     expect(o1.reports).toBe(ZOHO_REPORTS);
     expect(o1.scheduled).toBe(true);
@@ -54,7 +57,7 @@ describe('how a scheduled read runs', () => {
   });
 
   test('the slice never outlasts the time left in the cron run', async () => {
-    mockQuery.mockResolvedValue({ rows: [{ company_id: 'c1', sync_frequency: 'daily' }] });
+    mockQuery.mockResolvedValue({ rows: [{ company_id: C1, sync_frequency: 'daily' }] });
     mockSlice.mockResolvedValue(ok());
     await runScheduledRecordReads({ budgetMs: 25_000, now: () => T0 });
     expect(mockSlice.mock.calls[0]![1].sliceMs).toBe(20_000);
@@ -65,24 +68,24 @@ describe('how a scheduled read runs', () => {
 
   test('a company is not started when under 10 seconds remain', async () => {
     let t = T0;
-    mockQuery.mockResolvedValue({ rows: [{ company_id: 'c1', sync_frequency: 'daily' }, { company_id: 'c2', sync_frequency: 'daily' }] });
+    mockQuery.mockResolvedValue({ rows: [{ company_id: C1, sync_frequency: 'daily' }, { company_id: C2, sync_frequency: 'daily' }] });
     mockSlice.mockImplementation(async () => { t += 50_000; return ok(); });
     const r = await runScheduledRecordReads({ budgetMs: 55_000, now: () => t });
-    expect(r.map((x) => x.company_id)).toEqual(['c1']);
+    expect(r.map((x) => x.company_id)).toEqual([C1]);
   });
 });
 
 describe('when Zoho cannot be read', () => {
   test('a lost connection backs the company off and is reported as an error', async () => {
-    mockQuery.mockResolvedValue({ rows: [{ company_id: 'c1', sync_frequency: 'daily' }] });
+    mockQuery.mockResolvedValue({ rows: [{ company_id: C1, sync_frequency: 'daily' }] });
     mockSlice.mockResolvedValue(ok({ done: false, stopped: 'auth', errors: ['Zoho re-authentication failed'] }));
     const r = await runScheduledRecordReads({ budgetMs: 55_000, now: () => T0 });
-    expect(mockFail).toHaveBeenCalledWith('c1');
+    expect(mockFail).toHaveBeenCalledWith(C1);
     expect(r[0]).toMatchObject({ status: 'error', stopped: 'auth', error: 'Zoho re-authentication failed' });
   });
 
   test('running out of allowance or time is not a failure', async () => {
-    mockQuery.mockResolvedValue({ rows: [{ company_id: 'c1', sync_frequency: 'daily' }] });
+    mockQuery.mockResolvedValue({ rows: [{ company_id: C1, sync_frequency: 'daily' }] });
     for (const stopped of ['time', 'daily_budget', 'daily_limit', 'rate_limited']) {
       mockSlice.mockResolvedValue(ok({ done: false, stopped }));
       const r = await runScheduledRecordReads({ budgetMs: 55_000, now: () => T0 });
@@ -92,11 +95,11 @@ describe('when Zoho cannot be read', () => {
   });
 
   test('one company throwing does not stop the others', async () => {
-    mockQuery.mockResolvedValue({ rows: [{ company_id: 'c1', sync_frequency: 'daily' }, { company_id: 'c2', sync_frequency: 'daily' }] });
+    mockQuery.mockResolvedValue({ rows: [{ company_id: C1, sync_frequency: 'daily' }, { company_id: C2, sync_frequency: 'daily' }] });
     mockSlice.mockRejectedValueOnce(new Error('Zoho Books is not connected')).mockResolvedValueOnce(ok());
     const r = await runScheduledRecordReads({ budgetMs: 55_000, now: () => T0 });
     expect(r.map((x) => x.status)).toEqual(['error', 'ok']);
-    expect(mockFail).toHaveBeenCalledWith('c1');
+    expect(mockFail).toHaveBeenCalledWith(C1);
   });
 });
 
