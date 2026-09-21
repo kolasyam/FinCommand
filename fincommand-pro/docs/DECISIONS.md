@@ -121,6 +121,16 @@ The tree-only, no-`eval()` rule below is unchanged. Ledger metrics (`definition_
 4. **A limited sync must say so.** Non-fatal problems (bills not fetched, no bills, skipped foreign bills, failed customer months, a partial chart of accounts) are recorded on the sync log and returned as the sync's warning; the year's bills and expenses are kept with the batch. (The empty vendor report was exactly such a silent failure: the old build's timestamp `date_start` was rejected by Zoho with HTTP 400 and swallowed.)
 5. **The chart of accounts is read in full** (all pages).
 
+## 16. Bank transactions get their own partitioned table (2026-09-21)
+
+**Decision** (owner: "build my database at high level"; plan phases A–D, this is B; detail and proof in `ZOHO-RECORDS.md`).
+1. **Bank transactions move out of the generic `zoho_records` into `zoho_bank_transactions`,** the one module that can reach millions of rows for a big company. Typed columns for what queries ask, full JSON kept, same content-hash / history / never-delete-on-removal rules.
+2. **Automatic hash partitioning by company: 16 partitions** (owner choice). No per-company set-up, every query touches one partition; row-level security on the parent and each partition.
+3. **Primary key `(company_id, account_id, txn_id)`,** because a Zoho transaction id is only unique within a bank account. The API keeps the composite `account:txn` id, its shape and its order.
+4. **The list order is a total order with a matching index (`0010`).** Found by measuring, not guessing: with `0009`'s plain `DESC` index every page sorted the whole company (135–312 ms at 200,000 rows and growing). `0010` reads a page off the index (0.1–17 ms). A unit test fails if the query and the index drift.
+5. **Moved with a fingerprint on both sides, in two separate gated steps.** *Copy* (insert-only into an empty table; done on main, 3,341 rows, fingerprints identical) and *retire the old copies* (needs the owner's approval of its own dry-run list; **not done**). The old and the new code coexist until then.
+6. **Proven before main:** listing equal to the old one field by field and in order (two defects found and fixed: an unstable page order, and a missing base amount), a live re-read that changed only what genuinely changed in Zoho, a second re-read that changed 0, all 8 bank accounts tying to Zoho's book balances, 320/320 leak checks, partition pruning under the restricted login, a synthetic 230,000-row scale test (deleted afterwards).
+
 ## 15. The database enforces company separation — row-level security (2026-09-21)
 
 **Decision** (owner: "build my database at high level"; plan phases A–D, this is A; detail and proof in `ROW-LEVEL-SECURITY.md`).

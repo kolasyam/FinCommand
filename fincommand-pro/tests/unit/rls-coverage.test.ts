@@ -18,8 +18,10 @@ const sources = [baseline, ...files.map(sql)];
 const created = new Set<string>();
 const dropped = new Set<string>();
 for (const text of sources) {
-  for (const m of text.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?"?([a-z_0-9]+)"?/gi)) created.add(m[1]!.toLowerCase());
-  for (const m of text.matchAll(/DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:public\.)?"?([a-z_0-9]+)"?/gi)) dropped.add(m[1]!.toLowerCase());
+  // (?!if\b): "CREATE TABLE IF NOT EXISTS %I ..." inside a DO block is a partition loop, not a table called "if".
+  // Partitions are reached only through their parent, which is what must be covered.
+  for (const m of text.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?"?(?!if\b)([a-z_0-9]+)"?/gi)) created.add(m[1]!.toLowerCase());
+  for (const m of text.matchAll(/DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:public\.)?"?(?!if\b)([a-z_0-9]+)"?/gi)) dropped.add(m[1]!.toLowerCase());
 }
 
 const covered = new Set<string>();
@@ -47,6 +49,13 @@ describe('row-level security coverage', () => {
     expect(text).toMatch(/WITH CHECK/);
     // a policy that would let every row through (fail open) is never written
     expect(text).not.toMatch(/USING\s*\(\s*true\s*\)/i);
+  });
+
+  test('a table added later without row-level security WOULD be caught (the check has teeth)', () => {
+    const sample = 'CREATE TABLE IF NOT EXISTS zz_new_table (a int);';
+    const found = [...sample.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?"?(?!if\b)([a-z_0-9]+)"?/gi)].map((m) => m[1]);
+    expect(found).toEqual(['zz_new_table']);
+    expect(covered.has('zz_new_table')).toBe(false);
   });
 
   test('the restricted role is created without BYPASSRLS and without a password in git', () => {

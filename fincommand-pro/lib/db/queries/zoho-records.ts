@@ -1,4 +1,6 @@
 import { query } from '@/lib/db/neon';
+import { usesBankTable } from '@/lib/services/zoho/modules';
+import { BANK_TXN_MODULE, parseBankTxnRecordId } from '@/lib/services/zoho/bank-transactions';
 
 /** SQL for the mirrored Zoho records: read progress, the detail queue, removals, and reading records back. Every query filters on company_id. */
 
@@ -168,6 +170,14 @@ export async function markDetailGone(companyId: string, module: string, zohoId: 
 
 /** How many stored, non-removed records were seen at or after `since`. */
 export async function countSeenSince(companyId: string, module: string, since: Date): Promise<{ seen: number; total: number }> {
+  if (usesBankTable(module)) {
+    const { rows } = await query<{ seen: string; total: string }>(
+      `SELECT count(*) FILTER (WHERE last_seen_at >= $2) AS seen, count(*) AS total
+         FROM zoho_bank_transactions WHERE company_id=$1 AND deleted_at IS NULL`,
+      [companyId, since]
+    );
+    return { seen: Number(rows[0]?.seen ?? 0), total: Number(rows[0]?.total ?? 0) };
+  }
   const { rows } = await query<{ seen: string; total: string }>(
     `SELECT count(*) FILTER (WHERE last_seen_at >= $3) AS seen, count(*) AS total
        FROM zoho_records WHERE company_id=$1 AND module=$2 AND deleted_at IS NULL`,
@@ -178,6 +188,14 @@ export async function countSeenSince(companyId: string, module: string, since: D
 
 /** After a COMPLETE full listing: records Zoho no longer lists are flagged as removed (never deleted). */
 export async function markMissingRemoved(companyId: string, module: string, passStartedAt: Date): Promise<number> {
+  if (usesBankTable(module)) {
+    const { rowCount } = await query(
+      `UPDATE zoho_bank_transactions SET deleted_at=NOW()
+        WHERE company_id=$1 AND deleted_at IS NULL AND last_seen_at < $2`,
+      [companyId, passStartedAt]
+    );
+    return rowCount ?? 0;
+  }
   const { rowCount } = await query(
     `UPDATE zoho_records SET deleted_at=NOW()
       WHERE company_id=$1 AND module=$2 AND deleted_at IS NULL AND last_seen_at < $3`,
@@ -199,10 +217,22 @@ export async function moduleCounts(companyId: string): Promise<Map<string, Modul
        FROM zoho_records WHERE company_id=$1 GROUP BY module`,
     [companyId]
   );
-  return new Map(rows.map((r) => [r.module!, {
+  const counts = new Map<string, ModuleCounts>(rows.map((r) => [r.module!, {
     module: r.module!, records: Number(r.records), removed: Number(r.removed), with_detail: Number(r.with_detail),
     detail_pending: Number(r.detail_pending), detail_failed: Number(r.detail_failed),
   }]));
+  // Bank transactions live in their own table (0009); it is the source of truth for that module, and any copy
+  // still in zoho_records from before the move is ignored.
+  const bank = await query<{ records: string; removed: string }>(
+    `SELECT count(*) FILTER (WHERE deleted_at IS NULL) AS records, count(*) FILTER (WHERE deleted_at IS NOT NULL) AS removed
+       FROM zoho_bank_transactions WHERE company_id=$1`,
+    [companyId]
+  );
+  counts.set(BANK_TXN_MODULE, {
+    module: BANK_TXN_MODULE, records: Number(bank.rows[0]?.records ?? 0), removed: Number(bank.rows[0]?.removed ?? 0),
+    with_detail: 0, detail_pending: 0, detail_failed: 0,
+  });
+  return counts;
 }
 
 export interface RecordFilters {
@@ -222,7 +252,53 @@ const LIST_COLUMNS = `zoho_id, module, title, parent_id, doc_number, doc_date::t
   currency_code, exchange_rate, amount, base_amount, balance, sub_amount, tax_amount, gst_treatment, gst_no, place_of_supply,
   zoho_modified_at, detail IS NOT NULL AS has_detail, detail_stale, revision, first_seen_at, last_seen_at, deleted_at`;
 
+/** Bank transactions in the shape every record has (so the API and screens need no special case), plus their own fields. */
+const BANK_LIST_COLUMNS = `account_id || ':' || txn_id AS zoho_id, 'banktransactions'::text AS module, account_name AS title, account_id AS parent_id,
+  reference_number AS doc_number, txn_date::text AS doc_date, NULL::text AS due_date, status, customer_id AS contact_id, payee AS contact_name,
+  currency_code, NULL::numeric AS exchange_rate, amount,
+  CASE WHEN currency_code = (SELECT upper(currency) FROM companies WHERE id = $1) THEN amount END AS base_amount,
+  NULL::numeric AS balance, NULL::numeric AS sub_amount,
+  NULL::numeric AS tax_amount, NULL::text AS gst_treatment, NULL::text AS gst_no, NULL::text AS place_of_supply, NULL::timestamptz AS zoho_modified_at,
+  FALSE AS has_detail, FALSE AS detail_stale, revision, first_seen_at, last_seen_at, deleted_at,
+  debit_or_credit, transaction_type, description, offset_account_name, running_balance`;
+
+async function listBankTransactions(companyId: string, f: RecordFilters) {
+  const where = ['company_id=$1'];
+  const params: unknown[] = [companyId];
+  const add = (sql: string, v: unknown) => { params.push(v); where.push(sql.replace('?', `$${params.length}`)); };
+  if (!f.includeRemoved) where.push('deleted_at IS NULL');
+  if (f.q) {
+    params.push(`%${f.q.replace(/[%_\\]/g, '\\$&')}%`);
+    const n = params.length;
+    where.push(`(reference_number ILIKE $${n} OR payee ILIKE $${n} OR account_name ILIKE $${n} OR description ILIKE $${n})`);
+  }
+  if (f.parentId) add('account_id = ?', f.parentId);
+  if (f.contactId) add('customer_id = ?', f.contactId);
+  if (f.status) add('status = ?', f.status);
+  if (f.from) add('txn_date >= ?::date', f.from);
+  if (f.to) add('txn_date <= ?::date', f.to);
+  const perPage = Math.min(Math.max(f.perPage ?? 50, 1), 200);
+  const page = Math.max(f.page ?? 1, 1);
+  const whereSql = where.join(' AND ');
+  const [{ rows }, { rows: total }] = await Promise.all([
+    query(`SELECT ${BANK_LIST_COLUMNS} FROM zoho_bank_transactions WHERE ${whereSql} ORDER BY txn_date DESC NULLS LAST, account_id, txn_id LIMIT ${perPage} OFFSET ${(page - 1) * perPage}`, params),
+    query<{ n: string }>(`SELECT count(*) AS n FROM zoho_bank_transactions WHERE ${whereSql}`, params),
+  ]);
+  return { records: rows, total: Number(total[0]?.n ?? 0), page, per_page: perPage };
+}
+
+async function getBankTransaction(companyId: string, zohoId: string) {
+  const id = parseBankTxnRecordId(zohoId);
+  if (!id) return null;
+  const { rows } = await query(
+    `SELECT ${BANK_LIST_COLUMNS}, payload FROM zoho_bank_transactions WHERE company_id=$1 AND account_id=$2 AND txn_id=$3`,
+    [companyId, id.accountId, id.txnId]
+  );
+  return rows.length ? { ...rows[0], detail: null, lines: [] } : null;
+}
+
 export async function listRecords(companyId: string, f: RecordFilters) {
+  if (usesBankTable(f.module)) return listBankTransactions(companyId, f);
   const where = ['company_id=$1', 'module=$2'];
   const params: unknown[] = [companyId, f.module];
   const add = (sql: string, v: unknown) => { params.push(v); where.push(sql.replace('?', `$${params.length}`)); };
@@ -247,6 +323,7 @@ export async function listRecords(companyId: string, f: RecordFilters) {
 }
 
 export async function getRecord(companyId: string, module: string, zohoId: string) {
+  if (usesBankTable(module)) return getBankTransaction(companyId, zohoId);
   const { rows } = await query(
     `SELECT ${LIST_COLUMNS}, payload, detail FROM zoho_records WHERE company_id=$1 AND module=$2 AND zoho_id=$3`,
     [companyId, module, zohoId]

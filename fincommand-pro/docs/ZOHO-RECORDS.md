@@ -17,11 +17,12 @@
 
 Contacts stay in `zoho_contacts` (`contacts.ts`). **GST data** is the GST fields on each document (`gst_treatment`, `gst_no`, place of supply, HSN/SAC and tax per line, ITC eligibility on bills) plus the tax masters and the tax-summary snapshots. **Zoho's API has no GSTR-1 / GSTR-3B / GST-summary endpoints** (HTTP 404, measured), and its general-ledger report returns account totals only, so transaction-level data comes from the modules above.
 
-## Tables (migrations `0006`, `0007`)
+## Tables (migrations `0006`, `0007`, `0009`, `0010`)
 
 | Table | Holds |
 |---|---|
-| `zoho_records` | one row per Zoho record and company: the list row and the detail record as JSON (**everything Zoho returns**), plus typed columns to filter on (`doc_number, doc_date, due_date, status, contact_*, currency_code, exchange_rate, amount, base_amount, balance, sub_amount, tax_amount, gst_treatment, gst_no, place_of_supply, title, parent_id`) |
+| `zoho_records` | one row per Zoho record and company: the list row and the detail record as JSON (**everything Zoho returns**), plus typed columns to filter on (`doc_number, doc_date, due_date, status, contact_*, currency_code, exchange_rate, amount, base_amount, balance, sub_amount, tax_amount, gst_treatment, gst_no, place_of_supply, title, parent_id`). Every module **except bank transactions** |
+| `zoho_bank_transactions` | bank transactions, **hash-partitioned by company (16 partitions)**, one row per (company, bank account, transaction id), typed columns + the full JSON. See below |
 | `zoho_record_lines` | line items, journal legs and applied documents, with tax, HSN/SAC and ITC as columns |
 | `zoho_record_history` | append-only: the previous version of any record that changed in Zoho |
 | `zoho_module_state` | where each module's read has got to (pass kind, page cursor, bank-account cursor, incremental cursor, last error) |
@@ -32,6 +33,20 @@ Contacts stay in `zoho_contacts` (`contacts.ts`). **GST data** is the GST fields
 Every table has `company_id` and every query filters on it. **Nothing is ever deleted because Zoho removed it**: a complete listing flags `deleted_at`. A record that changes first has its old version copied to history.
 
 **`base_amount` is never estimated.** It is Zoho's own base-currency figure (`bcy_total`, `bcy_amount`, `bcy_balance`), or the document's own amount when the document is in the base currency. A foreign-currency bill or credit note that carries no base figure keeps `base_amount` empty (same rule as the vendor fix in `ZOHO-DATA-AUDIT.md`).
+
+## Bank transactions have their own table (`0009`, `0010`; 2026-09-21)
+
+They were 3,341 of one company's 6,721 `zoho_records` rows, and a big company can have millions. `zoho_bank_transactions` is built for that:
+
+- **Hash-partitioned by `company_id` into 16 partitions**, so no per-company set-up is ever needed, and every query (which always filters on `company_id`) touches **one** partition. Row-level security is on the parent and on every partition; the restricted login has **no privilege on a partition directly**, only through the parent (checked).
+- **Primary key `(company_id, account_id, txn_id)`.** A Zoho transaction id is unique only *within* a bank account (a transfer shows on both accounts under one id; 275 ids repeat across the reference org's accounts), so the id alone would silently merge rows. The API still exposes the old composite `"<account>:<txn>"` id.
+- **Typed columns** for what queries ask (date, amount, debit/credit, type, status, payee, reference, offset account, running balance) + the full JSON + a content hash. An unchanged transaction only has its seen-time touched; a changed one first has its previous version copied to `zoho_record_history` (key `account:txn`), then is updated with `revision + 1`. Nothing is deleted when Zoho stops listing a transaction: `deleted_at` is set.
+- **Same API, same output.** `GET /zoho/records?module=banktransactions`, status counts and single-record reads come from the new table with the shape they had. Checked field by field against the old rows (3,341 shared): identical except what genuinely changed in Zoho since. `base_amount` is the transaction's own amount when it is in the company's base currency (as before), derived at read time. The listing order is `txn_date DESC NULLS LAST, account_id, txn_id`, a total order, identical to the old order over the shared rows.
+- **`0010` matters.** The list needs an index in *exactly* that order. `0009`'s indexes were plain `DESC` (blanks first), so every page sorted the whole company: **135 ms for page 1 and 312 ms for page 400 at 200,000 rows, growing with the count**. With `0010` a page is read off the index: **0.1 ms and 14–17 ms**, with 0 sorts, 1 of 16 partitions, both as the owner and under row-level security. `tests/unit/zoho-bank-queries.test.ts` fails if the query order and the index drift apart.
+
+**Measured at scale** (Neon test branch, synthetic: one company of 200,000 transactions + 30 of 1,000, deleted afterwards): a small company's first page 0.1 ms next to the big one; one account + one year 0.2 ms; a yearly total per account 15 ms; a key lookup 0.0 ms. `count(*)` over the big company is linear (~70 ms per 200,000 rows; ~100 ms under row-level security): the list's total costs that, in parallel with the page. If a company ever reaches millions, cap or estimate the total then. Writes (`upsertBankTransactionsPage`, 200 rows) took ~1.5 s on the big company and ~1.2 s on a small one: about five round trips at ~230 ms from India, so network, not table size.
+
+**Verified on real data (branch, 2026-09-21, Real Variable):** a live re-read of all bank transactions with the new code stored 40 new + 4 changed rows and left 3,337 identical (the 40 are credit-card items created in Zoho after the earlier read: every id is above that account's previous highest; the 4 changes are matching/categorising, each with its previous version in history). A second full re-read of bank accounts and transactions changed **0 rows**. For every one of the 8 accounts that have transactions, a transaction on the account's latest day carries Zoho's book balance for that account exactly; one credit card's balance moved by the 40 new items. The `base_amount` gap and an unstable page order (the ordering key was `txn_id` only) were found by comparing old and new listings and fixed before this shipped.
 
 ## How a read works (`lib/services/zoho/records-sync.ts`)
 
@@ -62,9 +77,11 @@ Only companies whose admin has already started a first read are touched. A tick 
 
 ## Files
 
-`lib/services/zoho/`: `modules.ts` (registry + pure extraction) · `records-sync.ts` (engine) · `records-cron.ts` · `budget.ts` · `usage.ts` · `health.ts`. `lib/ingestion/zoho-records.ts` (the one write path) · `lib/db/queries/zoho-records.ts`. Routes under `app/api/v1/zoho/{modules/sync,modules/status,records,report-snapshots}` and `app/api/v1/internal/zoho-records-cron`. UI: `components/dashboard/ZohoDataPanel.tsx` (Upload tab). Tests: `zoho-modules`, `zoho-records-ingest`, `zoho-records-sync`, `zoho-records-cron`, `zoho-budget`, `zoho-health`.
+`lib/services/zoho/`: `modules.ts` (registry + pure extraction) · `records-sync.ts` (engine) · `records-cron.ts` · `budget.ts` · `usage.ts` · `health.ts`. `lib/ingestion/zoho-records.ts` (the write path for every module but bank transactions) · `lib/ingestion/zoho-bank-transactions.ts` (bank transactions) · `lib/services/zoho/bank-transactions.ts` (their extraction and the `account:txn` id) · `lib/db/queries/zoho-records.ts` · `db/scripts/move-bank-transactions.ts` (the gated copy / retire). Routes under `app/api/v1/zoho/{modules/sync,modules/status,records,report-snapshots}` and `app/api/v1/internal/zoho-records-cron`. UI: `components/dashboard/ZohoDataPanel.tsx` (Upload tab). Tests: `zoho-modules`, `zoho-records-ingest`, `zoho-records-sync`, `zoho-records-cron`, `zoho-budget`, `zoho-health`.
 
 ## Deploying
+
+**Bank transactions (`0009`, `0010`):** applied on main 2026-09-21 (dry run alone first). `npx tsx db/scripts/move-bank-transactions.ts --target=main --copy` (dry run → list id → `--apply --confirm=<id>`) copied the 3,341 existing rows into the new table with the fingerprint identical on both sides (done on main; list id `5765bdd3d548`). **`--retire-old` (removing the old copies from `zoho_records`) is a separate step that needs the owner's approval of its own dry-run list; not done.** Until the new code is deployed the old code keeps reading `zoho_records`, which still holds them, so nothing breaks in between; after deploying, the old copies are dead weight until retired.
 
 `0006` and `0007` are applied on main (2026-09-21); apply them before the new code on any other database (dry run alone first; the old code keeps working on the new schema). Then set the Zoho plan on the Upload tab (Real Variable: Professional) and start the first read from the panel. The new build encrypts the stored Zoho token when it next refreshes: do not run the old and new builds against one database after that.
 

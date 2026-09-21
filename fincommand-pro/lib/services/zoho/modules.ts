@@ -44,6 +44,8 @@ export interface ModuleDef {
   incremental: boolean;
   /** One list read per parent record (e.g. bank transactions per bank account). */
   fanOut?: { parentModule: string; param: string };
+  /** Where the module's rows live: the generic zoho_records (default), or the partitioned bank-transactions table (0009). */
+  store?: 'records' | 'bank_transactions';
   fields: FieldMap;
   lines?: LineSpec[];
 }
@@ -122,7 +124,7 @@ export const ZOHO_MODULES: ModuleDef[] = [
   { key: 'bankaccounts', label: 'Bank accounts', phase: 'B', path: '/bankaccounts', listKey: 'bankaccounts', detail: 'none', incremental: false,
     fields: { id: 'account_id', title: ['account_name'], number: ['account_code'], status: ['is_active'], currency: ['currency_code'], amount: ['balance'], balance: ['bank_balance'], base: ['bcy_balance'] } },
   { key: 'banktransactions', label: 'Bank transactions', phase: 'B', path: '/banktransactions', listKey: 'banktransactions', detail: 'none', incremental: false,
-    fanOut: { parentModule: 'bankaccounts', param: 'account_id' },
+    fanOut: { parentModule: 'bankaccounts', param: 'account_id' }, store: 'bank_transactions',
     fields: { id: 'transaction_id', title: ['account_name'], parent: ['account_id'], number: ['reference_number'], date: ['date'], status: ['status'], contactId: ['customer_id'], contactName: ['payee'], currency: ['currency_code'], amount: ['amount'] } },
   { key: 'items', label: 'Items', phase: 'B', path: '/items', listKey: 'items', detail: 'none', incremental: false,
     fields: { id: 'item_id', title: ['name'], number: ['sku'], status: ['status'], amount: ['rate'] } },
@@ -163,6 +165,11 @@ export const ZOHO_MODULES: ModuleDef[] = [
 
 export function getModule(key: string): ModuleDef | undefined {
   return ZOHO_MODULES.find((m) => m.key === key);
+}
+
+/** True when the module's rows live in zoho_bank_transactions rather than zoho_records. */
+export function usesBankTable(key: string): boolean {
+  return getModule(key)?.store === 'bank_transactions';
 }
 
 export function modulesForPhases(phases: Array<'A' | 'B'>): ModuleDef[] {

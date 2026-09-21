@@ -4,6 +4,7 @@ import { ApiError } from '@/lib/auth/permissions';
 import * as store from '@/lib/db/queries/zoho-records';
 import type { ModuleState, StatePatch } from '@/lib/db/queries/zoho-records';
 import { upsertListPage, writeDetail, saveSnapshot, type PageResult, type DetailOutcome } from '@/lib/ingestion/zoho-records';
+import { upsertBankTransactionsPage } from '@/lib/ingestion/zoho-bank-transactions';
 import { ZOHO_API, callZoho, decryptZohoConfig, refreshZohoTokenSingleFlight, type ZohoConfigRow } from './client';
 import {
   detailDefault, detailRecord, formatZohoModifiedTime, hasMorePages, listRows, type ExtractCtx, type ModuleDef, type ReportDef,
@@ -64,7 +65,8 @@ export const pgStore: RecordStore = {
   claim: store.claimModules,
   release: store.releaseModules,
   saveState: store.saveState,
-  upsertPage: (i) => upsertListPage(i),
+  // Bank transactions have their own partitioned table (migration 0009); every other module is a zoho_records row.
+  upsertPage: (i) => (i.def.store === 'bank_transactions' ? upsertBankTransactionsPage(i) : upsertListPage(i)),
   needingDetail: store.needingDetail,
   writeDetail: (i) => writeDetail(i),
   markDetailFailure: store.markDetailFailure,
