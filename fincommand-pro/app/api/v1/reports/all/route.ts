@@ -16,9 +16,11 @@ import {
 } from '@/lib/financial/tb-engine';
 import { mergeCyLedgers, mergeCyCustomerRevenue, mergeCyVendorExpense } from '@/lib/financial/cy-merge';
 import {
-  getCachedReport, setCachedReport, buildReportCacheKey, hashReportDataVersion,
+  getCachedReportShared, setCachedReport, buildReportCacheKey, hashReportDataVersion,
   getCachedReportInputs, setCachedReportInputs, buildReportInputsKey,
 } from '@/lib/cache/report-cache';
+import { setSharedCached } from '@/lib/cache/shared-cache';
+import { afterResponse } from '@/lib/cache/after-response';
 import { loadCustomMetricDefinitions } from '@/lib/db/queries/custom-metrics';
 import { computeLedgerMetric, priorPeriodOf, type PeriodParams, type LedgerMetricSpec } from '@/lib/financial/tb-engine';
 import type { CustomMetricDefinition } from '@/lib/financial/custom-metric-engine';
@@ -71,7 +73,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   const cacheKey = buildReportCacheKey(user.company_id, fyId, params, dataVersion);
 
   if (!nocache) {
-    const cached = getCachedReport<Record<string, unknown>>(cacheKey);
+    const cached = await getCachedReportShared<Record<string, unknown>>(cacheKey);
     if (cached) {
       return json(cached);
     }
@@ -216,6 +218,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   };
 
   setCachedReport(cacheKey, responseData);
+  afterResponse(() => setSharedCached(cacheKey, responseData)); // shared cache: off unless configured; never delays the response
   return json(responseData);
 });
 

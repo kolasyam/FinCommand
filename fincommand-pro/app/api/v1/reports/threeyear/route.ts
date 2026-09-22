@@ -3,12 +3,15 @@ import { authenticate } from '@/lib/auth/permissions';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import { isIn } from '@/lib/validations/common';
 import { query } from '@/lib/db/neon';
-import { loadStatementLedgers } from '@/lib/db/queries/reports';
+import { loadStatementLedgers, loadReportDataVersion } from '@/lib/db/queries/reports';
 import {
   computeMIS, computePL, computeTreasury, computeRatios, computeCashFlow, computeBS,
   type YearType,
 } from '@/lib/financial/tb-engine';
 import type { FinancialYearRow } from '@/lib/db/queries/reports';
+import { getCachedReportShared, setCachedReport, buildThreeYearCacheKey, hashReportDataVersion } from '@/lib/cache/report-cache';
+import { setSharedCached } from '@/lib/cache/shared-cache';
+import { afterResponse } from '@/lib/cache/after-response';
 
 export const runtime = 'nodejs';
 
@@ -31,15 +34,15 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     return json({ error: 'Provide at most 3 fy_ids for comparison' }, { status: 400 });
   }
 
-  // Everything below depends only on the user or on the requested ids, not on
-  // each other, so it goes out as ONE wave instead of four steps plus a
-  // one-year-at-a-time loop — each of which is a full round trip to the
-  // database (docs/LATENCY.md). Ledgers are preloaded for every id that is a
-  // canonical UUID; anything else (odd casing/format) still goes through the
-  // original per-year load in the loop below, so behaviour is unchanged.
-  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const preloadIds = [...new Set(fyIds.filter(id => UUID.test(id)).map(id => id.toLowerCase()))];
-  const [{ rows: fys }, { rows: companyRows }, { rows: auditRows }, preloaded] = await Promise.all([
+  // The queries below depend only on the user or on the requested ids, not on
+  // each other, so they go out as ONE wave instead of four steps — a full
+  // round trip each (docs/LATENCY.md).
+  const yearType = (yearTypeParam as YearType) || 'FY';
+  const nocache = searchParams.get('nocache') === 'true' || searchParams.get('refresh') === 'true';
+
+  // Light metadata first — needed to validate the request and to build the cache key either way — so a cache HIT
+  // never pays for the per-year ledger loads and statement computes below (docs/SHARED-CACHE.md).
+  const [{ rows: fys }, { rows: companyRows }, { rows: auditRows }, version] = await Promise.all([
     query<FinancialYearRow>(
       `SELECT * FROM financial_years WHERE id = ANY($1) AND company_id = $2 ORDER BY start_date`,
       [fyIds, user.company_id]
@@ -56,8 +59,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     query<{ count: string; last_at: string | null }>(
       `SELECT COUNT(*) AS count, MAX(created_at) AS last_at FROM audit_trail WHERE company_id=$1`, [user.company_id]
     ),
-    Promise.all(preloadIds.map(async id => [id, await loadStatementLedgers(user.company_id, id)] as const))
-      .then(entries => new Map(entries)),
+    loadReportDataVersion(user.company_id),
   ]);
   if (fys.length === 0) return json({ error: 'Financial years not found' }, { status: 404 });
 
@@ -67,7 +69,18 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     last_event_at: auditRows[0]?.last_at || null,
   };
 
-  const yearType = (yearTypeParam as YearType) || 'FY';
+  const dataVersion = hashReportDataVersion(version);
+  const cacheKey = buildThreeYearCacheKey(user.company_id, fyIds, yearType, dataVersion);
+  if (!nocache) {
+    const cached = await getCachedReportShared<Record<string, unknown>>(cacheKey);
+    if (cached) return json(cached);
+  }
+
+  // Ledgers are preloaded, in parallel, for every id that is a canonical UUID; anything else (odd casing/format)
+  // still goes through the original per-year load in the loop below, so behaviour is unchanged.
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const preloadIds = [...new Set(fyIds.filter(id => UUID.test(id)).map(id => id.toLowerCase()))];
+  const preloaded = new Map(await Promise.all(preloadIds.map(async id => [id, await loadStatementLedgers(user.company_id, id)] as const)));
 
   interface CfSummary {
     ocf: number; icf: number; fcf: number;
@@ -171,5 +184,8 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     };
   }
 
-  return json({ years: withGrowth, cagr, generated_at: new Date().toISOString(), source_currency, audit_summary });
+  const responseData = { years: withGrowth, cagr, generated_at: new Date().toISOString(), source_currency, audit_summary };
+  setCachedReport(cacheKey, responseData);
+  afterResponse(() => setSharedCached(cacheKey, responseData));
+  return json(responseData);
 });

@@ -15,17 +15,17 @@ Must pass with **0 errors**. This repo uses `npm run typecheck` as the equivalen
 ```bash
 npm test
 ```
-Must pass all suites. **Verified 2026-09-21** (after the Zoho records mirror, see `ZOHO-RECORDS.md`):
+Must pass all suites. **Verified 2026-09-22** (after the shared report cache, see `SHARED-CACHE.md`):
 ```
-Test Suites: 43 passed, 43 total
-Tests:       740 passed, 740 total
+Test Suites: 44 passed, 44 total
+Tests:       764 passed, 764 total
 ```
-Phase 0 added `migrate-core`, `tb-validation`, `security` (token encryption + OAuth state), `report-cache-key` and `zoho-assembly`. Phase 1 added `ingestion`, `content-hash`, `period-surplus` and `script-support`. The latency pass (`LATENCY.md`) added `auth-claims`, `report-inputs-cache`, `auth-cache`, `cron-auth` and `neon-keepalive`; the Zoho audit added `zoho-people`. Row-level security (`ROW-LEVEL-SECURITY.md`) added `tenant-context`, `tenant-pool`, `api-handler-scope` and `rls-coverage`; its database proof is `db/scripts/rls-check.ts --target=branch` (the leak test, run after any change to policies, grants or the connection layer). The Zoho records mirror added `zoho-modules`, `zoho-records-ingest`, `zoho-records-sync`, `zoho-records-state`, `zoho-records-cron`, `zoho-budget`, `zoho-health`, `zoho-usage` and `zoho-client-limits`. The bank-transactions table (`ZOHO-RECORDS.md`) added `zoho-bank-transactions`, `zoho-bank-queries` (including the check that the list order matches the `0010` index) and `zoho-store-dispatch`; `rls-coverage` now also reads `db/schema.sql` and understands partitions. Its database proof, on the Neon branch: old-vs-new listing equivalence, a live re-read (twice), the bank-balance tie, `rls-check.ts --target=branch` (320/320, partitions carry no direct privilege) and a synthetic scale test with `EXPLAIN ANALYZE` (throwaway scripts, not kept in the repo).
+Phase 0 added `migrate-core`, `tb-validation`, `security` (token encryption + OAuth state), `report-cache-key` and `zoho-assembly`. Phase 1 added `ingestion`, `content-hash`, `period-surplus` and `script-support`. The latency pass (`LATENCY.md`) added `auth-claims`, `report-inputs-cache`, `auth-cache`, `cron-auth` and `neon-keepalive`; the Zoho audit added `zoho-people`. Row-level security (`ROW-LEVEL-SECURITY.md`) added `tenant-context`, `tenant-pool`, `api-handler-scope` and `rls-coverage`; its database proof is `db/scripts/rls-check.ts --target=branch` (the leak test, run after any change to policies, grants or the connection layer). The Zoho records mirror added `zoho-modules`, `zoho-records-ingest`, `zoho-records-sync`, `zoho-records-state`, `zoho-records-cron`, `zoho-budget`, `zoho-health`, `zoho-usage` and `zoho-client-limits`. The bank-transactions table (`ZOHO-RECORDS.md`) added `zoho-bank-transactions`, `zoho-bank-queries` (including the check that the list order matches the `0010` index) and `zoho-store-dispatch`; `rls-coverage` now also reads `db/schema.sql` and understands partitions. Its database proof, on the Neon branch: old-vs-new listing equivalence, a live re-read (twice), the bank-balance tie, `rls-check.ts --target=branch` (320/320, partitions carry no direct privilege) and a synthetic scale test with `EXPLAIN ANALYZE` (throwaway scripts, not kept in the repo). The shared report cache (`SHARED-CACHE.md`) added `shared-cache` (encryption round trip, key scoping, fail-open, timeout, circuit breaker, a fake Upstash server) and extended `report-cache-key` for `/reports/threeyear`'s new cache key. Its database/route proof: 0 of 287 report/route responses changed on the branch, plus an end-to-end run with real routes in separate processes standing in for separate server instances (throwaway script, not kept in the repo).
 
 On a machine short of memory, run `npx jest --runInBand`. If `npx tsc --noEmit` or `next build` runs out of memory ("Zone out of memory", "Array buffer allocation failed"), close other programs and retry; a narrower `tsc -p` over the touched files is a partial substitute, not a replacement.
 
 > [!NOTE]
-> If a future run shows a different suite/test count than 40/712, that's a signal the codebase has moved on since this doc was written — update this section rather than treating the old numbers as ground truth.
+> If a future run shows a different suite/test count than 44/764, that's a signal the codebase has moved on since this doc was written — update this section rather than treating the old numbers as ground truth.
 
 ## Step 3 — Root diagnostic script protocol (DB / financial-calculation changes only)
 

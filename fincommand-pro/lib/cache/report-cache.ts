@@ -11,6 +11,7 @@
  */
 import { createHash } from 'crypto';
 import type { PeriodParams } from '@/lib/financial/tb-engine';
+import { getSharedCached } from './shared-cache';
 
 interface CacheEntry {
   data: unknown;
@@ -46,6 +47,11 @@ export function buildReportCacheKey(companyId: string, fyId: string, params: Per
   return `${companyId}:${fyId}:${params.periodType || 'annual'}:${params.period || 'all'}:${params.yearType || 'FY'}:${dataVersion}`;
 }
 
+/** Same idea for /reports/threeyear. The response order never depends on the input order (always start_date), so the ids are sorted for the key: two requests naming the same years differently ordered share one cache entry. */
+export function buildThreeYearCacheKey(companyId: string, fyIds: string[], yearType: string, dataVersion: string): string {
+  return `${companyId}:three:${[...fyIds].sort().join(',')}:${yearType}:${dataVersion}`;
+}
+
 export function getCachedReport<T>(key: string): T | null {
   if (process.env.NODE_ENV === 'development') {
     return null; // In development mode, always compute fresh report data directly from Neon DB
@@ -67,6 +73,19 @@ export function setCachedReport(key: string, data: unknown, ttlMs = DEFAULT_TTL_
     if (now > entry.expiresAt) cache.delete(k);
   }
   cache.set(key, { data, expiresAt: now + ttlMs });
+}
+
+/**
+ * Two levels for report bundles: this instance's memory, then the shared Redis cache (shared-cache.ts, off unless
+ * configured), so a second or freshly started server instance is served without recomputing. The key carries the
+ * data version, so neither level can serve a bundle older than the data; invalidateReportCache() clears memory only.
+ */
+export async function getCachedReportShared<T>(key: string): Promise<T | null> {
+  const local = getCachedReport<T>(key);
+  if (local) return local;
+  const shared = await getSharedCached<T>(key);
+  if (shared) setCachedReport(key, shared); // keep it in this instance's memory as well
+  return shared;
 }
 
 /**

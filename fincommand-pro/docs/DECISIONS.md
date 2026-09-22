@@ -121,6 +121,17 @@ The tree-only, no-`eval()` rule below is unchanged. Ledger metrics (`definition_
 4. **A limited sync must say so.** Non-fatal problems (bills not fetched, no bills, skipped foreign bills, failed customer months, a partial chart of accounts) are recorded on the sync log and returned as the sync's warning; the year's bills and expenses are kept with the batch. (The empty vendor report was exactly such a silent failure: the old build's timestamp `date_start` was rejected by Zoho with HTTP 400 and swallowed.)
 5. **The chart of accounts is read in full** (all pages).
 
+## 17. A shared report cache — Upstash Redis (2026-09-22)
+
+**Decision** (owner: "build my database at high level"; plan phases A–D, this is C; detail and proof in `SHARED-CACHE.md`).
+1. **A second, shared cache level in front of the database, not instead of the existing per-instance one.** `getCachedReportShared` checks memory, then Redis; only a miss on both reaches the database and the compute. Not configured (default) behaves exactly as before.
+2. **External Redis at Upstash, over its plain REST API — no new dependency.** Owner choice from the plan's options.
+3. **Encrypted before it leaves the database (AES-256-GCM) and fails open on any problem** — wrong/rotated key, Redis down, a timeout, or a value too large for its request limit all mean "not cached," never wrong data or an error to the user (owner choice: "encrypted, fail-open").
+4. **Freshness reuses the existing data-version key**; a data change makes a stale bundle unreachable everywhere the moment any instance writes, the same guarantee the in-memory cache already gave. No new invalidation path.
+5. **The Redis write happens after the response is sent** (Next's `after()`), so the shared cache can only ever help a later request, never slow this one down.
+6. **`/reports/threeyear` gets a cache for the first time** (it had none, not even in-memory) — the light metadata queries run first as one wave (unchanged round-trip count on a miss), and only a miss goes on to the per-year ledger loads and computes.
+7. **Proven on the branch:** 0 of 287 report/route responses changed (owner login, before vs. after); an encryption/fail-open/circuit-breaker suite against a fake Upstash server; an end-to-end run with real report routes and separate processes standing in for separate server instances (cold store, a fresh instance served from Redis, Redis down, the key rotated, a real data change and reverting it — all responses identical).
+
 ## 16. Bank transactions get their own partitioned table (2026-09-21)
 
 **Decision** (owner: "build my database at high level"; plan phases A–D, this is B; detail and proof in `ZOHO-RECORDS.md`).
