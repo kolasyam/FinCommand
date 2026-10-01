@@ -6,19 +6,19 @@
  * Excel accounting formats (see xlsx-kit.ts), matching the on-screen tab
  * and PDF exactly.
  */
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import type { ReportBundle } from '@/lib/dashboard/types';
 import type { AggregatedNote } from '@/lib/financial/tb-engine';
 import { getFyLabel, getFyShortLabel, formatDate, getUnitHeader, unitSuffix, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
 import { getCurrencyMeta } from '@/lib/services/currency';
-import { ACC_FMT, PCT_FMT, DEFAULT_COMPANY_NAME, toUnit, buildSheet, buildInfoSheet, type SheetRow } from './xlsx-kit';
+import { ACC_FMT, PCT_FMT, DEFAULT_COMPANY_NAME, toUnit, buildSheet, buildInfoSheet, downloadWorkbook, type SheetRow } from './xlsx-kit';
 
 const isBSSection = (sec?: string | null) => ['anc', 'ac', 'eq', 'lnc', 'lc'].includes(sec || '');
 const noteKey = (n: AggregatedNote) => `${isBSSection(n.section) ? 'bs' : 'pl'}_${n.note_no}`;
 const SECTION_LABEL: Record<string, string> = { eq: 'Equity', lnc: 'Non-Current Liabilities', lc: 'Current Liabilities', anc: 'Non-Current Assets', ac: 'Current Assets', inc: 'Income', exp: 'Expense' };
 
-export function buildNotesXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): { wb: XLSX.WorkBook; fyShort: string } {
-  const wb = XLSX.utils.book_new();
+export function buildNotesXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): { wb: ExcelJS.Workbook; fyShort: string } {
+  const wb = new ExcelJS.Workbook();
   const yearType = bundle.period_params?.yearType || 'FY';
   const fyFullLabel = getFyLabel(bundle.financial_year, yearType);
   const fyShort = getFyShortLabel(bundle.financial_year, yearType);
@@ -110,7 +110,7 @@ export function buildNotesXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPA
   return { wb, fyShort };
 }
 
-export function exportNotesXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): void {
+export async function exportNotesXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): Promise<void> {
   const { wb, fyShort } = buildNotesXlsx(bundle, companyName, unit, compare, currency);
-  XLSX.writeFile(wb, `FinCommandPro_NotesToAccounts_${fyShort}.xlsx`);
+  await downloadWorkbook(wb, `FinCommandPro_NotesToAccounts_${fyShort}.xlsx`);
 }

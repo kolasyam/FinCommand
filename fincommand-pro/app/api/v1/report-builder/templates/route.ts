@@ -12,7 +12,7 @@ import {
   validateTemplate, FORMAT_PRESETS, resolvePresetLedgers, type ReportTemplate,
 } from '@/lib/financial/report-builder-engine';
 import type { Section } from '@/lib/financial/tb-engine';
-import { v4 as uuid } from 'uuid';
+import { randomUUID as uuid } from 'crypto';
 
 export const runtime = 'nodejs';
 

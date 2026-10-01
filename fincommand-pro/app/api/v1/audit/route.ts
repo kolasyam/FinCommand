@@ -16,24 +16,42 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   const userId = searchParams.get('user_id');
   const from = searchParams.get('from');
   const to = searchParams.get('to');
-  const limit = searchParams.get('limit') || '100';
-  const offset = searchParams.get('offset') || '0';
+  // Bad paging or date values are the caller's mistake (400), not a server crash.
+  const limit = searchParams.has('limit') ? Number(searchParams.get('limit')) : 100;
+  const offset = searchParams.has('offset') ? Number(searchParams.get('offset')) : 0;
+  if (!Number.isInteger(limit) || limit < 1 || !Number.isInteger(offset) || offset < 0) {
+    return json({ error: 'limit must be a positive whole number and offset a non-negative whole number' }, { status: 400 });
+  }
+  if ((from && Number.isNaN(Date.parse(from))) || (to && Number.isNaN(Date.parse(to)))) {
+    return json({ error: 'from and to must be valid dates' }, { status: 400 });
+  }
+  if (userId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
+    return json({ error: 'user_id must be a valid id' }, { status: 400 });
+  }
+
+  let whereClauses = `WHERE a.company_id=$1`;
+  const params: unknown[] = [user.company_id];
+  if (action) { params.push(action); whereClauses += ` AND a.action=$${params.length}`; }
+  if (userId) { params.push(userId); whereClauses += ` AND a.user_id=$${params.length}`; }
+  if (from) { params.push(from); whereClauses += ` AND a.created_at >= $${params.length}`; }
+  if (to) { params.push(to); whereClauses += ` AND a.created_at <= $${params.length}`; }
+
+  const countParams = [...params];
 
   let q = `SELECT a.*, u.name AS user_name_full
            FROM audit_trail a LEFT JOIN users u ON u.id=a.user_id
-           WHERE a.company_id=$1`;
-  const params: unknown[] = [user.company_id];
-  if (action) { params.push(action); q += ` AND a.action=$${params.length}`; }
-  if (userId) { params.push(userId); q += ` AND a.user_id=$${params.length}`; }
-  if (from) { params.push(from); q += ` AND a.created_at >= $${params.length}`; }
-  if (to) { params.push(to); q += ` AND a.created_at <= $${params.length}`; }
-  params.push(Math.min(+limit, 500));
+           ${whereClauses}`;
+  
+  params.push(Math.min(limit, 500));
   q += ` ORDER BY a.created_at DESC LIMIT $${params.length}`;
-  params.push(+offset);
+  params.push(offset);
   q += ` OFFSET $${params.length}`;
 
   const { rows } = await query(q, params);
-  const { rows: cnt } = await query<{ count: string }>(`SELECT COUNT(*) FROM audit_trail WHERE company_id=$1`, [user.company_id]);
+  const { rows: cnt } = await query<{ count: string }>(
+    `SELECT COUNT(*) FROM audit_trail a ${whereClauses}`, 
+    countParams
+  );
 
   return json({ total: parseInt(cnt[0].count), rows });
 });

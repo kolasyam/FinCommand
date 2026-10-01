@@ -283,7 +283,7 @@ export function CustomizableTabPanel({ tabKey, defaultWidgets, fixedView, title,
       } else {
         const model = buildLayoutExportModel(widgets, resolveWidget, bundle);
         if (format === 'pdf') exportDashboardLayoutPdf(model, meta, gridRef.current);
-        else if (format === 'xlsx') exportDashboardLayoutXlsx(model, meta);
+        else if (format === 'xlsx') await exportDashboardLayoutXlsx(model, meta);
         else if (format === 'csv') exportDashboardLayoutCsv(model, meta);
         else await exportDashboardLayoutPptx(model, meta);
       }

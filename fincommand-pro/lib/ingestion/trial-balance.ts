@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import { v4 as uuid } from 'uuid';
+import { randomUUID, randomUUID as uuid } from 'crypto';
 import { withTransaction } from '@/lib/db/neon';
 import { ApiError } from '@/lib/auth/permissions';
 import {
@@ -106,14 +106,23 @@ function toHashable(l: NormalizedLedger): HashableLedger {
 /** Fingerprint of an already-stored batch, from its own rows (for batches written before 0003). */
 async function hashStoredBatch(client: PoolClient, uploadId: string, currency: string): Promise<string> {
   const [ledgers, rev, ven, cost] = await Promise.all([
-    client.query(`SELECT * FROM tb_ledgers WHERE upload_id=$1`, [uploadId]),
+    // The monthly figures live in ledger_month_amounts (the deferred drop (db/deferred) removes the wide columns).
+    client.query(
+      `SELECT l.*,
+              (SELECT array_agg(a.dr ORDER BY a.period_month) FROM ledger_month_amounts a WHERE a.ledger_id = l.id) AS month_dr,
+              (SELECT array_agg(a.cr ORDER BY a.period_month) FROM ledger_month_amounts a WHERE a.ledger_id = l.id) AS month_cr
+         FROM tb_ledgers l WHERE l.upload_id=$1`, [uploadId]),
     client.query(`SELECT zoho_customer_id, customer_name, m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12 FROM tb_customer_revenue WHERE upload_id=$1`, [uploadId]),
     client.query(`SELECT zoho_vendor_id, vendor_name, m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12 FROM tb_vendor_expense WHERE upload_id=$1`, [uploadId]),
     client.query(`SELECT zoho_customer_id, customer_name, m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12 FROM tb_customer_cost WHERE upload_id=$1`, [uploadId]),
   ]);
   return contentHash({
     currency,
-    ledgers: ledgers.rows.map(hashableFromStoredLedger),
+    ledgers: ledgers.rows.map((r) => {
+      const wide: Record<string, unknown> = { ...r };
+      for (let i = 0; i < 12; i++) { wide[`m${i + 1}_dr`] = r.month_dr?.[i] ?? 0; wide[`m${i + 1}_cr`] = r.month_cr?.[i] ?? 0; }
+      return hashableFromStoredLedger(wide);
+    }),
     customerRevenue: rev.rows.map((r) => hashableFromStoredEntity(r, 'zoho_customer_id', 'customer_name')),
     vendorExpense: ven.rows.map((r) => hashableFromStoredEntity(r, 'zoho_vendor_id', 'vendor_name')),
     customerCost: cost.rows.map((r) => hashableFromStoredEntity(r, 'zoho_customer_id', 'customer_name')),
@@ -126,7 +135,6 @@ const CHUNK_ROWS = 500;
 const LEDGER_COLUMNS = [
   'upload_id', 'company_id', 'financial_year_id', 'ledger_code', 'ledger_name',
   'note_no', 'note_name', 'section', 'treasury_type', 'normal_bal', 'op_dr', 'op_cr',
-  ...Array.from({ length: 12 }, (_, i) => [`m${i + 1}_dr`, `m${i + 1}_cr`]).flat(),
   'zoho_account_id', 'zoho_account_type', 'depth', 'is_child_present',
 ];
 
@@ -251,7 +259,7 @@ export async function ingestTrialBalance(input: IngestInput, deps: IngestDeps = 
     vendorExpense: input.vendorExpense,
     customerCost: input.customerCost,
   });
-  let uploadId = uuid();
+  let uploadId: string = uuid();
   let status: IngestResult['status'] = 'created';
   let replacedSource: DataSource | null = null;
 
@@ -321,9 +329,16 @@ export async function ingestTrialBalance(input: IngestInput, deps: IngestDeps = 
     await insertRows(client, 'tb_ledgers', LEDGER_COLUMNS, input.ledgers, (l) => [
       uploadId, companyId, fyId, l.code, l.name,
       l.note_no, l.note_name, l.section, l.treasury_type, l.normal_bal, l.op_dr, l.op_cr,
-      ...l.months.flatMap((mv) => [mv.dr, mv.cr]),
       l.zoho_account_id ?? null, l.zoho_account_type ?? null, l.depth ?? 0, l.is_child_present ?? false,
     ]);
+
+    // ── Phase D dual-write: ledger_month_amounts ───────────────────────────
+    // Runs inside the same transaction as the wide tb_ledgers insert — both
+    // succeed or both roll back. The long table is kept in sync on every
+    // ingest going forward. Reclassify (note_no/section/treasury_type only)
+    // does NOT touch amount columns and therefore does NOT need to touch
+    // ledger_month_amounts — only ingestion writes amounts.
+    await insertLedgerMonthAmounts(client, uploadId, companyId, fyId, input.ledgers);
 
     const key = { uploadId, companyId, fyId };
     await insertEntityRows(client, 'tb_customer_revenue', 'zoho_customer_id', 'customer_name', input.customerRevenue, key);
@@ -334,4 +349,69 @@ export async function ingestTrialBalance(input: IngestInput, deps: IngestDeps = 
   });
 
   return { status, uploadId, summary, replacedSource };
+}
+
+/**
+ * Inserts one row per ledger per month into ledger_month_amounts.
+ * Called inside the same transaction as the tb_ledgers insert.
+ * fyStartDate is derived from the financial_year's start_date (queried once).
+ */
+async function insertLedgerMonthAmounts(
+  client: PoolClient,
+  uploadId: string,
+  companyId: string,
+  fyId: string,
+  ledgers: NormalizedLedger[],
+): Promise<void> {
+  // The 12 month dates are computed by Postgres with the very same expression
+  // the report queries use (fy.start_date + n months), so what is written is
+  // always what is read — and nothing depends on the server's time zone
+  // (a JS Date built from a DATE shifts a month early on an India-time machine).
+  const { rows: monthDates } = await client.query<{ d: string }>(
+    `SELECT (fy.start_date + (g.i * INTERVAL '1 month'))::date::text AS d
+       FROM financial_years fy, generate_series(0, 11) AS g(i)
+      WHERE fy.id = $1 ORDER BY g.i`, [fyId],
+  );
+  if (monthDates.length !== 12) return; // should never happen inside the same transaction
+
+  // Newly inserted ledger ids + their stable account identity (set by the 0005 trigger).
+  const { rows: ledgerIds } = await client.query<{ id: string; account_id: string | null; ledger_code: string | null; ledger_name: string }>(
+    `SELECT id, account_id, ledger_code, ledger_name FROM tb_ledgers WHERE upload_id = $1`, [uploadId],
+  );
+  const idByKey = new Map(ledgerIds.map((r) => [`${r.ledger_code ?? ''}::${r.ledger_name}`, r]));
+
+  const LMA_COLUMNS = ['id', 'company_id', 'batch_id', 'ledger_id', 'account_id', 'period_month', 'dr', 'cr'];
+
+  // Build (ledger × 12 months) rows
+  const monthRows: Array<{ ledgerId: string; accountId: string | null; periodMonth: string; dr: number; cr: number }> = [];
+  for (const l of ledgers) {
+    const row = idByKey.get(`${l.code ?? ''}::${l.name}`);
+    // Every ledger was inserted above in this transaction; a miss means its figures would silently vanish.
+    if (!row) throw new Error(`Monthly amounts: ledger "${l.name}" was not found in batch ${uploadId}`);
+    for (let i = 0; i < 12; i++) {
+      monthRows.push({
+        ledgerId: row.id,
+        accountId: row.account_id,
+        periodMonth: monthDates[i].d, // 'YYYY-MM-DD'
+        dr: l.months[i]?.dr ?? 0,
+        cr: l.months[i]?.cr ?? 0,
+      });
+    }
+  }
+
+  // Chunk-insert (same helper as wide rows, reuse insertRows)
+  const LMA_CHUNK = 500; // 8 params × 500 = 4000 < 65535
+  for (let i = 0; i < monthRows.length; i += LMA_CHUNK) {
+    const params: unknown[] = [];
+    const tuples = monthRows.slice(i, i + LMA_CHUNK).map((r) => {
+      const base = params.length;
+      params.push(randomUUID(), companyId, uploadId, r.ledgerId, r.accountId, r.periodMonth, r.dr, r.cr);
+      return `($${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7},$${base+8})`;
+    });
+    await client.query(
+      `INSERT INTO ledger_month_amounts (${LMA_COLUMNS.join(',')}) VALUES ${tuples.join(',')}
+       ON CONFLICT (ledger_id, period_month) DO UPDATE SET dr=EXCLUDED.dr, cr=EXCLUDED.cr`,
+      params,
+    );
+  }
 }

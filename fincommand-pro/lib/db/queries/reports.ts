@@ -1,3 +1,4 @@
+import { isUndefinedTable } from '@/lib/db/pg-errors';
 import { query } from '@/lib/db/neon';
 import { withPeriodSurplus, type TbLedgerRow } from '@/lib/financial/tb-engine';
 import { mergeCyLedgers } from '@/lib/financial/cy-merge';
@@ -20,12 +21,54 @@ const CURRENT_BATCH = `(SELECT id FROM tb_uploads WHERE company_id = $1 AND fina
 
 /** Loads current-upload ledgers for a company+FY — mirrors reports.js loadLedgers(). */
 export async function loadLedgers(companyId: string, fyId: string): Promise<TbLedgerRow[]> {
-  const { rows } = await query<TbLedgerRow>(
-    `SELECT l.* FROM tb_ledgers l
-     WHERE l.upload_id = ${CURRENT_BATCH} AND l.company_id = $1
-     ORDER BY l.ledger_name`,
-    [companyId, fyId]
-  );
+  const { rows } = await query<TbLedgerRow>(`
+    SELECT
+      l.id, l.ledger_code, l.ledger_name, l.note_no, l.note_name,
+      l.section, l.treasury_type, l.normal_bal,
+      l.op_dr, l.op_cr,
+      -- Pivot: aggregate 12 month rows back into named columns
+      MAX(CASE WHEN lma.period_month = fy.start_date + '0 months'::interval THEN lma.dr END) AS m1_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '0 months'::interval THEN lma.cr END) AS m1_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '1 month'::interval  THEN lma.dr END) AS m2_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '1 month'::interval  THEN lma.cr END) AS m2_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '2 months'::interval THEN lma.dr END) AS m3_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '2 months'::interval THEN lma.cr END) AS m3_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '3 months'::interval THEN lma.dr END) AS m4_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '3 months'::interval THEN lma.cr END) AS m4_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '4 months'::interval THEN lma.dr END) AS m5_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '4 months'::interval THEN lma.cr END) AS m5_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '5 months'::interval THEN lma.dr END) AS m6_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '5 months'::interval THEN lma.cr END) AS m6_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '6 months'::interval THEN lma.dr END) AS m7_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '6 months'::interval THEN lma.cr END) AS m7_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '7 months'::interval THEN lma.dr END) AS m8_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '7 months'::interval THEN lma.cr END) AS m8_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '8 months'::interval THEN lma.dr END) AS m9_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '8 months'::interval THEN lma.cr END) AS m9_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '9 months'::interval THEN lma.dr END) AS m10_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '9 months'::interval THEN lma.cr END) AS m10_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '10 months'::interval THEN lma.dr END) AS m11_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '10 months'::interval THEN lma.cr END) AS m11_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '11 months'::interval THEN lma.dr END) AS m12_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '11 months'::interval THEN lma.cr END) AS m12_cr,
+      l.zoho_account_id, l.zoho_account_type, l.depth, l.is_child_present
+    FROM tb_ledgers l
+    JOIN tb_uploads u
+      ON u.id = l.upload_id
+     AND u.company_id = $1
+     AND u.financial_year_id = $2
+     AND u.is_current = TRUE
+    JOIN financial_years fy ON fy.id = $2
+    LEFT JOIN ledger_month_amounts lma
+      ON lma.ledger_id = l.id
+     AND lma.batch_id  = l.upload_id
+    WHERE l.company_id = $1
+    GROUP BY l.id, l.ledger_code, l.ledger_name, l.note_no, l.note_name,
+             l.section, l.treasury_type, l.normal_bal, l.op_dr, l.op_cr,
+             l.zoho_account_id, l.zoho_account_type, l.depth, l.is_child_present,
+             fy.start_date
+    ORDER BY l.ledger_name
+  `, [companyId, fyId]);
   return rows;
 }
 
@@ -72,7 +115,7 @@ export async function loadCustomerRevenue(companyId: string, fyId: string): Prom
     );
     return rows;
   } catch (err) {
-    if ((err as Error).message?.includes('does not exist')) return [];
+    if (isUndefinedTable(err)) return [];
     throw err;
   }
 }
@@ -104,7 +147,7 @@ export async function loadVendorExpense(companyId: string, fyId: string): Promis
     );
     return rows;
   } catch (err) {
-    if ((err as Error).message?.includes('does not exist')) return [];
+    if (isUndefinedTable(err)) return [];
     throw err;
   }
 }
@@ -137,7 +180,7 @@ export async function loadCustomerCost(companyId: string, fyId: string): Promise
     );
     return rows;
   } catch (err) {
-    if ((err as Error).message?.includes('does not exist')) return [];
+    if (isUndefinedTable(err)) return [];
     throw err;
   }
 }
@@ -240,14 +283,53 @@ export async function loadNextFYOf(companyId: string, fyId: string): Promise<Fin
 
 /** Statement ledgers (loadStatementLedgers) of the year before `fyId`'s year; [] when there is none. */
 export async function loadPreviousStatementLedgers(companyId: string, fyId: string): Promise<TbLedgerRow[]> {
-  const { rows } = await query<TbLedgerRow>(
-    `SELECT l.* FROM tb_ledgers l
-     WHERE l.upload_id = (SELECT t.id FROM tb_uploads t
-                          WHERE t.company_id = $1 AND t.is_current = TRUE AND t.financial_year_id = ${PREVIOUS_FY_ID})
-       AND l.company_id = $1
-     ORDER BY l.ledger_name`,
-    [companyId, fyId]
-  );
+  const { rows } = await query<TbLedgerRow>(`
+    SELECT
+      l.id, l.ledger_code, l.ledger_name, l.note_no, l.note_name,
+      l.section, l.treasury_type, l.normal_bal,
+      l.op_dr, l.op_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '0 months'::interval THEN lma.dr END) AS m1_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '0 months'::interval THEN lma.cr END) AS m1_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '1 month'::interval  THEN lma.dr END) AS m2_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '1 month'::interval  THEN lma.cr END) AS m2_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '2 months'::interval THEN lma.dr END) AS m3_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '2 months'::interval THEN lma.cr END) AS m3_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '3 months'::interval THEN lma.dr END) AS m4_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '3 months'::interval THEN lma.cr END) AS m4_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '4 months'::interval THEN lma.dr END) AS m5_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '4 months'::interval THEN lma.cr END) AS m5_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '5 months'::interval THEN lma.dr END) AS m6_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '5 months'::interval THEN lma.cr END) AS m6_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '6 months'::interval THEN lma.dr END) AS m7_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '6 months'::interval THEN lma.cr END) AS m7_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '7 months'::interval THEN lma.dr END) AS m8_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '7 months'::interval THEN lma.cr END) AS m8_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '8 months'::interval THEN lma.dr END) AS m9_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '8 months'::interval THEN lma.cr END) AS m9_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '9 months'::interval THEN lma.dr END) AS m10_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '9 months'::interval THEN lma.cr END) AS m10_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '10 months'::interval THEN lma.dr END) AS m11_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '10 months'::interval THEN lma.cr END) AS m11_cr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '11 months'::interval THEN lma.dr END) AS m12_dr,
+      MAX(CASE WHEN lma.period_month = fy.start_date + '11 months'::interval THEN lma.cr END) AS m12_cr,
+      l.zoho_account_id, l.zoho_account_type, l.depth, l.is_child_present
+    FROM tb_ledgers l
+    JOIN tb_uploads u
+      ON u.id = l.upload_id
+     AND u.company_id = $1
+     AND u.financial_year_id = ${PREVIOUS_FY_ID}
+     AND u.is_current = TRUE
+    JOIN financial_years fy ON fy.id = u.financial_year_id
+    LEFT JOIN ledger_month_amounts lma
+      ON lma.ledger_id = l.id
+     AND lma.batch_id  = l.upload_id
+    WHERE l.company_id = $1
+    GROUP BY l.id, l.ledger_code, l.ledger_name, l.note_no, l.note_name,
+             l.section, l.treasury_type, l.normal_bal, l.op_dr, l.op_cr,
+             l.zoho_account_id, l.zoho_account_type, l.depth, l.is_child_present,
+             fy.start_date
+    ORDER BY l.ledger_name
+  `, [companyId, fyId]);
   return withPeriodSurplus(rows);
 }
 

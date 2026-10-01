@@ -1,3 +1,4 @@
+import { isUndefinedTable } from '@/lib/db/pg-errors';
 import { query } from '@/lib/db/neon';
 
 export interface ZohoContactRow {
@@ -31,7 +32,7 @@ export async function loadZohoContacts(companyId: string): Promise<ZohoContactRo
     );
     return rows;
   } catch (err) {
-    if ((err as Error).message?.includes('does not exist')) return [];
+    if (isUndefinedTable(err)) return [];
     throw err;
   }
 }

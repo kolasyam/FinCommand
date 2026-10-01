@@ -4,11 +4,11 @@
  * Bespoke Executive Overview Excel export — see xlsx-kit.ts for the shared
  * real-numbers-with-native-accounting-format approach used here.
  */
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import type { ReportBundle } from '@/lib/dashboard/types';
 import { getFyLabel, getFyShortLabel, formatDate, getUnitHeader, unitSuffix, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
 import { getCurrencyMeta } from '@/lib/services/currency';
-import { ACC_FMT, PCT_FMT, DEFAULT_COMPANY_NAME, toUnit, buildSheet, buildInfoSheet, type SheetRow } from './xlsx-kit';
+import { ACC_FMT, PCT_FMT, DEFAULT_COMPANY_NAME, toUnit, buildSheet, buildInfoSheet, downloadWorkbook, type SheetRow } from './xlsx-kit';
 
 /**
  * Builds the workbook without triggering a browser download — kept
@@ -16,8 +16,8 @@ import { ACC_FMT, PCT_FMT, DEFAULT_COMPANY_NAME, toUnit, buildSheet, buildInfoSh
  * mechanism. `unit` and `compare` mirror the on-screen tab's current
  * Display Unit selector and comparison state at download time.
  */
-export function buildOverviewXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): { wb: XLSX.WorkBook; fyShort: string } {
-  const wb = XLSX.utils.book_new();
+export function buildOverviewXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): { wb: ExcelJS.Workbook; fyShort: string } {
+  const wb = new ExcelJS.Workbook();
   const yearType = bundle.period_params?.yearType || 'FY';
   const fyFullLabel = getFyLabel(bundle.financial_year, yearType);
   const fyShort = getFyShortLabel(bundle.financial_year, yearType);
@@ -90,7 +90,7 @@ export function buildOverviewXlsx(bundle: ReportBundle, companyName = DEFAULT_CO
   return { wb, fyShort };
 }
 
-export function exportOverviewXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): void {
+export async function exportOverviewXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): Promise<void> {
   const { wb, fyShort } = buildOverviewXlsx(bundle, companyName, unit, compare, currency);
-  XLSX.writeFile(wb, `FinCommandPro_ExecutiveOverview_${fyShort}.xlsx`);
+  await downloadWorkbook(wb, `FinCommandPro_ExecutiveOverview_${fyShort}.xlsx`);
 }

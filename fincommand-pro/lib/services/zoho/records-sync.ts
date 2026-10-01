@@ -426,7 +426,7 @@ export interface ZohoSession {
 /** The connection a read uses. Throws a clear 409 when Zoho is not connected. */
 export async function openZohoSession(companyId: string): Promise<ZohoSession> {
   const { rows } = await query<ZohoConfigRow>(
-    `SELECT * FROM zoho_config WHERE company_id=$1 AND is_active=TRUE AND refresh_token IS NOT NULL`, [companyId]);
+    `SELECT company_id, org_id, access_token, refresh_token, token_expiry, data_center FROM zoho_config WHERE company_id=$1 AND is_active=TRUE AND refresh_token IS NOT NULL`, [companyId]);
   if (!rows.length) throw new ApiError(409, 'Zoho Books is not connected. Connect it first.', 'ZOHO_NOT_CONNECTED');
   const cfg = decryptZohoConfig(rows[0]!);
   if (!cfg.org_id) throw new ApiError(409, 'Zoho Organisation ID is not set.', 'ZOHO_NO_ORG');

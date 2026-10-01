@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { authenticate, requireRole, ROLE_SETS } from '@/lib/auth/permissions';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import { query } from '@/lib/db/neon';
+import { logAudit } from '@/lib/audit/audit';
 
 export const runtime = 'nodejs';
 
@@ -16,5 +17,6 @@ export const PUT = withErrorHandling(async (req: NextRequest, { params }: { para
     [user.id, id, user.company_id]
   );
   if (!rows.length) return json({ error: 'FY not found' }, { status: 404 });
+  logAudit(req, user, 'FY_LOCK', 'financial_year', id, { label: rows[0].label });
   return json({ message: 'Financial year locked', fy: rows[0] });
 });

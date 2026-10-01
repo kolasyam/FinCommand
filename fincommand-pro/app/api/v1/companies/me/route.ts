@@ -10,7 +10,10 @@ export const runtime = 'nodejs';
 
 export const GET = withErrorHandling(async (req: NextRequest) => {
   const user = await authenticate(req);
-  const { rows } = await query('SELECT * FROM companies WHERE id=$1', [user.company_id]);
+  const { rows } = await query(
+    'SELECT id, name, cin, pan, gstin, registered_address, date_of_incorporation, currency, presentation_currency FROM companies WHERE id=$1',
+    [user.company_id]
+  );
   return json(rows[0]);
 });
 
@@ -51,7 +54,7 @@ export const PUT = withErrorHandling(async (req: NextRequest) => {
          currency = COALESCE($7, currency),
          presentation_currency = CASE WHEN $8 = 'DEFAULT' THEN presentation_currency ELSE $8 END,
          updated_at = NOW()
-     WHERE id = $9 RETURNING *`,
+     WHERE id = $9 RETURNING id, name, cin, pan, gstin, registered_address, date_of_incorporation, currency, presentation_currency`,
     [
       name !== undefined ? name.trim() : null,
       cin !== undefined ? cin.trim().toUpperCase() : null,

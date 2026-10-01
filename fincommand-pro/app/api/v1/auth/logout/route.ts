@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { query } from '@/lib/db/neon';
+import { hashRefreshToken } from '@/lib/auth/jwt';
 import { authenticate } from '@/lib/auth/permissions';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
 
@@ -21,7 +22,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
 
   if (refresh_token) {
     tasks.push(
-      query(`UPDATE refresh_tokens SET revoked_at=NOW() WHERE token=$1 AND user_id=$2`, [refresh_token, user.id])
+      query(`UPDATE refresh_tokens SET revoked_at=NOW() WHERE token=$1 AND user_id=$2`, [hashRefreshToken(refresh_token), user.id])
     );
   }
 

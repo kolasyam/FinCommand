@@ -41,11 +41,14 @@ export const ROLE_SETS = {
   zohoRecords: ['admin', 'cfo', 'ceo', 'auditor'] as Role[],
 };
 
-/** The bearer token (or session cookie) of a request, if any. */
+/**
+ * The bearer token of a request, if any. Deliberately NOT read from a cookie: the browser attaches cookies
+ * to requests started by any other website, which would let those sites act as the signed-in user.
+ */
 function readAccessToken(req: NextRequest): string | undefined {
   const header = req.headers.get('authorization');
   if (header?.startsWith('Bearer ')) return header.slice(7);
-  return req.cookies.get('fc_token')?.value || req.cookies.get('token')?.value;
+  return undefined;
 }
 
 /**

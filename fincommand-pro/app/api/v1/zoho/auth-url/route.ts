@@ -2,7 +2,8 @@ import type { NextRequest } from 'next/server';
 import { authenticate, requireRole, ROLE_SETS } from '@/lib/auth/permissions';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import { ZOHO_ACCOUNTS } from '@/lib/services/zoho';
-import { signOAuthState } from '@/lib/security/oauth-state';
+import { randomBytes } from 'crypto';
+import { signOAuthState, bindingHash, OAUTH_BINDING_COOKIE } from '@/lib/security/oauth-state';
 
 export const runtime = 'nodejs';
 
@@ -13,6 +14,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   const requested = req.nextUrl.searchParams.get('data_center') || 'IN';
   const dc = ZOHO_ACCOUNTS[requested] ? requested : 'IN';
   const base = ZOHO_ACCOUNTS[dc];
+  const binding = randomBytes(24).toString('base64url');
   const params = new URLSearchParams({
     scope: process.env.ZOHO_SCOPES || 'ZohoBooks.fullaccess.all',
     client_id: process.env.ZOHO_CLIENT_ID || '',
@@ -21,7 +23,12 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     access_type: 'offline',
     prompt: 'consent',
     // Signed + expiring — the unauthenticated callback trusts only this (see lib/security/oauth-state.ts).
-    state: signOAuthState({ companyId: user.company_id, dataCenter: dc, userId: user.id }),
+    state: signOAuthState({ companyId: user.company_id, dataCenter: dc, userId: user.id, bindingHash: bindingHash(binding) }),
   });
-  return json({ auth_url: `${base}/oauth/v2/auth?${params}` });
+  const res = json({ auth_url: `${base}/oauth/v2/auth?${params}` });
+  // Only the browser that asked for this link can finish the flow (checked in the callback).
+  res.cookies.set(OAUTH_BINDING_COOKIE, binding, {
+    httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/api/v1/zoho', maxAge: 10 * 60,
+  });
+  return res;
 });

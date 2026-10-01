@@ -35,24 +35,26 @@ export function withErrorHandling<C = { params: Promise<Record<string, never>> }
       return await handler(req, ctx);
     } catch (err) {
       const e = err as PgError;
+      // Internals (stack, raw 500 messages) only ever go back to a developer's own machine, never from Vercel.
+      const localDev = process.env.NODE_ENV === 'development' && !process.env.VERCEL;
       console.error(`[ERROR] ${req.method} ${req.nextUrl.pathname}:`, e.message);
       if (process.env.NODE_ENV === 'development') console.error(e.stack);
 
       if (e.code === '23505') {
-        return NextResponse.json({ error: 'Duplicate entry: ' + e.detail }, { status: 409 });
+        return NextResponse.json({ error: 'That already exists.' }, { status: 409 });
       }
       if (e.code === '23503') {
-        return NextResponse.json({ error: 'Foreign key violation: ' + e.detail }, { status: 400 });
+        return NextResponse.json({ error: 'This refers to something that does not exist, or is still in use.' }, { status: 400 });
       }
       // Database rules added in DB Phase 0 (db/migrations/0001_integrity.sql).
       if (e.code === '23P01') {
         return NextResponse.json({ error: 'This overlaps an existing record (for example, two financial years covering the same dates).' }, { status: 409 });
       }
       if (e.code === '23514') {
-        return NextResponse.json({ error: 'A value failed a data rule: ' + (e.detail || e.message) }, { status: 400 });
+        return NextResponse.json({ error: 'A value failed a data rule. Please check the values and try again.' }, { status: 400 });
       }
       if (e.code === '22001') {
-        return NextResponse.json({ error: 'A value is longer than allowed: ' + e.message }, { status: 400 });
+        return NextResponse.json({ error: 'A value is longer than allowed.' }, { status: 400 });
       }
       if (e.code === '55P03') {
         return NextResponse.json(
@@ -65,10 +67,10 @@ export function withErrorHandling<C = { params: Promise<Record<string, never>> }
       const apiCode = err instanceof ApiError ? err.code : undefined;
       return NextResponse.json(
         {
-          error: status === 500 && process.env.NODE_ENV === 'production' ? 'Internal server error' : e.message,
+          error: status === 500 && !localDev ? 'Internal server error' : e.message,
           ...(apiCode ? { code: apiCode } : {}),
           ...(err instanceof ApiError && err.extra ? err.extra : {}),
-          ...(process.env.NODE_ENV === 'development' ? { stack: e.stack } : {}),
+          ...(localDev ? { stack: e.stack } : {}),
         },
         { status }
       );

@@ -18,9 +18,9 @@ export function DownloadBar({ title, subtitle, section, compareEnabled = true }:
     exportSectionPdf(section, bundle, companyName, displayUnit, compareEnabled, presentationCurrency);
     toast('PDF downloaded');
   }
-  function downloadXlsx() {
+  async function downloadXlsx() {
     if (!bundle) return;
-    exportSectionXlsx(section, bundle, companyName, displayUnit, compareEnabled, presentationCurrency);
+    await exportSectionXlsx(section, bundle, companyName, displayUnit, compareEnabled, presentationCurrency);
     toast('Excel downloaded');
   }
 

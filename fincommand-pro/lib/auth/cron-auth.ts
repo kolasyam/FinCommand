@@ -15,7 +15,8 @@ import { NextResponse } from 'next/server';
 export function checkCronSecret(req: NextRequest, routeName: string): NextResponse | null {
   const secret = process.env.CRON_SECRET;
   if (!secret) {
-    if (process.env.NODE_ENV === 'production') {
+    // On Vercel it is always closed, even if a stray NODE_ENV=development was copied into its settings.
+    if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
       console.error(`[${routeName}] CRON_SECRET is not set — refusing to run.`);
       return NextResponse.json({ error: 'Cron is not configured' }, { status: 503 });
     }

@@ -151,20 +151,7 @@ CREATE TABLE IF NOT EXISTS tb_ledgers (
   -- Opening balances
   op_dr             NUMERIC(18,2) DEFAULT 0,
   op_cr             NUMERIC(18,2) DEFAULT 0,
-  -- Monthly MOVEMENTS (Dr and Cr separately, NOT cumulative)
-  -- m1 = April (FY) or January (CY)
-  m1_dr  NUMERIC(18,2) DEFAULT 0,  m1_cr  NUMERIC(18,2) DEFAULT 0,
-  m2_dr  NUMERIC(18,2) DEFAULT 0,  m2_cr  NUMERIC(18,2) DEFAULT 0,
-  m3_dr  NUMERIC(18,2) DEFAULT 0,  m3_cr  NUMERIC(18,2) DEFAULT 0,
-  m4_dr  NUMERIC(18,2) DEFAULT 0,  m4_cr  NUMERIC(18,2) DEFAULT 0,
-  m5_dr  NUMERIC(18,2) DEFAULT 0,  m5_cr  NUMERIC(18,2) DEFAULT 0,
-  m6_dr  NUMERIC(18,2) DEFAULT 0,  m6_cr  NUMERIC(18,2) DEFAULT 0,
-  m7_dr  NUMERIC(18,2) DEFAULT 0,  m7_cr  NUMERIC(18,2) DEFAULT 0,
-  m8_dr  NUMERIC(18,2) DEFAULT 0,  m8_cr  NUMERIC(18,2) DEFAULT 0,
-  m9_dr  NUMERIC(18,2) DEFAULT 0,  m9_cr  NUMERIC(18,2) DEFAULT 0,
-  m10_dr NUMERIC(18,2) DEFAULT 0,  m10_cr NUMERIC(18,2) DEFAULT 0,
-  m11_dr NUMERIC(18,2) DEFAULT 0,  m11_cr NUMERIC(18,2) DEFAULT 0,
-  m12_dr NUMERIC(18,2) DEFAULT 0,  m12_cr NUMERIC(18,2) DEFAULT 0,
+  -- Monthly MOVEMENTS are now strictly stored in ledger_month_amounts table (Phase D)
   -- Zoho-specific metadata (preserved from raw API response)
   zoho_account_id   VARCHAR(100),   -- Zoho's internal account_id
   zoho_account_type VARCHAR(50),    -- Zoho account group: expense, income, asset, liability, equity

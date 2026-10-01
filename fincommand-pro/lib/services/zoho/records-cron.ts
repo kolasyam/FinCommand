@@ -4,6 +4,10 @@ import { DEFAULT_SLICE_MS, runModuleSlice } from './records-sync';
 import { recordRefreshIntervalMs } from './budget';
 import { recordZohoFailure } from './health';
 import { runAsCompany } from '@/lib/db/tenant-context';
+import { runScheduledExtras } from './extras-run';
+
+/** Zoho calls the extras read (comments, files, statements) may use per scheduled tick. */
+const EXTRAS_CALLS_PER_TICK = parseInt(process.env.ZOHO_EXTRAS_CALLS_PER_TICK || '', 10) || 40;
 
 export interface ScheduledReadResult {
   company_id: string;
@@ -51,6 +55,16 @@ export async function runScheduledRecordReads(opts: { budgetMs: number; now?: ()
         sliceMs: Math.min(DEFAULT_SLICE_MS, left - 5_000),
       }));
       if (r.stopped === 'auth') await recordZohoFailure(row.company_id);
+      // Only when the records themselves are fully up to date, and only with time and allowance to spare: comments
+      // and files cost one call per record, so they never compete with reading the books.
+      if (r.stopped === 'complete' && opts.budgetMs - (now() - started) > 15_000) {
+        try {
+          const x = await runAsCompany(row.company_id, () => runScheduledExtras(row.company_id, { maxCalls: EXTRAS_CALLS_PER_TICK, deadlineAt: started + opts.budgetMs - 3_000 }));
+          if (x.stopped === 'auth') await recordZohoFailure(row.company_id);
+        } catch (e) {
+          console.error('[zoho-records-cron] extras read failed:', (e as Error).message);
+        }
+      }
       results.push({ company_id: row.company_id, status: r.stopped === 'auth' ? 'error' : 'ok', stopped: r.stopped, calls: r.callsMade, error: r.stopped === 'auth' ? r.errors[0] : undefined });
     } catch (e) {
       await recordZohoFailure(row.company_id);

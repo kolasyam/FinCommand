@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { query } from '@/lib/db/neon';
 import { authenticate } from '@/lib/auth/permissions';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
-import { ValidationCollector } from '@/lib/validations/common';
+import { ValidationCollector, isStrongPassword } from '@/lib/validations/common';
 
 export const runtime = 'nodejs';
 
@@ -15,9 +15,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
 
   const v = new ValidationCollector()
     .check(current_password.length > 0, 'current_password', 'required')
-    .check(new_password.length >= 8, 'new_password', 'must be at least 8 characters')
-    .check(/[A-Z]/.test(new_password), 'new_password', 'must contain an uppercase letter')
-    .check(/[0-9]/.test(new_password), 'new_password', 'must contain a digit');
+    .check(isStrongPassword(new_password), 'new_password', 'Password must be at least 8 characters and contain at least one letter and one number');
   if (!v.isEmpty()) return json({ errors: v.errors() }, { status: 422 });
 
   const { rows } = await query<{ password_hash: string }>('SELECT password_hash FROM users WHERE id=$1', [user.id]);

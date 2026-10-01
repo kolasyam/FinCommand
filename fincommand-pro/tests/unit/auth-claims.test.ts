@@ -15,9 +15,9 @@ describe('claimedCompanyId — the company a request\'s signed token was issued 
     expect(claimedCompanyId(req({ authorization: `Bearer ${token}` }))).toBe('company-9');
   });
 
-  test('reads it from the session cookie too, like authenticate() does', () => {
+  test('does NOT read it from a cookie (cookies ride along on cross-site requests)', () => {
     const token = signAccessToken('user-1', 'cfo', 'company-9');
-    expect(claimedCompanyId(req({ cookie: `fc_token=${token}` }))).toBe('company-9');
+    expect(claimedCompanyId(req({ cookie: `fc_token=${token}` }))).toBeNull();
   });
 
   test('null — never a throw — for a missing, garbled, expired or wrongly signed token', () => {

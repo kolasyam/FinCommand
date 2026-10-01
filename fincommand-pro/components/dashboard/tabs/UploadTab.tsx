@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import { useDashboard } from '@/lib/dashboard/DashboardContext';
 import { useToast } from '@/lib/dashboard/ToastContext';
 import { apiFetch, getToken, getRefreshToken, ApiClientError } from '@/lib/dashboard/api-client';
@@ -303,7 +303,7 @@ export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogi
 
   function pickFile(f: File | null) {
     if (!f) return;
-    if (!/\.(xlsx|xls)$/i.test(f.name)) { setError('Please choose a .xlsx or .xls file'); return; }
+    if (!/\.xlsx$/i.test(f.name)) { setError('Please choose a .xlsx file (open an .xls in Excel and Save As .xlsx first)'); return; }
     setFile(f);
     setError(null);
     setResult(null);
@@ -311,21 +311,24 @@ export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogi
 
     // Quick client-side sheet name check
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       try {
-        const data = new Uint8Array(ev.target?.result as ArrayBuffer);
-        const wb = XLSX.read(data, { type: 'array', sheetRows: 1 });
-        const names = wb.SheetNames;
+        const data = ev.target?.result as ArrayBuffer;
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(data);
+        const names = wb.worksheets.map(s => s.name);
         const tbCandidates = ['trial_balance', 'trialbalance', 'tb', 'sheet1'];
         const normalised = names.map(n => n.toLowerCase().replace(/[\s_-]/g, ''));
         const found = normalised.some(n => tbCandidates.includes(n));
 
         if (!found) {
-          // Check if any sheet has TB-like headers
           let hasHeaders = false;
           for (const sn of names) {
-            const peek: unknown[][] = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1 });
-            const hdrStr = (peek[0] || []).map(h => String(h || '').toLowerCase().replace(/[\s_-]/g, '')).join('|');
+            const ws = wb.getWorksheet(sn);
+            if (!ws) continue;
+            const firstRow = ws.getRow(1).values;
+            const hdrArr = Array.isArray(firstRow) ? firstRow : Object.values(firstRow || {});
+            const hdrStr = hdrArr.map(h => String(h || '').toLowerCase().replace(/[\s_-]/g, '')).join('|');
             if (hdrStr.includes('ledgername') || hdrStr.includes('ledgercode') ||
                 (hdrStr.includes('openingdr') && hdrStr.includes('openingcr'))) {
               hasHeaders = true;
@@ -387,9 +390,13 @@ export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogi
     }
   }
 
-  function downloadTemplate() {
-    const wb = XLSX.utils.book_new();
+  async function downloadTemplate() {
+    const wb = new ExcelJS.Workbook();
+    const sheet = wb.addWorksheet('Trial_Balance');
+    const instr = wb.addWorksheet('Instructions');
+    
     const hdr = ['Ledger_Code', 'Ledger_Name', 'Opening_Dr', 'Opening_Cr', ...FY_MONTHS.flatMap(m => [`${m}_Dr`, `${m}_Cr`])];
+    sheet.addRow(hdr);
     const sampleRows = [
       ['6001', 'IT Services Revenue', 0, 0, 0, 1410, 0, 1473, 0, 1553, 0, 1638, 0, 1596, 0, 1694, 0, 1757, 0, 1876, 0, 1813, 0, 1904, 0, 1995, 0, 1915],
       ['7011', 'Salaries & Wages', 0, 0, 486, 0, 508, 0, 537, 0, 567, 0, 551, 0, 585, 0, 606, 0, 648, 0, 627, 0, 659, 0, 730, 0, 619, 0],
@@ -397,18 +404,28 @@ export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogi
       ['3001', 'Equity Share Capital', 0, 10000, ...Array(24).fill(0)],
       ['3013', 'Retained Earnings', 0, 61240, ...Array(24).fill(0)],
     ];
-    const sheet = XLSX.utils.aoa_to_sheet([hdr, ...sampleRows]);
-    sheet['!cols'] = [{ wch: 14 }, { wch: 36 }, { wch: 12 }, { wch: 12 }, ...FY_MONTHS.flatMap(() => [{ wch: 8 }, { wch: 8 }])];
-    XLSX.utils.book_append_sheet(wb, sheet, 'Trial_Balance');
-    const instr = XLSX.utils.aoa_to_sheet([
-      ['FinCommand Pro — Monthly Trial Balance Template'], [''],
-      ['Required sheet name: Trial_Balance'],
-      ['Columns: Ledger_Code, Ledger_Name, Opening_Dr, Opening_Cr, then Apr_Dr/Apr_Cr … Mar_Dr/Mar_Cr'],
-      ['Monthly Dr/Cr are MOVEMENTS for that month, not cumulative balances.'],
-      ['Balance Sheet = Opening + cumulative movements. P&L = sum of movements for the selected period.'],
-    ]);
-    XLSX.utils.book_append_sheet(wb, instr, 'Instructions');
-    XLSX.writeFile(wb, 'FinCommand_TB_Monthly_Template.xlsx');
+    sampleRows.forEach(r => sheet.addRow(r));
+    
+    sheet.columns = [
+      { width: 14 }, { width: 36 }, { width: 12 }, { width: 12 },
+      ...FY_MONTHS.flatMap(() => [{ width: 8 }, { width: 8 }])
+    ];
+
+    instr.addRow(['FinCommand Pro — Monthly Trial Balance Template']);
+    instr.addRow(['']);
+    instr.addRow(['Required sheet name: Trial_Balance']);
+    instr.addRow(['Columns: Ledger_Code, Ledger_Name, Opening_Dr, Opening_Cr, then Apr_Dr/Apr_Cr … Mar_Dr/Mar_Cr']);
+    instr.addRow(['Monthly Dr/Cr are MOVEMENTS for that month, not cumulative balances.']);
+    instr.addRow(['Balance Sheet = Opening + cumulative movements. P&L = sum of movements for the selected period.']);
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'FinCommand_TB_Monthly_Template.xlsx';
+    a.click();
+    URL.revokeObjectURL(url);
     toast('Template downloaded');
   }
 
@@ -559,7 +576,7 @@ export function UploadTab({ onOpenLogin, onNavigate, onOpenAddFy }: { onOpenLogi
                 {file ? `${(file.size / 1024).toFixed(1)} KB — ready to upload` : 'Supports .xlsx — Trial_Balance sheet required'}
               </div>
             </div>
-            <input ref={inputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={e => pickFile(e.target.files?.[0] ?? null)} />
+            <input ref={inputRef} type="file" accept=".xlsx" style={{ display: 'none' }} onChange={e => pickFile(e.target.files?.[0] ?? null)} />
 
             {sheetWarning && <div className="warn-bar" style={{ marginTop: 8 }}>{sheetWarning}</div>}
             {error && <div className="warn-bar" style={{ marginTop: 8 }}>⚠ {error}</div>}

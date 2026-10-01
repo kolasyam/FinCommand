@@ -3,8 +3,8 @@ import axios from 'axios';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import { query } from '@/lib/db/neon';
 import { runAsCompany } from '@/lib/db/tenant-context';
-import { ZOHO_ACCOUNTS } from '@/lib/services/zoho';
-import { verifyOAuthState } from '@/lib/security/oauth-state';
+import { ZOHO_ACCOUNTS, ZOHO_API } from '@/lib/services/zoho';
+import { verifyOAuthState, bindingHash, OAUTH_BINDING_COOKIE } from '@/lib/security/oauth-state';
 import { encryptToken } from '@/lib/security/token-crypto';
 import { ROLE_SETS } from '@/lib/auth/permissions';
 
@@ -32,6 +32,11 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   const verified = verifyOAuthState(state);
   if (!verified.ok) return fail(verified.error);
   const { companyId, dataCenter: dc, userId } = verified.value;
+  // …and it is being finished by the same browser that started it.
+  const binding = req.cookies.get(OAUTH_BINDING_COOKIE)?.value;
+  if (!binding || !verified.value.bindingHash || bindingHash(binding) !== verified.value.bindingHash) {
+    return fail('This Zoho connection must be finished in the same browser that started it. Please click "Connect Zoho Books" again.');
+  }
   // …and the person who started it can still manage this company's Zoho connection.
   // (The state is signed by us, so its company is trustworthy: from here the database work runs AS that company.)
   const { rows: starter } = await runAsCompany(companyId, () => query<{ role: string }>(
@@ -71,6 +76,16 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     }
     const expiry = new Date(Date.now() + ((expires_in || 3600) - 60) * 1000);
 
+    // Which organisations can the new login see? A previously saved Organisation ID that it can't
+    // see (a different organisation was connected) is cleared instead of failing every sync.
+    let orgIds: string[] | null = null;
+    try {
+      const orgRes = await axios.get<{ organizations?: { organization_id?: string }[] }>(`${ZOHO_API[dc] || ZOHO_API.IN}/organizations`, {
+        headers: { Authorization: `Zoho-oauthtoken ${access_token}` }, timeout: 15000,
+      });
+      orgIds = (orgRes.data.organizations ?? []).map((o) => String(o.organization_id ?? '')).filter(Boolean);
+    } catch { /* can't tell — keep the saved id */ }
+
     // Tokens are stored encrypted (lib/security/token-crypto.ts); this throws
     // — and the user sees the error — if TOKEN_ENCRYPTION_KEY is missing.
     await runAsCompany(companyId, () => query(
@@ -79,12 +94,14 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
        VALUES ($1,$2,$3,$4,$5,TRUE,'never',NULL)
        ON CONFLICT (company_id) DO UPDATE SET
          access_token=$2, refresh_token=$3, token_expiry=$4,
-         data_center=$5, is_active=TRUE, last_sync_status='never', last_sync_error=NULL, updated_at=NOW()`,
-      [companyId, encryptToken(access_token), encryptToken(refresh_token), expiry, dc]
+         data_center=$5, is_active=TRUE, last_sync_status='never', last_sync_error=NULL, updated_at=NOW(),
+         org_id = CASE WHEN $6::text[] IS NULL OR zoho_config.org_id = ANY($6::text[]) THEN zoho_config.org_id ELSE NULL END`,
+      [companyId, encryptToken(access_token), encryptToken(refresh_token), expiry, dc, orgIds]
     ));
 
     return NextResponse.redirect(`${baseUrl}/dashboard?tab=upload&zoho=connected`);
   } catch (err) {
-    return NextResponse.redirect(`${baseUrl}/dashboard?tab=upload&zoho_error=${encodeURIComponent((err as Error).message)}`);
+    console.error('[zoho/callback] connect failed:', (err as Error).message);
+    return fail('Could not connect Zoho Books. Please try again.');
   }
 }, { system: true });

@@ -1,4 +1,11 @@
-import * as XLSX from 'xlsx';
+import type * as ExcelJS from 'exceljs';
+
+/** A sheet as rows of cell values, row 1 first — what the export's readers see. */
+function sheetRows(wb: ExcelJS.Workbook, name: string): (string | number)[][] {
+  const rows: (string | number)[][] = [];
+  wb.getWorksheet(name)!.eachRow({ includeEmpty: true }, (row, n) => { rows[n - 1] = (row.values as (string | number)[]).slice(1); });
+  return Array.from(rows, (r) => r ?? []);
+}
 import PptxGenJS from 'pptxgenjs';
 import JSZip from 'jszip';
 import {
@@ -84,19 +91,19 @@ describe('buildDashboardLayoutXlsx', () => {
   });
 
   test('has Info, Widgets, Trends, Breakdowns and Tables sheets', () => {
-    expect(wb.SheetNames).toEqual(['Info', 'Widgets', 'Trends', 'Breakdowns', 'Tables']);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['Info', 'Widgets', 'Trends', 'Breakdowns', 'Tables']);
   });
   test('amounts are real numbers in the selected unit (5,00,000 rupees = 5 Lakhs), with a native number format', () => {
-    const rows = XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets.Widgets, { header: 1 });
+    const rows = sheetRows(wb, 'Widgets');
     const revenueRow = rows.find((r) => r[2] === 'Revenue from Operations' && r[1] === 'stat_card')!;
     expect(revenueRow[3]).toBeCloseTo(5, 10);
     expect(revenueRow[4]).toBeCloseTo(4, 10);
     expect(revenueRow[5]).toBeCloseTo(25, 10);
-    const cell = wb.Sheets.Widgets[XLSX.utils.encode_cell({ r: rows.indexOf(revenueRow), c: 3 })];
-    expect(cell.z).toBeTruthy();
+    const cell = wb.getWorksheet('Widgets')!.getCell(rows.indexOf(revenueRow) + 1, 4);
+    expect(cell.numFmt).toBeTruthy();
   });
   test('trend sheet holds one real number per month', () => {
-    const rows = XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets.Trends, { header: 1 });
+    const rows = sheetRows(wb, 'Trends');
     expect(rows[1]).toEqual(['Metric', 'Apr', 'May']);
     expect(rows[2][0]).toBe('Revenue from Operations');
     expect(rows[2][1]).toBeCloseTo(2, 10);
@@ -181,7 +188,7 @@ describe('export model — new widget types and chart options', () => {
 
 describe('warn level and comparison in the Excel export', () => {
   const wb = buildDashboardLayoutXlsx(buildLayoutExportModel(widgets2, resolve2, bundle2), META);
-  const rows = XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets.Widgets, { header: 1 });
+  const rows = sheetRows(wb, 'Widgets');
 
   test('a figure between its target and warn level is "Warning", with both levels spelled out', () => {
     expect(rows[0]).toEqual(['Widget', 'Type', 'Metric', 'Value (₹ in Lakhs)', 'Comparative', 'Change', 'Compared with', 'Target', 'Status']);

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { v4 as uuid } from 'uuid';
+import { randomUUID as uuid } from 'crypto';
 import { query } from '@/lib/db/neon';
 import { invalidateReportCache } from '@/lib/cache/report-cache';
 import { ApiError } from '@/lib/auth/permissions';
@@ -124,7 +124,7 @@ async function runZohoSync(
   const { rows: coRows } = await query<{ currency: string }>(`SELECT currency FROM companies WHERE id=$1`, [companyId]);
   const baseCurrency = (coRows[0]?.currency || 'INR').toUpperCase();
 
-  const { rows: cfgRows } = await query<ZohoConfigRow>(`SELECT * FROM zoho_config WHERE company_id=$1`, [companyId]);
+  const { rows: cfgRows } = await query<ZohoConfigRow>(`SELECT company_id, org_id, access_token, refresh_token, token_expiry, data_center FROM zoho_config WHERE company_id=$1`, [companyId]);
   if (!cfgRows.length) throw new Error('Zoho Books not connected');
   const cfg = decryptZohoConfig(cfgRows[0]);
   const orgId = cfg.org_id;

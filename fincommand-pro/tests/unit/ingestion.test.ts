@@ -18,7 +18,7 @@ function fakeDb(opts: { year?: { is_locked?: boolean; data_source?: 'zoho' | 'ex
         const c = opts.current;
         return { rows: c ? [{ id: 'current-batch', currency: 'INR', file_sha256: c.fileSha ?? null, content_sha256: c.contentSha ?? null }] : [], rowCount: c ? 1 : 0 };
       }
-      if (/SELECT \* FROM tb_ledgers WHERE upload_id/.test(sql)) return { rows: opts.current?.storedRows ?? [], rowCount: 0 };
+      if (/FROM tb_ledgers l WHERE l\.upload_id/.test(sql)) return { rows: opts.current?.storedRows ?? [], rowCount: 0 };
       if (/INSERT INTO raw_payloads/.test(sql)) return { rows: [{ id: `payload-${(params?.[2] as string).length}` }], rowCount: 1 };
       return { rows: [], rowCount: 0 };
     },
@@ -133,7 +133,10 @@ describe('ingestTrialBalance — the one write path for every source', () => {
         return {
           ledger_code: l.code, ledger_name: l.name, note_no: l.note_no, note_name: l.note_name, section: l.section,
           treasury_type: l.treasury_type, normal_bal: l.normal_bal, zoho_account_id: null, zoho_account_type: null, id: `r${i}`,
-          ...Object.fromEntries(Object.entries(amounts).map(([k, v]) => [k, (v ?? 0).toFixed(2)])),
+          // Monthly figures now come from ledger_month_amounts, as two arrays ordered by month.
+          op_dr: (amounts.op_dr ?? 0).toFixed(2), op_cr: (amounts.op_cr ?? 0).toFixed(2),
+          month_dr: Array.from({ length: 12 }, (_, m) => (amounts[`m${m + 1}_dr`] ?? 0).toFixed(4)),
+          month_cr: Array.from({ length: 12 }, (_, m) => (amounts[`m${m + 1}_cr`] ?? 0).toFixed(4)),
         };
       });
       const db = fakeDb({ year: { data_source: 'zoho' }, current: { contentSha: null, storedRows } });

@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { query, withTransaction } from '@/lib/db/neon';
-import { signAccessToken, signRefreshToken } from '@/lib/auth/jwt';
+import { signAccessToken, signRefreshToken, hashRefreshToken } from '@/lib/auth/jwt';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import { isEmail, isCIN, isPAN, isNotFutureDate, isStrongPassword, isIn, ValidationCollector } from '@/lib/validations/common';
 import { isCurrencyCode } from '@/lib/services/currency';
@@ -80,8 +80,8 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   // Parallel pre-checks for existing company and registered emails
   const [coRes, emailRes] = await Promise.all([
     query<{ id: string }>(
-      `SELECT id FROM companies WHERE LOWER(name) = LOWER($1) AND date_of_incorporation = $2`,
-      [companyName, dateOfIncorporation]
+      `SELECT id FROM companies WHERE (LOWER(name) = LOWER($1) AND date_of_incorporation = $2) OR ($3 <> '' AND UPPER(cin) = $3)`,
+      [companyName, dateOfIncorporation, cin]
     ),
     query<{ email: string }>(
       `SELECT email FROM users WHERE email = ANY($1::text[])`,
@@ -167,7 +167,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   await query(
     `INSERT INTO refresh_tokens (user_id, token, ip_address, user_agent, expires_at)
      VALUES ($1,$2,$3,$4,$5)`,
-    [adminUser.id, refreshToken, ip, ua, expiresAt]
+    [adminUser.id, hashRefreshToken(refreshToken), ip, ua, expiresAt]
   );
 
   return json({

@@ -1,6 +1,6 @@
 import { query, withTransaction } from '@/lib/db/neon';
 import type { PoolClient } from 'pg';
-import { v4 as uuid } from 'uuid';
+import { randomUUID as uuid } from 'crypto';
 import type { ReportLine, ReportTemplate, LineLedgerMap, LineType } from '@/lib/financial/report-builder-engine';
 
 interface TemplateRow {

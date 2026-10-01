@@ -1,11 +1,14 @@
 import type { NextRequest } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { query } from '@/lib/db/neon';
-import { signAccessToken, signRefreshToken } from '@/lib/auth/jwt';
+import { signAccessToken, signRefreshToken, hashRefreshToken } from '@/lib/auth/jwt';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import { isEmail, ValidationCollector } from '@/lib/validations/common';
 
 export const runtime = 'nodejs';
+
+// A real bcrypt hash of a random string: compared against when the email is unknown.
+const DUMMY_HASH = '$2a$10$P7yPnXSyHyZqrn0.mw96h.p4VGAqZ6KMNfjjwYStLH1Qvfd8n2ozO';
 
 interface UserRow {
   id: string; company_id: string; name: string; email: string; role: string;
@@ -24,29 +27,43 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   if (!v.isEmpty()) return json({ errors: v.errors() }, { status: 422 });
 
   const { rows } = await query<UserRow>(
-    `SELECT u.*, c.name AS company_name
+    `SELECT u.id, u.name, u.email, u.role, u.company_id, u.is_active,
+            u.password_hash, u.locked_until, u.failed_attempts,
+            c.name AS company_name
      FROM users u JOIN companies c ON c.id = u.company_id
      WHERE u.email=$1`,
     [email]
   );
   const user = rows[0];
 
+  // Same work and same answer whether or not the account exists, so neither the
+  // wording nor the response time says which emails are registered.
+  const match = await bcrypt.compare(password, user?.password_hash ?? DUMMY_HASH);
   if (!user) return json({ error: 'Invalid credentials' }, { status: 401 });
-  if (!user.is_active) return json({ error: 'Account inactive' }, { status: 403 });
+
+  // While locked the answer is the same whatever password was sent — otherwise the lock would tell an
+  // attacker when a guess is right. (It only reveals that an account exists after 5 failures against it.)
   if (user.locked_until && new Date(user.locked_until) > new Date()) {
     return json({ error: 'Account locked. Try again later.' }, { status: 429 });
   }
 
-  const match = await bcrypt.compare(password, user.password_hash);
   if (!match) {
+    // A lock that has run out starts a fresh count; before, the old count stayed and one more miss re-locked at once.
     await query(
-      `UPDATE users SET failed_attempts = failed_attempts + 1,
-        locked_until = CASE WHEN failed_attempts >= 4 THEN NOW() + INTERVAL '15 minutes' ELSE locked_until END
+      `UPDATE users SET
+         failed_attempts = CASE WHEN locked_until IS NOT NULL AND locked_until <= NOW() THEN 1 ELSE failed_attempts + 1 END,
+         locked_until = CASE
+           WHEN locked_until IS NOT NULL AND locked_until <= NOW() THEN NULL
+           WHEN failed_attempts >= 4 THEN NOW() + INTERVAL '15 minutes'
+           ELSE locked_until END
        WHERE id=$1`,
       [user.id]
     );
     return json({ error: 'Invalid credentials' }, { status: 401 });
   }
+
+  // Only someone who proved they know the password is told why they can't get in.
+  if (!user.is_active) return json({ error: 'Account inactive' }, { status: 403 });
 
   const accessToken = signAccessToken(user.id, user.role, user.company_id);
   const refreshToken = signRefreshToken(user.id);
@@ -59,7 +76,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     query(
       `INSERT INTO refresh_tokens (user_id, token, ip_address, user_agent, expires_at)
        VALUES ($1,$2,$3,$4,$5)`,
-      [user.id, refreshToken, ip, ua, expiresAt]
+      [user.id, hashRefreshToken(refreshToken), ip, ua, expiresAt]
     ),
     query(
       `INSERT INTO audit_trail (company_id,user_id,user_name,user_role,action,ip_address,user_agent)

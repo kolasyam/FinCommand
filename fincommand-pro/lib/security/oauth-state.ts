@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'crypto';
 
 /**
  * Signed OAuth `state` for the Zoho Books connect flow.
@@ -24,9 +24,22 @@ interface StatePayload {
   /** user who started the flow */ u: string;
   /** expiry, ms since epoch */ exp: number;
   /** nonce — makes every state unique */ n: string;
+  /** SHA-256 of the browser-binding secret (see bindingHash) */ h?: string;
 }
 
-export interface VerifiedOAuthState { companyId: string; dataCenter: string; userId: string }
+export interface VerifiedOAuthState { companyId: string; dataCenter: string; userId: string; bindingHash?: string }
+
+/**
+ * Ties a state to the browser that started the flow: auth-url hands that browser
+ * a random secret in an httpOnly cookie and puts only its hash in the signed
+ * state; the callback must see the same secret come back. Without this, an
+ * attacker could start a flow, send the link to a victim, and have the victim's
+ * Zoho books connected to the attacker's company.
+ */
+export function bindingHash(secret: string): string {
+  return createHash('sha256').update(`${CONTEXT}.bind.${secret}`).digest('hex');
+}
+export const OAUTH_BINDING_COOKIE = 'fc_zoho_oauth';
 
 function sign(body: string, secret: string): string {
   return createHmac('sha256', secret).update(`${CONTEXT}.${body}`).digest('base64url');
@@ -44,7 +57,7 @@ export function signOAuthState(
 ): string {
   const payload: StatePayload = {
     c: input.companyId, d: input.dataCenter, u: input.userId,
-    exp: now + TTL_MS, n: randomBytes(12).toString('base64url'),
+    exp: now + TTL_MS, n: randomBytes(12).toString('base64url'), h: input.bindingHash,
   };
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
   return `${body}.${sign(body, requireSecret(secret))}`;
@@ -74,5 +87,5 @@ export function verifyOAuthState(
     return { ok: false, error: 'The Zoho connection link expired. Please click "Connect Zoho Books" again.' };
   }
   if (!UUID_RE.test(payload.c) || !UUID_RE.test(payload.u) || typeof payload.d !== 'string') return invalid;
-  return { ok: true, value: { companyId: payload.c, dataCenter: payload.d, userId: payload.u } };
+  return { ok: true, value: { companyId: payload.c, dataCenter: payload.d, userId: payload.u, bindingHash: typeof payload.h === 'string' ? payload.h : undefined } };
 }

@@ -12,11 +12,11 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   const noteNo = searchParams.get('note_no');
   const search = searchParams.get('search');
 
-  let q = `SELECT * FROM ledger_master WHERE (company_id=$1 OR company_id IS NULL) AND is_active=TRUE`;
+  let q = `SELECT id, company_id, ledger_code, ledger_name, note_no, note_name, section, treasury_type, normal_bal, is_active FROM ledger_master WHERE (company_id=$1 OR company_id IS NULL) AND is_active=TRUE`;
   const params: unknown[] = [user.company_id];
   if (section) { params.push(section); q += ` AND section=$${params.length}`; }
   if (noteNo) { params.push(noteNo); q += ` AND note_no=$${params.length}`; }
-  if (search) { params.push(`%${search}%`); q += ` AND ledger_name ILIKE $${params.length}`; }
+  if (search) { params.push('%' + search.replace(/[%_\\]/g, '\\$&') + '%'); q += ` AND ledger_name ILIKE $${params.length}`; }
   q += ' ORDER BY note_no, ledger_name';
 
   const { rows } = await query(q, params);
@@ -36,7 +36,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     `INSERT INTO ledger_master
        (company_id,ledger_code,ledger_name,note_no,note_name,section,treasury_type,normal_bal,is_global,created_by)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,FALSE,$9)
-     ON CONFLICT DO NOTHING RETURNING *`,
+     ON CONFLICT DO NOTHING RETURNING id, company_id, ledger_code, ledger_name, note_no, note_name, section, treasury_type, normal_bal, is_active`,
     [user.company_id, ledger_code || null, ledger_name, note_no, note_name || null,
      section, treasury_type || null, normal_bal || 'Dr', user.id]
   );

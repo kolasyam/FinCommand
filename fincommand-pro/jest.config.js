@@ -7,5 +7,6 @@ module.exports = {
   setupFiles: ['<rootDir>/tests/setup.ts'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
+    '^uuid$': '<rootDir>/tests/shims/uuid.cjs',
   },
 };

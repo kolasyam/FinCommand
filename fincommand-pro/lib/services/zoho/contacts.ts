@@ -86,7 +86,7 @@ function extractContact(raw: Record<string, unknown>, contactType: 'customer' | 
 export async function syncZohoContacts(companyId: string): Promise<ZohoContactSyncResult> {
   const errors: string[] = [];
   const { rows: cfgRows } = await query<ZohoConfigRow>(
-    `SELECT * FROM zoho_config WHERE company_id=$1 AND is_active=TRUE AND refresh_token IS NOT NULL`, [companyId]
+    `SELECT company_id, org_id, access_token, refresh_token, token_expiry, data_center FROM zoho_config WHERE company_id=$1 AND is_active=TRUE AND refresh_token IS NOT NULL`, [companyId]
   );
   if (!cfgRows.length) { errors.push('Zoho Books not connected'); return { synced: 0, customers: 0, vendors: 0, errors }; }
   const cfg = decryptZohoConfig(cfgRows[0]!);

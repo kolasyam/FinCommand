@@ -5,19 +5,19 @@
  * real numbers with native Excel accounting formats (see xlsx-kit.ts),
  * matching the on-screen tab and PDF exactly.
  */
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import type { ReportBundle } from '@/lib/dashboard/types';
 import type { TreasuryEntry, TreasuryResult } from '@/lib/financial/tb-engine';
 import { getFyLabel, getFyShortLabel, formatDate, getUnitHeader, unitSuffix, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
 import { getCurrencyMeta } from '@/lib/services/currency';
-import { ACC_FMT, PCT_FMT, DEFAULT_COMPANY_NAME, toUnit, buildSheet, buildInfoSheet, type SheetRow } from './xlsx-kit';
+import { ACC_FMT, PCT_FMT, DEFAULT_COMPANY_NAME, toUnit, buildSheet, buildInfoSheet, downloadWorkbook, type SheetRow } from './xlsx-kit';
 
 function allEntries(t: TreasuryResult): TreasuryEntry[] {
   return [...t.cash, ...t.bank_ca, ...t.bank_sb, ...t.fds, ...t.mfs];
 }
 
-export function buildTreasuryXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): { wb: XLSX.WorkBook; fyShort: string } {
-  const wb = XLSX.utils.book_new();
+export function buildTreasuryXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): { wb: ExcelJS.Workbook; fyShort: string } {
+  const wb = new ExcelJS.Workbook();
   const yearType = bundle.period_params?.yearType || 'FY';
   const fyFullLabel = getFyLabel(bundle.financial_year, yearType);
   const fyShort = getFyShortLabel(bundle.financial_year, yearType);
@@ -102,7 +102,7 @@ export function buildTreasuryXlsx(bundle: ReportBundle, companyName = DEFAULT_CO
   return { wb, fyShort };
 }
 
-export function exportTreasuryXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): void {
+export async function exportTreasuryXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): Promise<void> {
   const { wb, fyShort } = buildTreasuryXlsx(bundle, companyName, unit, compare, currency);
-  XLSX.writeFile(wb, `FinCommandPro_Treasury_${fyShort}.xlsx`);
+  await downloadWorkbook(wb, `FinCommandPro_Treasury_${fyShort}.xlsx`);
 }

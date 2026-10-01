@@ -9,7 +9,7 @@
  * — Excel's own native negative-red-in-parentheses rendering, so the values
  * stay live numbers a user can chart, sum, or build formulas against.
  */
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import type { DisplayUnit } from '@/lib/utils/format';
 
 export const ACC_FMT = '#,##0.00;[Red](#,##0.00)';
@@ -24,31 +24,33 @@ export const toUnit = (rupees: number, unit: DisplayUnit = 'Lakhs') => rupees / 
 export type CellVal = string | number | null;
 export interface SheetRow { cells: CellVal[]; formats?: (string | null)[]; bold?: boolean; }
 
-export function buildSheet(wb: XLSX.WorkBook, sheetName: string, rows: SheetRow[], colWidths: number[]) {
-  const aoa = rows.map(r => r.cells.map(c => (c === null ? '' : c)));
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
+export function buildSheet(wb: ExcelJS.Workbook, sheetName: string, rows: SheetRow[], colWidths: number[]) {
+  let name = sheetName.slice(0, 31);
+  let n = 1;
+  while (wb.worksheets.some(s => s.name === name)) {
+    const suf = `_${n++}`; 
+    name = `${sheetName.slice(0, 31 - suf.length)}${suf}`;
+  }
+  
+  const ws = wb.addWorksheet(name);
+  ws.columns = colWidths.map(w => ({ width: w }));
 
-  rows.forEach((row, ri) => {
+  rows.forEach((row) => {
+    const wsRow = ws.addRow(row.cells.map(c => c === null ? '' : c));
     row.cells.forEach((val, ci) => {
-      const ref = XLSX.utils.encode_cell({ r: ri, c: ci });
-      const cell = ws[ref];
-      if (!cell) return;
+      const cell = wsRow.getCell(ci + 1);
       const fmt = row.formats?.[ci];
-      if (fmt && typeof val === 'number') cell.z = fmt;
+      if (fmt && typeof val === 'number') {
+        cell.numFmt = fmt;
+      }
       if (row.bold) {
-        cell.s = { font: { bold: true } }; // honored only by editors that read cell.s (community xlsx writer doesn't emit styles) — harmless no-op otherwise, kept for forward-compat.
+        cell.font = { bold: true };
       }
     });
   });
-
-  ws['!cols'] = colWidths.map(w => ({ wch: w }));
-  let name = sheetName.slice(0, 31);
-  let n = 1;
-  while (wb.SheetNames.includes(name)) { const suf = `_${n++}`; name = `${sheetName.slice(0, 31 - suf.length)}${suf}`; }
-  XLSX.utils.book_append_sheet(wb, ws, name);
 }
 
-export function buildInfoSheet(wb: XLSX.WorkBook, opts: {
+export function buildInfoSheet(wb: ExcelJS.Workbook, opts: {
   companyName: string; fyFullLabel: string; yearType: string; periodLabel: string; generatedAt: string;
 }) {
   const info: SheetRow[] = [
@@ -62,4 +64,17 @@ export function buildInfoSheet(wb: XLSX.WorkBook, opts: {
     { cells: ['Generated At', opts.generatedAt] },
   ];
   buildSheet(wb, 'Info', info, [25, 45]);
+}
+
+export async function downloadWorkbook(wb: ExcelJS.Workbook, filename: string) {
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }

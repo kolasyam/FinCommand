@@ -63,6 +63,7 @@ export interface ReportDef {
 // generalledger (account totals only, no transactions).
 export const ZOHO_REPORTS: ReportDef[] = [
   { key: 'taxsummary', label: 'Tax summary (GST)', path: '/reports/taxsummary', period: 'fy' },
+  { key: 'openingbalances', label: 'Opening balances', path: '/settings/openingbalances', period: 'asof' },
   { key: 'salesbyitem', label: 'Sales by item', path: '/reports/salesbyitem', period: 'fy' },
   { key: 'cashflow', label: 'Cash flow', path: '/reports/cashflow', period: 'fy' },
   { key: 'aragingsummary', label: 'Receivables ageing', path: '/reports/aragingsummary', period: 'asof' },
@@ -161,6 +162,26 @@ export const ZOHO_MODULES: ModuleDef[] = [
     fields: { id: 'recurring_expense_id', title: ['recurrence_name'], status: ['status'], contactId: ['vendor_id'], contactName: ['vendor_name'], amount: ['total'], currency: ['currency_code'], modified: ['last_modified_time'] } },
   { key: 'budgets', label: 'Budgets', phase: 'B', path: '/budgets', listKey: 'budgets', detail: 'none', incremental: false,
     fields: { id: 'budget_id', title: ['name', 'budget_name'], status: ['status'] } },
+
+  // ── More of what Zoho keeps (each is one cheap list read; an organisation that doesn't use the feature simply
+  //    returns nothing or a per-module error, which never stops the other modules) ──
+  { key: 'bankrules', label: 'Bank rules', phase: 'B', path: '/bankaccounts/rules', listKey: 'rules', detail: 'none', incremental: false,
+    fanOut: { parentModule: 'bankaccounts', param: 'account_id' },
+    fields: { id: 'rule_id', title: ['rule_name'], parent: ['account_id'] } },
+  { key: 'pricebooks', label: 'Price lists', phase: 'B', path: '/pricebooks', listKey: 'pricebooks', detail: 'none', incremental: false,
+    fields: { id: 'pricebook_id', title: ['name'], status: ['status'], currency: ['currency_code'] } },
+  { key: 'compositeitems', label: 'Composite items', phase: 'B', path: '/compositeitems', listKey: 'composite_items', detail: 'none', incremental: false,
+    fields: { id: 'composite_item_id', title: ['name'], number: ['sku'], status: ['status'], amount: ['rate'] } },
+  { key: 'inventoryadjustments', label: 'Inventory adjustments', phase: 'B', path: '/inventoryadjustments', listKey: 'inventory_adjustments', detail: 'none', incremental: false,
+    fields: { id: 'inventory_adjustment_id', number: ['reference_number'], title: ['reason'], date: ['date'], status: ['status'] } },
+  { key: 'transferorders', label: 'Transfer orders', phase: 'B', path: '/transferorders', listKey: 'transfer_orders', detail: 'none', incremental: false,
+    fields: { id: 'transfer_order_id', number: ['transfer_order_number'], date: ['date'], status: ['status'] } },
+  { key: 'warehouses', label: 'Warehouses', phase: 'B', path: '/settings/warehouses', listKey: 'warehouses', detail: 'none', incremental: false,
+    fields: { id: 'warehouse_id', title: ['warehouse_name'], status: ['status'] } },
+  { key: 'ewaybills', label: 'E-way bills', phase: 'B', path: '/ewaybills', listKey: 'ewaybills', detail: 'none', incremental: false,
+    fields: { id: 'ewaybill_id', number: ['ewaybill_number'], date: ['date', 'ewaybill_date'], status: ['status'], contactName: ['customer_name'] } },
+  { key: 'timeentries', label: 'Time entries', phase: 'B', path: '/projects/timeentries', listKey: 'time_entries', detail: 'none', incremental: false,
+    fields: { id: 'time_entry_id', title: ['task_name'], date: ['log_date'], status: ['billed_status'], contactName: ['customer_name'] } },
 ];
 
 export function getModule(key: string): ModuleDef | undefined {

@@ -5,15 +5,15 @@
  * matrix as real numbers with native Excel accounting formats (see
  * xlsx-kit.ts), matching the on-screen tab and PDF exactly.
  */
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import type { ReportBundle } from '@/lib/dashboard/types';
 import type { MISColumn } from '@/lib/financial/tb-engine';
 import { getFyLabel, getFyShortLabel, formatDate, getUnitHeader, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
-import { ACC_FMT, PCT_FMT, DEFAULT_COMPANY_NAME, toUnit, buildSheet, buildInfoSheet, type SheetRow } from './xlsx-kit';
+import { ACC_FMT, PCT_FMT, DEFAULT_COMPANY_NAME, toUnit, buildSheet, buildInfoSheet, downloadWorkbook, type SheetRow } from './xlsx-kit';
 
 /** `unit` and `compare` mirror the on-screen tab's current Display Unit selector and "Compare with prior year" toggle — a downloaded report shows exactly what the tab showed at the moment it was downloaded, not always ₹ Lakhs / always-on comparison regardless of what the user picked. */
-export function buildMisXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): { wb: XLSX.WorkBook; fyShort: string } {
-  const wb = XLSX.utils.book_new();
+export function buildMisXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): { wb: ExcelJS.Workbook; fyShort: string } {
+  const wb = new ExcelJS.Workbook();
   const yearType = bundle.period_params?.yearType || 'FY';
   const fyFullLabel = getFyLabel(bundle.financial_year, yearType);
   const fyShort = getFyShortLabel(bundle.financial_year, yearType);
@@ -106,7 +106,7 @@ export function buildMisXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY
   return { wb, fyShort };
 }
 
-export function exportMisXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): void {
+export async function exportMisXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): Promise<void> {
   const { wb, fyShort } = buildMisXlsx(bundle, companyName, unit, compare, currency);
-  XLSX.writeFile(wb, `FinCommandPro_MIS_${fyShort}.xlsx`);
+  await downloadWorkbook(wb, `FinCommandPro_MIS_${fyShort}.xlsx`);
 }

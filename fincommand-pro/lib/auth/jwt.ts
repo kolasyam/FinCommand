@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { createHash, randomUUID } from 'crypto';
 
 export interface AccessTokenPayload {
   sub: string;
@@ -19,9 +20,19 @@ export function signAccessToken(sub: string, role: string, companyId: string): s
 
 /** Signs a refresh token — identical claim shape to the original signRefresh() in routes/auth.js. */
 export function signRefreshToken(sub: string): string {
-  return jwt.sign({ sub }, requireEnv('JWT_REFRESH_SECRET'), {
+  // jti makes every refresh token unique — two logins/refreshes in the same second no longer collide.
+  return jwt.sign({ sub, jti: randomUUID() }, requireEnv('JWT_REFRESH_SECRET'), {
     expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   } as jwt.SignOptions);
+}
+
+/**
+ * Refresh tokens are stored as a SHA-256 fingerprint, never as the token
+ * itself, so a copy of the database cannot be used to take over sessions.
+ * (The token is a high-entropy signed JWT, so a plain hash is enough.)
+ */
+export function hashRefreshToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
 }
 
 export function verifyAccessToken(token: string): AccessTokenPayload {

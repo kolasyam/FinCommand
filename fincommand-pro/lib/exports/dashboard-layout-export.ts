@@ -26,7 +26,7 @@
  */
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import type PptxGenJS from 'pptxgenjs';
 import type { ReportBundle } from '@/lib/dashboard/types';
 import {
@@ -38,7 +38,7 @@ import {
   NAVY, SLATE, BORDER, MARGIN, CONTENT_W, PAGE_W, PDF_TABLE_STYLES, GREEN, GREEN_TINT, RED, RED_TINT, AMBER, AMBER_TINT,
   addPdfHeader, addPdfFooter, toneColor, toneTint, pdfTableBottom,
 } from './pdf-kit';
-import { ACC_FMT, toUnit, buildSheet, type SheetRow, type CellVal } from './xlsx-kit';
+import { ACC_FMT, toUnit, buildSheet, downloadWorkbook, type SheetRow, type CellVal } from './xlsx-kit';
 
 // ── Model ────────────────────────────────────────────────────────────────
 
@@ -339,8 +339,8 @@ function excelFormat(type: ValueType, decimals: number): string {
 const CHANGE_PCT_FMT = '0.0"%";[Red](0.0"%")';
 
 /** Builds the workbook without downloading it (testable in Node). Sheets: Info, Widgets (one row per value), Trends (month-by-month), Breakdowns, Tables. */
-export function buildDashboardLayoutXlsx(model: ExportBlock[], meta: LayoutExportMeta): XLSX.WorkBook {
-  const wb = XLSX.utils.book_new();
+export function buildDashboardLayoutXlsx(model: ExportBlock[], meta: LayoutExportMeta): ExcelJS.Workbook {
+  const wb = new ExcelJS.Workbook();
   const unitHeader = getUnitHeader(meta.unit, meta.currency);
 
   buildSheet(wb, 'Info', [
@@ -459,8 +459,8 @@ function downloadBlob(blob: Blob, fileName: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-export function exportDashboardLayoutXlsx(model: ExportBlock[], meta: LayoutExportMeta): void {
-  XLSX.writeFile(buildDashboardLayoutXlsx(model, meta), `${fileBase(meta)}.xlsx`);
+export async function exportDashboardLayoutXlsx(model: ExportBlock[], meta: LayoutExportMeta): Promise<void> {
+  await downloadWorkbook(buildDashboardLayoutXlsx(model, meta), `${fileBase(meta)}.xlsx`);
 }
 
 // ── CSV ──────────────────────────────────────────────────────────────────

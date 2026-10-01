@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { createHash } from 'crypto';
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import { authenticate, requireRole, ROLE_SETS } from '@/lib/auth/permissions';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import { query } from '@/lib/db/neon';
@@ -8,6 +8,7 @@ import { logAudit } from '@/lib/audit/audit';
 import { invalidateReportCache } from '@/lib/cache/report-cache';
 import { isCurrencyCode } from '@/lib/services/currency';
 import { describeImbalance } from '@/lib/financial/tb-validation';
+import { cellPlainValue, cellText, parseAmount } from '@/lib/ingestion/excel-values';
 import { ingestTrialBalance, type NormalizedLedger } from '@/lib/ingestion/trial-balance';
 
 export const runtime = 'nodejs';
@@ -22,14 +23,24 @@ interface LedgerMasterRow {
 
 interface FyRow { id: string; is_locked: boolean }
 
-// Detects a column index by matching header text against candidate substrings —
-// ported verbatim from routes/trialBalance.js `fi()`.
 function findColumn(hdr: unknown[], ...needles: string[]): number {
   for (const needle of needles) {
     const i = hdr.findIndex(h => String(h || '').toLowerCase().replace(/[_\s-]/g, '').includes(needle));
     if (i >= 0) return i;
   }
   return -1;
+}
+
+function sheetToArray(ws: ExcelJS.Worksheet): unknown[][] {
+  const result: unknown[][] = [];
+  ws.eachRow({ includeEmpty: true }, (row) => {
+    const rowData: unknown[] = [];
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      rowData[colNumber - 1] = cellPlainValue(cell.value);
+    });
+    result.push(rowData);
+  });
+  return result;
 }
 
 export const POST = withErrorHandling(async (req: NextRequest) => {
@@ -56,8 +67,12 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   if (typeof financial_year_id !== 'string' || !financial_year_id) {
     return json({ error: 'financial_year_id required' }, { status: 400 });
   }
-  if (!/\.(xlsx|xls)$/i.test(file.name)) {
-    return json({ error: 'Only .xlsx and .xls files allowed' }, { status: 400 });
+  // The reader (ExcelJS) cannot open the old binary .xls format — say so instead of failing with a vague error later.
+  if (/\.xls$/i.test(file.name)) {
+    return json({ error: 'Old .xls files are not supported. Open it in Excel and use Save As -> Excel Workbook (.xlsx), then upload again.' }, { status: 400 });
+  }
+  if (!/\.xlsx$/i.test(file.name)) {
+    return json({ error: 'Only .xlsx files allowed' }, { status: 400 });
   }
   if (file.size > MAX_FILE_SIZE) {
     return json({ error: `File exceeds ${process.env.MAX_FILE_SIZE_MB || '50'}MB limit` }, { status: 413 });
@@ -73,41 +88,40 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   const buffer = Buffer.from(await file.arrayBuffer());
   const fileSha256 = createHash('sha256').update(buffer).digest('hex');
 
-  let wb: XLSX.WorkBook;
+  let wb = new ExcelJS.Workbook();
   try {
-    wb = XLSX.read(buffer, { type: 'buffer' });
+    await wb.xlsx.load(buffer as any);
   } catch (e) {
     return json({ error: 'Cannot read Excel file: ' + (e as Error).message }, { status: 422 });
   }
 
   // ── Flexible Trial Balance sheet detection ──
-  // Try exact match first, then common variations (case-insensitive), then
-  // first sheet if it has the right header columns. This lets users upload
-  // files from Tally, SAP, Zoho Books, etc. without renaming sheets.
   const TB_CANDIDATES = ['Trial_Balance', 'Trial Balance', 'TrialBalance', 'TB', 'trial_balance', 'Sheet1'];
   let tbSheetName: string | undefined;
+  
+  const sheetNames = wb.worksheets.map(s => s.name);
 
   // 1. Exact match from candidates
   for (const candidate of TB_CANDIDATES) {
-    if (wb.SheetNames.includes(candidate)) { tbSheetName = candidate; break; }
+    if (sheetNames.includes(candidate)) { tbSheetName = candidate; break; }
   }
 
   // 2. Case-insensitive match
   if (!tbSheetName) {
-    const lower = wb.SheetNames.map(n => n.toLowerCase().replace(/[\s_-]/g, ''));
+    const lower = sheetNames.map(n => n.toLowerCase().replace(/[\s_-]/g, ''));
     const idx = lower.findIndex(n => n === 'trialbalance' || n === 'tb');
-    if (idx >= 0) tbSheetName = wb.SheetNames[idx];
+    if (idx >= 0) tbSheetName = sheetNames[idx];
   }
 
   // 3. First sheet that contains recognisable TB header columns
   if (!tbSheetName) {
-    for (const sn of wb.SheetNames) {
-      const peek: unknown[][] = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1 });
+    for (const ws of wb.worksheets) {
+      const peek = sheetToArray(ws).slice(0, 5);
       const hdrRow = peek[0] || [];
       const hdrStr = hdrRow.map(h => String(h || '').toLowerCase().replace(/[\s_-]/g, '')).join('|');
       if (hdrStr.includes('ledgername') || hdrStr.includes('ledgercode') ||
           (hdrStr.includes('openingdr') && hdrStr.includes('openingcr'))) {
-        tbSheetName = sn;
+        tbSheetName = ws.name;
         break;
       }
     }
@@ -115,13 +129,13 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
 
   if (!tbSheetName) {
     return json({
-      error: `No Trial Balance sheet found. Your file has sheets: [${wb.SheetNames.join(', ')}]. `
+      error: `No Trial Balance sheet found. Your file has sheets: [${sheetNames.join(', ')}]. `
            + `Please use the downloaded template or ensure your file has a sheet named "Trial_Balance" `
            + `with columns: Ledger_Code, Ledger_Name, Opening_Dr, Opening_Cr, Apr_Dr … Mar_Cr.`
     }, { status: 422 });
   }
 
-  const tbRaw: unknown[][] = XLSX.utils.sheet_to_json(wb.Sheets[tbSheetName], { header: 1 });
+  const tbRaw: unknown[][] = sheetToArray(wb.getWorksheet(tbSheetName)!);
   const hdr = tbRaw[0] || [];
 
   const ci = {
@@ -156,11 +170,11 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   const LM_CANDIDATES = ['Ledger_Master', 'Ledger Master', 'LedgerMaster', 'ledger_master'];
   let lmSheetName: string | undefined;
   for (const candidate of LM_CANDIDATES) {
-    if (wb.SheetNames.includes(candidate)) { lmSheetName = candidate; break; }
+    if (sheetNames.includes(candidate)) { lmSheetName = candidate; break; }
   }
 
   if (lmSheetName) {
-    const lmRaw: unknown[][] = XLSX.utils.sheet_to_json(wb.Sheets[lmSheetName], { header: 1 });
+    const lmRaw: unknown[][] = sheetToArray(wb.getWorksheet(lmSheetName)!);
     const lmHdr = lmRaw[0] || [];
     const lmCi = {
       code: findColumn(lmHdr, 'ledgercode', 'ledger_code', 'code'),
@@ -174,8 +188,8 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
 
     lmRaw.slice(1).forEach(r => {
       if (!r || r.length === 0) return;
-      const code = lmCi.code >= 0 ? String(r[lmCi.code] || '').trim() : '';
-      const name = lmCi.name >= 0 ? String(r[lmCi.name] || '').trim() : '';
+      const code = lmCi.code >= 0 ? cellText(r[lmCi.code]) : '';
+      const name = lmCi.name >= 0 ? cellText(r[lmCi.name]) : '';
       if (!code && !name) return;
 
       const noteNoVal = lmCi.note_no >= 0 ? parseInt(String(r[lmCi.note_no])) : NaN;
@@ -204,17 +218,26 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   let mapped = 0;
   const unmatched: string[] = [];
 
+  // A figure that isn't a number is reported, never quietly stored as 0.
+  const badAmounts: string[] = [];
+  const amount = (v: unknown, ledger: string, column: string): number => {
+    const n = parseAmount(v);
+    if (n === null) { badAmounts.push(`${ledger} -> ${column}: "${cellText(v)}"`); return 0; }
+    return n;
+  };
+
   tbRaw.slice(1).forEach(r => {
     if (!r[ci.name]) return;
-    const name = String(r[ci.name]).trim();
-    const code = ci.code >= 0 ? String(r[ci.code] || '').trim() : '';
+    const name = cellText(r[ci.name]);
+    if (!name) return;
+    const code = ci.code >= 0 ? cellText(r[ci.code]) : '';
     const lm = lmByCode.get(code) || lmByName.get(name.toLowerCase());
     if (lm) mapped++; else if (name) unmatched.push(name);
 
     const row: ParsedRow = {
       code, name,
-      op_dr: parseFloat(String(r[ci.op_dr])) || 0,
-      op_cr: parseFloat(String(r[ci.op_cr])) || 0,
+      op_dr: amount(r[ci.op_dr], name, 'Opening_Dr'),
+      op_cr: amount(r[ci.op_cr], name, 'Opening_Cr'),
       note_no: lm?.note_no ?? null,
       note_name: lm?.note_name ?? null,
       section: lm?.section ?? null,
@@ -223,11 +246,18 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     };
     monthCols.forEach((mc, mi) => {
       const monthNum = mi + 1;
-      row[`m${monthNum}_dr`] = mc.dr >= 0 ? (parseFloat(String(r[mc.dr])) || 0) : 0;
-      row[`m${monthNum}_cr`] = mc.cr >= 0 ? (parseFloat(String(r[mc.cr])) || 0) : 0;
+      row[`m${monthNum}_dr`] = mc.dr >= 0 ? amount(r[mc.dr], name, `${FY_MONTHS[mi]}_Dr`) : 0;
+      row[`m${monthNum}_cr`] = mc.cr >= 0 ? amount(r[mc.cr], name, `${FY_MONTHS[mi]}_Cr`) : 0;
     });
     rows.push(row);
   });
+
+  if (badAmounts.length) {
+    return json({
+      error: `${badAmounts.length} amount${badAmounts.length > 1 ? 's are' : ' is'} not a number: ${badAmounts.slice(0, 8).join('; ')}${badAmounts.length > 8 ? ` and ${badAmounts.length - 8} more` : ''}. Fix them and upload again.`,
+      code: 'INVALID_AMOUNTS',
+    }, { status: 422 });
+  }
 
   const coverage = rows.length > 0 ? Math.round(mapped / rows.length * 100) : 0;
 

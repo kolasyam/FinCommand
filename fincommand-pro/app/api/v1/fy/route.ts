@@ -29,6 +29,11 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   if (!label || !start_date || !end_date) {
     return json({ error: 'label, start_date, end_date required' }, { status: 400 });
   }
+  // Every month of the year is stored as start_date + n months; a start that is not the 1st would
+  // make the stored months and the report months disagree.
+  if (!/^\d{4}-\d{2}-01$/.test(String(start_date))) {
+    return json({ error: 'start_date must be the first day of a month (YYYY-MM-01)' }, { status: 400 });
+  }
   try {
     const { rows } = await query(
       `INSERT INTO financial_years (company_id,label,short_label,start_date,end_date,year_type)

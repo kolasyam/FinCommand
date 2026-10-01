@@ -166,12 +166,12 @@ function DashboardShell() {
 
   const companyName = dataMode === 'api' && user?.company_name ? user.company_name : undefined;
 
-  function downloadAllXlsx() {
+  async function downloadAllXlsx() {
     if (!bundle) { toast('Load report data first (switch out of 3-Year view)'); return; }
     // "Download All" has no single tab's Compare toggle to respect, so it
     // defaults to including YoY comparison wherever prior-year data exists —
     // the same behavior this bundle always had.
-    exportAllXlsx(bundle, companyName, displayUnit, true, presentationCurrency);
+    await exportAllXlsx(bundle, companyName, displayUnit, true, presentationCurrency);
     toast('All reports exported to Excel');
   }
   function downloadAllPdf() {

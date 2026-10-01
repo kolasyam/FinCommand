@@ -2,7 +2,9 @@ import type { NextRequest } from 'next/server';
 import { authenticate, requireRole, ROLE_SETS } from '@/lib/auth/permissions';
 import { withErrorHandling, json } from '@/lib/utils/api-handler';
 import { query } from '@/lib/db/neon';
-import { fetchAndStoreZohoOrgCurrency } from '@/lib/services/zoho';
+import axios from 'axios';
+import { fetchAndStoreZohoOrgCurrency, ZOHO_ACCOUNTS } from '@/lib/services/zoho';
+import { decryptZohoConfig } from '@/lib/services/zoho/client';
 import { isValidDailyLimit, ZOHO_PLAN_LIMITS } from '@/lib/services/zoho/budget';
 
 export const runtime = 'nodejs';
@@ -18,6 +20,16 @@ export const PUT = withErrorHandling(async (req: NextRequest) => {
   // It caps how much the record reads may use; it must be one of the plan values, not a free number.
   if (body.api_daily_limit !== undefined && !isValidDailyLimit(body.api_daily_limit)) {
     return json({ error: `api_daily_limit must be one of ${Object.values(ZOHO_PLAN_LIMITS).join(', ')}` }, { status: 400 });
+  }
+
+  // One Zoho organisation can feed only one company: two companies sharing it would mix their books.
+  // Only a LIVE connection counts (active, holding a token): a leftover or disconnected entry that merely
+  // remembers the id - a test company, an abandoned attempt - must not block the real owner from connecting.
+  if (typeof org_id === 'string' && org_id.trim()) {
+    const { rows: taken } = await query(
+      `SELECT 1 FROM zoho_config WHERE org_id=$1 AND company_id<>$2 AND is_active=TRUE AND refresh_token IS NOT NULL LIMIT 1`,
+      [org_id.trim(), user.company_id]);
+    if (taken.length) return json({ error: 'This Zoho organisation is already connected to another company.' }, { status: 409 });
   }
 
   // Explicit columns, never RETURNING * — that sent the Zoho access and
@@ -56,6 +68,10 @@ export const DELETE = withErrorHandling(async (req: NextRequest) => {
   const user = await authenticate(req);
   requireRole(user, ROLE_SETS.isCFO);
 
+  const { rows: [cfg] } = await query<{ access_token: string | null; refresh_token: string | null; data_center: string | null }>(
+    `SELECT access_token, refresh_token, data_center FROM zoho_config WHERE company_id=$1`, [user.company_id]
+  );
+
   await query(
     `UPDATE zoho_config SET
        is_active=FALSE,
@@ -68,5 +84,13 @@ export const DELETE = withErrorHandling(async (req: NextRequest) => {
      WHERE company_id=$1`,
     [user.company_id]
   );
+
+  // Also tell Zoho, so the grant stops working there too. Best effort: our copy is already gone either way.
+  const refreshToken = cfg?.refresh_token ? decryptZohoConfig(cfg).refresh_token : null;
+  if (refreshToken) {
+    const base = ZOHO_ACCOUNTS[cfg!.data_center || 'IN'] || ZOHO_ACCOUNTS.IN;
+    await axios.post(`${base}/oauth/v2/token/revoke`, null, { params: { token: refreshToken }, timeout: 10000 })
+      .catch((err: Error) => console.warn('[zoho/config] token revoke at Zoho failed:', err.message));
+  }
   return json({ message: 'Zoho Books disconnected successfully' });
 });

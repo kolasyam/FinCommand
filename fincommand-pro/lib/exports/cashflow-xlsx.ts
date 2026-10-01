@@ -5,15 +5,15 @@
  * real numbers with native Excel accounting formats (see xlsx-kit.ts),
  * using the same human-readable labels as the on-screen tab and PDF.
  */
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import type { ReportBundle } from '@/lib/dashboard/types';
 import { getFyLabel, getFyShortLabel, formatDate, getUnitHeader, unitSuffix, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
 import { getCurrencyMeta } from '@/lib/services/currency';
 import { cfLabel } from '@/lib/financial/cashflow-labels';
-import { ACC_FMT, PCT_FMT, DEFAULT_COMPANY_NAME, toUnit, buildSheet, buildInfoSheet, type SheetRow } from './xlsx-kit';
+import { ACC_FMT, PCT_FMT, DEFAULT_COMPANY_NAME, toUnit, buildSheet, buildInfoSheet, downloadWorkbook, type SheetRow } from './xlsx-kit';
 
-export function buildCashFlowXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): { wb: XLSX.WorkBook; fyShort: string } {
-  const wb = XLSX.utils.book_new();
+export function buildCashFlowXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): { wb: ExcelJS.Workbook; fyShort: string } {
+  const wb = new ExcelJS.Workbook();
   const yearType = bundle.period_params?.yearType || 'FY';
   const fyFullLabel = getFyLabel(bundle.financial_year, yearType);
   const fyShort = getFyShortLabel(bundle.financial_year, yearType);
@@ -104,7 +104,7 @@ export function buildCashFlowXlsx(bundle: ReportBundle, companyName = DEFAULT_CO
   return { wb, fyShort };
 }
 
-export function exportCashFlowXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): void {
+export async function exportCashFlowXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): Promise<void> {
   const { wb, fyShort } = buildCashFlowXlsx(bundle, companyName, unit, compare, currency);
-  XLSX.writeFile(wb, `FinCommandPro_CashFlow_${fyShort}.xlsx`);
+  await downloadWorkbook(wb, `FinCommandPro_CashFlow_${fyShort}.xlsx`);
 }

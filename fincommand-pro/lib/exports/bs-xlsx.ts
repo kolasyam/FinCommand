@@ -5,13 +5,13 @@
  * Note-level breakdowns as real numbers with native Excel accounting
  * formats (see xlsx-kit.ts), matching the on-screen tab and PDF exactly.
  */
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import type { ReportBundle } from '@/lib/dashboard/types';
 import type { AggregatedNote } from '@/lib/financial/tb-engine';
 import { resolvePeriod } from '@/lib/financial/tb-engine';
 import { getFyLabel, getFyShortLabel, formatDate, cyYearFromFy, getUnitHeader, unitSuffix, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
 import { getCurrencyMeta } from '@/lib/services/currency';
-import { ACC_FMT, PCT_FMT, DEFAULT_COMPANY_NAME, toUnit, buildSheet, buildInfoSheet, type SheetRow } from './xlsx-kit';
+import { ACC_FMT, PCT_FMT, DEFAULT_COMPANY_NAME, toUnit, buildSheet, buildInfoSheet, downloadWorkbook, type SheetRow } from './xlsx-kit';
 
 /** Same "as at" date logic as BalanceSheetTab.tsx / bs-pdf.ts. */
 function resolveAsAtDate(financialYear: { start_date: string; end_date: string }, yearType: string, periodParams: ReportBundle['period_params']): string {
@@ -28,8 +28,8 @@ function resolveAsAtDate(financialYear: { start_date: string; end_date: string }
   return formatDate(financialYear.end_date);
 }
 
-export function buildBsXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): { wb: XLSX.WorkBook; fyShort: string } {
-  const wb = XLSX.utils.book_new();
+export function buildBsXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): { wb: ExcelJS.Workbook; fyShort: string } {
+  const wb = new ExcelJS.Workbook();
   const yearType = bundle.period_params?.yearType || 'FY';
   const fyFullLabel = getFyLabel(bundle.financial_year, yearType);
   const fyShort = getFyShortLabel(bundle.financial_year, yearType);
@@ -132,7 +132,7 @@ export function buildBsXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_
   return { wb, fyShort };
 }
 
-export function exportBsXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): void {
+export async function exportBsXlsx(bundle: ReportBundle, companyName = DEFAULT_COMPANY_NAME, unit: DisplayUnit = 'Lakhs', compare = true, currency: CurrencyCode = 'INR'): Promise<void> {
   const { wb, fyShort } = buildBsXlsx(bundle, companyName, unit, compare, currency);
-  XLSX.writeFile(wb, `FinCommandPro_BalanceSheet_${fyShort}.xlsx`);
+  await downloadWorkbook(wb, `FinCommandPro_BalanceSheet_${fyShort}.xlsx`);
 }

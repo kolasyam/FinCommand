@@ -6,6 +6,8 @@ import { syncFromZoho } from '@/lib/services/zoho';
 import { runAsCompany } from '@/lib/db/tenant-context';
 
 export const runtime = 'nodejs';
+// Without this the platform default applies and a long list of companies is cut off mid-sync.
+export const maxDuration = 60;
 
 /**
  * Vercel Cron entry point — replaces server.js's node-cron scheduler, which
@@ -25,6 +27,17 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   const denied = checkCronSecret(req, 'zoho-cron');
   if (denied) return denied;
 
+  const startedAt = Date.now();
+  // Stop STARTING new syncs well before the function is killed; whatever is left is picked up on the next tick
+  // (the list is ordered least-recently-synced first, so every company gets its turn).
+  const budgetMs = parseInt(process.env.ZOHO_CRON_BUDGET_MS || '', 10) || 40_000;
+
+  // A sync whose function was killed never wrote its end state — close those logs so they don't sit on "running" forever.
+  await query(
+    `UPDATE sync_logs SET status='error', error_message='Sync did not finish (the server stopped it)', completed_at=NOW()
+      WHERE status='running' AND started_at < NOW() - INTERVAL '30 minutes'`
+  ).catch((e: Error) => console.error('[zoho-cron] stale sync-log cleanup failed:', e.message));
+
   const results: { company_id: string; status: string; error?: string; skipped?: string }[] = [];
   // sync_frequency gates *which* companies are due, not just whether cron
   // applies to them at all — this previously only excluded 'manual', so a
@@ -40,7 +53,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     `SELECT zc.company_id, fy.id AS fy_id
      FROM zoho_config zc
      JOIN financial_years fy ON fy.company_id=zc.company_id
-     WHERE zc.is_active=TRUE AND zc.org_id IS NOT NULL
+     WHERE zc.is_active=TRUE AND zc.org_id IS NOT NULL AND zc.refresh_token IS NOT NULL
        AND zc.sync_frequency != 'manual'
        -- A company that keeps failing waits 15 min, 1 h, 6 h, 24 h between tries (health.ts) instead of
        -- being retried on every tick, each try spending ~40 of its daily Zoho API calls.
@@ -56,9 +69,10 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
          OR (zc.sync_frequency='hourly' AND zc.last_synced_at <= NOW() - INTERVAL '1 hour')
          OR (zc.sync_frequency='daily' AND zc.last_synced_at <= NOW() - INTERVAL '1 day')
        )
-     ORDER BY fy.start_date DESC`
+     ORDER BY zc.last_synced_at ASC NULLS FIRST, fy.start_date DESC`
   );
   for (const row of rows) {
+    if (Date.now() - startedAt > budgetMs) { results.push({ company_id: row.company_id, status: 'deferred', skipped: 'time budget used — next run' }); continue; }
     try {
       // The company list above is read on the system connection; each company's sync then runs AS that company,
       // so under row-level security a bug in one sync cannot touch another company's rows.
