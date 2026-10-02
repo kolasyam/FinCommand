@@ -24,14 +24,14 @@
  * restored (saved as a new version — history is never rewritten).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
-import { useToast } from '@/lib/dashboard/ToastContext';
-import { useCustomMetricsList } from '@/lib/dashboard/TabCustomizationsContext';
-import { ApiClientError } from '@/lib/dashboard/api-client';
+import { useDashboard } from '@/lib/client/DashboardContext';
+import { useToast } from '@/lib/client/ToastContext';
+import { useCustomMetricsList } from '@/lib/client/TabCustomizationsContext';
+import { ApiClientError } from '@/lib/client/api-client';
 import {
   saveCustomMetric, previewLedgerMetric, fetchCustomMetricVersions, restoreCustomMetricVersion,
   type LedgerMetricPreview, type CustomMetricVersionDTO,
-} from '@/lib/dashboard/dashboard-builder-api';
+} from '@/lib/client/dashboard-builder-api';
 import {
   buildChainExpr, flattenChain, resolveCustomMetric, customMetricCapabilities, describeCustomMetric,
   findDependents, isUnaryOp, metricKind, fromSnapshot, CUSTOM_METRIC_KEY_RE,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
+import { useDashboard } from '@/lib/client/DashboardContext';
 import { Kpi } from '../Kpi';
 import { RevenueEbitdaChart } from '@/components/charts/RevenueEbitdaChart';
 import { MarginTrendChart } from '@/components/charts/MarginTrendChart';

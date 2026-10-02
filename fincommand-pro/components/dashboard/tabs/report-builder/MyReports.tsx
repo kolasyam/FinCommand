@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useToast } from '@/lib/dashboard/ToastContext';
+import { useToast } from '@/lib/client/ToastContext';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
-import { ApiClientError } from '@/lib/dashboard/api-client';
-import { fetchSavedReports, deleteSavedReport, fetchTemplates, type SavedReportDTO, type TemplateSummary } from '@/lib/dashboard/report-builder-api';
+import { ApiClientError } from '@/lib/client/api-client';
+import { fetchSavedReports, deleteSavedReport, fetchTemplates, type SavedReportDTO, type TemplateSummary } from '@/lib/client/report-builder-api';
 import { formatDate } from '@/lib/utils/format';
 
 export function MyReports({ fyList, onOpen }: { fyList: { id: string; label: string }[]; onOpen: (report: SavedReportDTO) => void }) {

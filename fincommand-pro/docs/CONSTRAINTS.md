@@ -75,7 +75,7 @@ Zoho's Sales by Customer report gives every amount already in the organisation's
 ## 2. Principle, not (yet) an enforced check — verify before assuming
 
 ### ⚠️ No hardcoded layout math in exports
-PDF export (`lib/exports/pdf.ts`) does use `doc.internal.pageSize.getHeight()` and `lastAutoTable.finalY` for dynamic vertical flow — verified, this part holds. Page-margin constants (e.g. `doc.line(14, …, 196, …)`) are fixed x-coordinates, which is normal for PDF margins, not the kind of brittle "assumed content height" hardcoding this constraint is meant to prevent. Treat "no hardcoded bounds" as applying to *content-dependent* positioning (table heights, row counts, section breaks), not page margins.
+PDF export (`lib/client/exports/pdf.ts`) does use `doc.internal.pageSize.getHeight()` and `lastAutoTable.finalY` for dynamic vertical flow — verified, this part holds. Page-margin constants (e.g. `doc.line(14, …, 196, …)`) are fixed x-coordinates, which is normal for PDF margins, not the kind of brittle "assumed content height" hardcoding this constraint is meant to prevent. Treat "no hardcoded bounds" as applying to *content-dependent* positioning (table heights, row counts, section breaks), not page margins.
 
 ## 3. Domain constraints (finance/statutory, not code-enforced but must be respected in any output)
 

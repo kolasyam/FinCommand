@@ -41,7 +41,7 @@ The picker and inspector offer a metric only where it can really fill the widget
 - **Sharing**: `custom_tabs.visibility` = company / roles / private, plus `shared_roles`. It is enforced server-side in `resolveTabKey()` / `loadCustomTabs()` / `getCustomTab()` (`lib/dashboard-builder/tab-access.ts`). Admin and the creator always see the tab.
 
 ### 1.6 Exporting the on-screen layout
-`lib/exports/dashboard-layout-export.ts`:
+`lib/client/exports/dashboard-layout-export.ts`:
 - `buildLayoutExportModel()` is a pure function: widgets plus the exact resolved metrics the grid rendered go in, typed blocks come out. An export can therefore never show a different number than the screen.
 - The PDF renderer keeps the grid's side-by-side placement and embeds each chart's own canvas as a JPEG capped at 1400 px (a raw PNG per chart made a one-page export about 3 MB).
 - The Excel renderer writes real numbers with native number formats.
@@ -53,7 +53,7 @@ The picker and inspector offer a metric only where it can really fill the widget
 ### 2.1 Mixed bar + line charts with a second axis
 - `WidgetSeriesBinding.renderAs` (bar/line) and `.axis` (left/right) are parsed and stored. `renderAs` was already in the schema but unused.
 - `MultiSeriesWidget` now renders through react-chartjs-2's generic `<Chart>`. Each series is drawn as bars or a line against `y` or `y1`. Each axis is formatted by the first series plotted on it, and the right axis draws no gridlines.
-- `BarController` and `LineController` are registered explicitly in `lib/charts/register.ts`.
+- `BarController` and `LineController` are registered explicitly in `lib/client/chart-register.ts`.
 - Lines are drawn over bars. The legend and tooltip keep series order, not draw order.
 - When "Stack series" is on, only bars on the same axis stack; a line is never added on top of the bars it is read against.
 - A lone right-axis series falls back to the left axis.

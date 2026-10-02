@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { isEmail, isCIN, isPAN, isNotFutureDate, isStrongPassword } from '@/lib/validations/common';
-import { storeSession } from '@/lib/dashboard/api-client';
+import { storeSession } from '@/lib/client/api-client';
 import { PasswordInput } from '@/components/ui/PasswordInput';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { IncorporationDateInput } from '@/components/ui/IncorporationDateInput';

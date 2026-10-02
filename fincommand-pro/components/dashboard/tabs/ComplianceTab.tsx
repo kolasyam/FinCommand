@@ -1,6 +1,6 @@
 'use client';
 
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
+import { useDashboard } from '@/lib/client/DashboardContext';
 import { DownloadBar } from '../DownloadBar';
 import { getFyLabel, formatDate } from '@/lib/utils/format';
 import { ThreeYearBanner } from '../ThreeYearFrame';

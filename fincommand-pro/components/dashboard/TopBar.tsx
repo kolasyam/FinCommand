@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
-import { useToast } from '@/lib/dashboard/ToastContext';
+import { useDashboard } from '@/lib/client/DashboardContext';
+import { useToast } from '@/lib/client/ToastContext';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { AddFyModal } from '@/components/dashboard/AddFyModal';
 import { getUnitHeader } from '@/lib/utils/format';

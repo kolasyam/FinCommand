@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useToast } from '@/lib/dashboard/ToastContext';
-import { ApiClientError } from '@/lib/dashboard/api-client';
+import { useToast } from '@/lib/client/ToastContext';
+import { ApiClientError } from '@/lib/client/api-client';
 import {
   fetchTemplateStructure, fetchLedgerOptions, setLineLedgers,
   type RealLedgerOption,
-} from '@/lib/dashboard/report-builder-api';
+} from '@/lib/client/report-builder-api';
 import { SECTION_LABELS, type ReportLine, type LineLedgerMap, type ReportTemplate } from '@/lib/financial/report-builder-engine';
 import type { Section } from '@/lib/financial/tb-engine';
 

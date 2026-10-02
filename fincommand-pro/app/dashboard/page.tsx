@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { DashboardProvider, useDashboard } from '@/lib/dashboard/DashboardContext';
-import { ToastProvider } from '@/lib/dashboard/ToastContext';
-import { TabCustomizationsProvider } from '@/lib/dashboard/TabCustomizationsContext';
-import { CustomTabsProvider } from '@/lib/dashboard/CustomTabsContext';
+import { DashboardProvider, useDashboard } from '@/lib/client/DashboardContext';
+import { ToastProvider } from '@/lib/client/ToastContext';
+import { TabCustomizationsProvider } from '@/lib/client/TabCustomizationsContext';
+import { CustomTabsProvider } from '@/lib/client/CustomTabsContext';
 import { TopBar } from '@/components/dashboard/TopBar';
 import { PeriodBar } from '@/components/dashboard/PeriodBar';
 import { SidebarNav } from '@/components/dashboard/SidebarNav';
@@ -32,9 +32,9 @@ import { BoardPackTab } from '@/components/dashboard/tabs/BoardPackTab';
 import { ReportBuilderTab } from '@/components/dashboard/tabs/ReportBuilderTab';
 import { MyDashboardTab } from '@/components/dashboard/tabs/MyDashboardTab';
 import { UploadTab } from '@/components/dashboard/tabs/UploadTab';
-import { exportAllPdf } from '@/lib/exports/pdf';
-import { exportAllXlsx } from '@/lib/exports/xlsx';
-import { useToast } from '@/lib/dashboard/ToastContext';
+import { exportAllPdf } from '@/lib/client/exports/pdf';
+import { exportAllXlsx } from '@/lib/client/exports/xlsx';
+import { useToast } from '@/lib/client/ToastContext';
 
 function EmptyStateCard({
   title = 'Please upload Trial Balance data to unlock features',

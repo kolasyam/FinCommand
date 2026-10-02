@@ -26,7 +26,7 @@
 import type {
   BSResult, CashFlowResult, RatiosResult, TreasuryResult, MISColumn, PLResult, AggregatedNote,
 } from './tb-engine';
-import type { ReportBundle } from '@/lib/dashboard/types';
+import type { ReportBundle } from '@/lib/types/dashboard';
 import { isBSSection } from './note-catalog';
 
 // ── Widget shape ────────────────────────────────────────────────────────

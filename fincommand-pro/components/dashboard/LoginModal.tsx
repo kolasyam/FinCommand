@@ -2,9 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
-import { useToast } from '@/lib/dashboard/ToastContext';
-import { getStoredUser } from '@/lib/dashboard/api-client';
+import { useDashboard } from '@/lib/client/DashboardContext';
+import { useToast } from '@/lib/client/ToastContext';
+import { getStoredUser } from '@/lib/client/api-client';
 import { PasswordInput } from '@/components/ui/PasswordInput';
 
 const passInputStyle: React.CSSProperties = {

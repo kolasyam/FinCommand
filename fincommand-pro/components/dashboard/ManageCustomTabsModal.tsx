@@ -15,12 +15,12 @@
  * that shows how many saved views go with it.
  */
 import { useState } from 'react';
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
-import { useToast } from '@/lib/dashboard/ToastContext';
-import { useCustomTabs } from '@/lib/dashboard/CustomTabsContext';
-import { ApiClientError } from '@/lib/dashboard/api-client';
+import { useDashboard } from '@/lib/client/DashboardContext';
+import { useToast } from '@/lib/client/ToastContext';
+import { useCustomTabs } from '@/lib/client/CustomTabsContext';
+import { ApiClientError } from '@/lib/client/api-client';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
-import type { CustomTabDTO } from '@/lib/dashboard/custom-tabs-api';
+import type { CustomTabDTO } from '@/lib/client/custom-tabs-api';
 import { DASHBOARD_TEMPLATES } from '@/lib/dashboard-builder/templates';
 import {
   SHAREABLE_ROLES, ROLE_LABELS, describeSharing, type TabVisibility,

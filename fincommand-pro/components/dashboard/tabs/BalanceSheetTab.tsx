@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
+import { useDashboard } from '@/lib/client/DashboardContext';
 import { Kpi } from '../Kpi';
 import { DownloadBar } from '../DownloadBar';
 import { fn, numTone, getFyLabel, getFyShortLabel, getUnitHeader, unitSuffix, formatDate, cyYearFromFy, formatChg, type DisplayUnit } from '@/lib/utils/format';
 import { getCurrencyMeta } from '@/lib/services/currency';
 import { resolvePeriod, type AggregatedNote, type PeriodParams } from '@/lib/financial/tb-engine';
-import type { FyLike } from '@/lib/dashboard/types';
+import type { FyLike } from '@/lib/types/dashboard';
 import { ThreeYearBanner, ThreeYearHeader, ThreeYearRow } from '../ThreeYearFrame';
 import { CustomizableTabPanel } from './dashboard-builder/CustomizableTabPanel';
 import { BALANCE_SHEET_DEFAULT_WIDGETS } from '@/lib/dashboard-builder/default-layout';

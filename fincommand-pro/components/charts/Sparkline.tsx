@@ -10,7 +10,7 @@
  */
 import { useEffect } from 'react';
 import { Line } from 'react-chartjs-2';
-import { ensureChartsRegistered } from '@/lib/charts/register';
+import { ensureChartsRegistered } from '@/lib/client/chart-register';
 
 export function Sparkline({ values, color = '#378ADD', height = 26, width = 84 }: { values: number[]; color?: string; height?: number; width?: number }) {
   useEffect(() => { ensureChartsRegistered(); }, []);

@@ -40,7 +40,7 @@ import {
   NUMERIC_LEDGER_FIELDS, NUMERIC_ONLY_OPERATORS, TEXT_ONLY_OPERATORS, VALUELESS_OPERATORS,
   type LedgerMetricSpec, type LedgerFilterCondition, type LedgerAggregation,
 } from './tb-engine';
-import type { ReportBundle } from '@/lib/dashboard/types';
+import type { ReportBundle } from '@/lib/types/dashboard';
 
 // ── Expression tree ──────────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { apiFetch, ApiClientError, getStoredUser } from '@/lib/dashboard/api-client';
+import { apiFetch, ApiClientError, getStoredUser } from '@/lib/client/api-client';
 
 /**
  * "Zoho data coverage": which of Zoho Books' individual records (invoices, bills,

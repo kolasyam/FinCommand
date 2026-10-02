@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
+import { useDashboard } from '@/lib/client/DashboardContext';
 import { fl as flRaw, pct, numTone, getUnitHeader } from '@/lib/utils/format';
 import { DownloadBar } from '../DownloadBar';
 

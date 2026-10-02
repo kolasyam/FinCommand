@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { LandingLoginModal } from './LandingLoginModal';
-import { getStoredUser, clearSession, type StoredUser } from '@/lib/dashboard/api-client';
+import { getStoredUser, clearSession, type StoredUser } from '@/lib/client/api-client';
 
 const FEATURES = [
   { title: 'IND AS Schedule III', desc: 'Balance Sheet, P&L, and Notes to Accounts computed to Schedule III of the Companies Act, from a single Trial Balance upload.' },

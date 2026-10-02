@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiFetch, ApiClientError, clearSession, getRefreshToken, getToken } from '@/lib/dashboard/api-client';
+import { apiFetch, ApiClientError, clearSession, getRefreshToken, getToken } from '@/lib/client/api-client';
 import { formatDate } from '@/lib/utils/format';
 import { LoadingBar, ErrorBanner } from '@/components/ui/StatusBanners';
 import { CustomSelect } from '@/components/ui/CustomSelect';

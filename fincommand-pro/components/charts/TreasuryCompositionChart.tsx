@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { Doughnut } from 'react-chartjs-2';
-import { ensureChartsRegistered } from '@/lib/charts/register';
+import { ensureChartsRegistered } from '@/lib/client/chart-register';
 
 const COLORS = ['#EF9F27', '#378ADD', '#93C5FD', '#1D9E75', '#5DCAA5'];
 

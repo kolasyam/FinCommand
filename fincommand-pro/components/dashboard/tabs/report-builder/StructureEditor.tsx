@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { useToast } from '@/lib/dashboard/ToastContext';
-import { ApiClientError } from '@/lib/dashboard/api-client';
+import { useToast } from '@/lib/client/ToastContext';
+import { ApiClientError } from '@/lib/client/api-client';
 import {
   fetchTemplateStructure, saveStructure, fetchLedgerOptions, renameTemplate as renameTemplateApi,
   type StructureLinePayload,
-} from '@/lib/dashboard/report-builder-api';
+} from '@/lib/client/report-builder-api';
 import {
   validateTemplate, lineDepth, LINE_TYPE_LABELS,
   type LineType, type ReportTemplate, type LineLedgerMap, type ValidationResult,

@@ -8,7 +8,7 @@
  * here instead of a literal, since it's one of potentially many custom tabs
  * rather than the single fixed 'my-dashboard'.
  */
-import { useCustomTabs } from '@/lib/dashboard/CustomTabsContext';
+import { useCustomTabs } from '@/lib/client/CustomTabsContext';
 import { CustomizableTabPanel } from './dashboard-builder/CustomizableTabPanel';
 
 export function CustomTab({ tabKey }: { tabKey: string }) {

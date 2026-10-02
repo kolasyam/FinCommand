@@ -1,9 +1,9 @@
 'use client';
 
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
-import { useToast } from '@/lib/dashboard/ToastContext';
-import { exportSectionPdf } from '@/lib/exports/pdf';
-import { exportSectionXlsx } from '@/lib/exports/xlsx';
+import { useDashboard } from '@/lib/client/DashboardContext';
+import { useToast } from '@/lib/client/ToastContext';
+import { exportSectionPdf } from '@/lib/client/exports/pdf';
+import { exportSectionXlsx } from '@/lib/client/exports/xlsx';
 
 export function DownloadBar({ title, subtitle, section, compareEnabled = true }: { title: string; subtitle: string; section: string; compareEnabled?: boolean }) {
   const { bundle, dataMode, user, displayUnit, presentationCurrency } = useDashboard();

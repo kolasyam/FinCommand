@@ -20,10 +20,10 @@
 import { useEffect } from 'react';
 import { Bar, Line, Doughnut, Chart } from 'react-chartjs-2';
 import type { ChartData, ChartOptions } from 'chart.js';
-import { ensureChartsRegistered } from '@/lib/charts/register';
+import { ensureChartsRegistered } from '@/lib/client/chart-register';
 import { fn, frRaw, pct, fx, signedPct, numTone, benchmarkTone, formatChg, type DisplayUnit, type CurrencyCode } from '@/lib/utils/format';
 import { getCurrencyMeta } from '@/lib/services/currency';
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
+import { useDashboard } from '@/lib/client/DashboardContext';
 import { findMetricCatalogEntry, thresholdStatus, ratioOf, type DashboardWidget, type ResolvedMetric } from '@/lib/financial/dashboard-builder-engine';
 import { isBSSection } from '@/lib/financial/note-catalog';
 import { jumpToNoteCard } from '@/lib/utils/note-navigation';

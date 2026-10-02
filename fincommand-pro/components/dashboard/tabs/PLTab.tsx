@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
+import { useDashboard } from '@/lib/client/DashboardContext';
 import { Kpi } from '../Kpi';
 import { DownloadBar } from '../DownloadBar';
 import { fn, frRaw, pct, numTone, kpiTone, getFyLabel, getFyShortLabel, getUnitHeader, type DisplayUnit } from '@/lib/utils/format';

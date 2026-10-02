@@ -4,7 +4,7 @@ import {
   type FormulaExpr, type CustomMetricDefinition, type Operand, type ChainStep,
 } from '@/lib/financial/custom-metric-engine';
 import { isKnownMetricKey, resolveMetric } from '@/lib/financial/dashboard-builder-engine';
-import type { ReportBundle } from '@/lib/dashboard/types';
+import type { ReportBundle } from '@/lib/types/dashboard';
 import type { MISColumn } from '@/lib/financial/tb-engine';
 
 function misColumn(rev: number, cos: number, ebitda: number, pat: number): MISColumn {

@@ -40,6 +40,12 @@ uploads/
 # remediation this needs.
 zoho_debug_*.json
 
+# Throwaway debugging scripts (run once against real data, then deleted)
+_diag*
+
+# Python cache
+__pycache__/
+
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts

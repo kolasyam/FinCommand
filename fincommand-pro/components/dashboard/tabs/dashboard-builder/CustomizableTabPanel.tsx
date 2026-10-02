@@ -18,10 +18,10 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
-import { useToast } from '@/lib/dashboard/ToastContext';
-import { useTabCustomization } from '@/lib/dashboard/TabCustomizationsContext';
-import { ApiClientError } from '@/lib/dashboard/api-client';
+import { useDashboard } from '@/lib/client/DashboardContext';
+import { useToast } from '@/lib/client/ToastContext';
+import { useTabCustomization } from '@/lib/client/TabCustomizationsContext';
+import { ApiClientError } from '@/lib/client/api-client';
 import { resolveAnyMetric } from '@/lib/financial/custom-metric-engine';
 import { WIDGET_MIN_SERIES, PERIOD_SUMMARY_METRIC_KEYS, findMetricCatalogEntry, type DashboardWidget, type TabKey } from '@/lib/financial/dashboard-builder-engine';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
@@ -34,7 +34,7 @@ import { getFyLabel, getFyShortLabel } from '@/lib/utils/format';
 import {
   buildLayoutExportModel, exportDashboardLayoutPdf, exportDashboardLayoutXlsx, exportDashboardLayoutPptx,
   exportDashboardLayoutCsv, exportDashboardLayoutPng, type LayoutExportMeta,
-} from '@/lib/exports/dashboard-layout-export';
+} from '@/lib/client/exports/dashboard-layout-export';
 
 // Mirrors ROLE_SETS.canWrite in lib/auth/permissions.ts (server-only — not
 // safe to import into a client component; same precedent as NotesTab.tsx's

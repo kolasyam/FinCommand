@@ -9,7 +9,7 @@
  */
 import { useEffect } from 'react';
 import { Bar } from 'react-chartjs-2';
-import { ensureChartsRegistered } from '@/lib/charts/register';
+import { ensureChartsRegistered } from '@/lib/client/chart-register';
 import { fl, type DisplayUnit } from '@/lib/utils/format';
 
 export function MisTrendChart({

@@ -4,7 +4,7 @@
  * Shared helpers for the 3-Year comparison view used across all dashboard tabs.
  */
 
-import type { ThreeYearEntry } from '@/lib/dashboard/types';
+import type { ThreeYearEntry } from '@/lib/types/dashboard';
 
 /**
  * Banner shown at the top of every 3-year tab when fewer than 3 years have data.

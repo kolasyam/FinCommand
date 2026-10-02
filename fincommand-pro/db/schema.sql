@@ -1,11 +1,12 @@
 -- ═══════════════════════════════════════════════════════════
 --  FinCommand Pro — PostgreSQL Schema (Neon-compatible)
 --  IND AS · Schedule III · CFO/CEO Financial Dashboard
---  Ported verbatim from backend/db/schema.sql — no changes.
 --
---  FROZEN BASELINE (2026-09-19). Do not add schema changes here any more:
---  put them in a new numbered file in db/migrations/ and run
---  `npm run db:migrate` (db:init runs this file, then the migrations).
+--  FROZEN BASELINE (2026-09-19) — NOT the current schema. The live schema is
+--  this file + every file in db/migrations/ (0000 onward), applied in order.
+--  Do not add schema changes here: put them in a new numbered migration and
+--  run `npx tsx db/migrate.ts --target=branch` (then --target=main).
+--  db:init runs this file, then the migrations.
 -- ═══════════════════════════════════════════════════════════
 
 -- Enable UUID extension

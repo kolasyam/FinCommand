@@ -1,14 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useToast } from '@/lib/dashboard/ToastContext';
+import { useToast } from '@/lib/client/ToastContext';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import type { FormatPreset } from '@/lib/financial/report-builder-engine';
 import {
   fetchTemplates, createBlankTemplate, cloneTemplate, createFromPreset, deleteTemplate,
   type TemplateSummary,
-} from '@/lib/dashboard/report-builder-api';
-import { ApiClientError } from '@/lib/dashboard/api-client';
+} from '@/lib/client/report-builder-api';
+import { ApiClientError } from '@/lib/client/api-client';
 
 const OVERLAY_STYLE: React.CSSProperties = {
   position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center',

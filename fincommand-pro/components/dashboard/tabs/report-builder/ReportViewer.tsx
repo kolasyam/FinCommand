@@ -1,15 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useToast } from '@/lib/dashboard/ToastContext';
-import { ApiClientError } from '@/lib/dashboard/api-client';
+import { useToast } from '@/lib/client/ToastContext';
+import { ApiClientError } from '@/lib/client/api-client';
 import { fl as flRaw, pct } from '@/lib/utils/format';
 import {
   fetchTemplateStructure, runReport, createSavedReport, updateSavedReport,
   type SavedReportDTO,
-} from '@/lib/dashboard/report-builder-api';
+} from '@/lib/client/report-builder-api';
 import type { ReportRow, ReportTemplate } from '@/lib/financial/report-builder-engine';
-import type { FyLike } from '@/lib/dashboard/types';
+import type { FyLike } from '@/lib/types/dashboard';
 
 function monthLabel(fy: FyLike, index: number): string {
   const start = new Date(fy.start_date);

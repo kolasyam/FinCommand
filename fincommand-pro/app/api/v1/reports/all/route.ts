@@ -24,7 +24,7 @@ import { afterResponse } from '@/lib/cache/after-response';
 import { loadCustomMetricDefinitions } from '@/lib/db/queries/custom-metrics';
 import { computeLedgerMetric, priorPeriodOf, type PeriodParams, type LedgerMetricSpec } from '@/lib/financial/tb-engine';
 import type { CustomMetricDefinition } from '@/lib/financial/custom-metric-engine';
-import type { CustomMetricValue, PriorPeriodBundle } from '@/lib/dashboard/types';
+import type { CustomMetricValue, PriorPeriodBundle } from '@/lib/types/dashboard';
 
 export const runtime = 'nodejs';
 

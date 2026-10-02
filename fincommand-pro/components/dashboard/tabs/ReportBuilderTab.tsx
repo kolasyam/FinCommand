@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
+import { useDashboard } from '@/lib/client/DashboardContext';
 import { TemplateList } from './report-builder/TemplateList';
 import { StructureEditor } from './report-builder/StructureEditor';
 import { LedgerMapper } from './report-builder/LedgerMapper';
 import { ReportViewer } from './report-builder/ReportViewer';
 import { MyReports } from './report-builder/MyReports';
-import type { SavedReportDTO } from '@/lib/dashboard/report-builder-api';
+import type { SavedReportDTO } from '@/lib/client/report-builder-api';
 
 type Tab = 'formats' | 'reports';
 type View =

@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { Line } from 'react-chartjs-2';
-import { ensureChartsRegistered } from '@/lib/charts/register';
+import { ensureChartsRegistered } from '@/lib/client/chart-register';
 
 export function MarginTrendChart({ labels, gm, em, pm }: { labels: string[]; gm: number[]; em: number[]; pm: number[] }) {
   useEffect(() => { ensureChartsRegistered(); }, []);

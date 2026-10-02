@@ -1,7 +1,7 @@
 'use client';
 
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
-import { useCustomTabs } from '@/lib/dashboard/CustomTabsContext';
+import { useDashboard } from '@/lib/client/DashboardContext';
+import { useCustomTabs } from '@/lib/client/CustomTabsContext';
 
 interface NavItem { id: string; label: string; icon: string; badge?: string }
 interface NavGroup { label: string; icon: string; items: NavItem[] }

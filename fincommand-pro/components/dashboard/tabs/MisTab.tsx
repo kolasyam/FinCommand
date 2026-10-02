@@ -1,6 +1,6 @@
 'use client';
 
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
+import { useDashboard } from '@/lib/client/DashboardContext';
 import { Kpi } from '../Kpi';
 import { fl as flRaw, fn as fnRaw, pct, signedPct, numTone, kpiTone, getFyShortLabel, getUnitHeader, unitSuffix } from '@/lib/utils/format';
 import { DownloadBar } from '../DownloadBar';

@@ -14,11 +14,11 @@
  * bundle (ledger metrics are computed server-side inside it).
  */
 import { useEffect, useState } from 'react';
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
-import { useToast } from '@/lib/dashboard/ToastContext';
-import { useCustomMetricsList } from '@/lib/dashboard/TabCustomizationsContext';
-import { ApiClientError } from '@/lib/dashboard/api-client';
-import { fetchCustomMetrics, deleteCustomMetric as apiDeleteCustomMetric } from '@/lib/dashboard/dashboard-builder-api';
+import { useDashboard } from '@/lib/client/DashboardContext';
+import { useToast } from '@/lib/client/ToastContext';
+import { useCustomMetricsList } from '@/lib/client/TabCustomizationsContext';
+import { ApiClientError } from '@/lib/client/api-client';
+import { fetchCustomMetrics, deleteCustomMetric as apiDeleteCustomMetric } from '@/lib/client/dashboard-builder-api';
 import { describeCustomMetric, metricKind, type CustomMetricListItem } from '@/lib/financial/custom-metric-engine';
 import { CustomMetricBuilder } from './tabs/dashboard-builder/CustomMetricBuilder';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';

@@ -1,7 +1,7 @@
 # CUSTOM-DASHBOARD-TABS.md — Implementation Log
 
 > [!NOTE]
-> This is an implementation log, not a living reference — it records what was built, why, and how it was verified, on the date below. For the ongoing architecture reference, see `fincommand-readme.md` and `HANDOVER.md`. For the competitive research that motivated this feature, see `ledgerframe-integration-blueprint.md`.
+> This is an implementation log, not a living reference — it records what was built, why, and how it was verified, on the date below. For the ongoing architecture reference, see `PLATFORM-REFERENCE.md` and `HANDOVER.md`. For the competitive research that motivated this feature, see `ledgerframe-integration-blueprint.md`.
 
 **Date**: 2026-09-17
 **Feature**: Custom dashboard tabs — a company can create its own named dashboard tab (beyond the 9 built-in customizable ones), add widgets to it, and attach either built-in or brand-new custom-metric formulas to those widgets. Closes the gap identified in `ledgerframe-integration-blueprint.md` §3–5 against the reference app "Ledgerframe."
@@ -69,8 +69,8 @@ export function isTabKey(v: unknown): v is FixedTabKey { /* unchanged body */ }
 
 ### 1.6 Client layer (new)
 
-- `lib/dashboard/custom-tabs-api.ts` — thin `apiFetch` wrappers (`fetchCustomTabs`, `createCustomTab`, `renameCustomTab`, `deleteCustomTab`).
-- `lib/dashboard/CustomTabsContext.tsx` — sibling to `TabCustomizationsContext.tsx`; fetches once per session, fails silently toward `[]` (same convention), optimistic local updates on create/rename/delete.
+- `lib/client/custom-tabs-api.ts` — thin `apiFetch` wrappers (`fetchCustomTabs`, `createCustomTab`, `renameCustomTab`, `deleteCustomTab`).
+- `lib/client/CustomTabsContext.tsx` — sibling to `TabCustomizationsContext.tsx`; fetches once per session, fails silently toward `[]` (same convention), optimistic local updates on create/rename/delete.
 - `components/dashboard/tabs/CustomTab.tsx` — thin wrapper around `CustomizableTabPanel` (`defaultWidgets={[]}`, `fixedView={null}`), with one addition beyond the trivial case (`MyDashboardTab.tsx`): a distinct "This custom tab was removed" message when the tab list has loaded and the requested key isn't in it — a deliberate departure from the usual silent-fail-toward-empty convention, because that convention is right for a *network* failure and wrong for "this entity no longer exists."
 - `components/dashboard/ManageCustomTabsModal.tsx` — the single list-and-create surface (deliberately not split into two flows) that avoids the exact "eight abandoned Untitled-dashboard entries, no list view" failure mode found live in Ledgerframe during the audit phase: the create form POSTs nothing until an explicit "Create" click, and every existing tab is listed with a real `layoutCount` next to its name so deleting a tab several teammates have personalized isn't a silent surprise.
 - `app/dashboard/page.tsx` — `renderTab()` gained a fallback branch (`activeTab.startsWith('custom-') ? <CustomTab tabKey={activeTab} /> : null`), `CustomTabsProvider` added to the provider tree, `ManageCustomTabsModal` wired to a new `manageCustomTabsOpen` state.

@@ -1,6 +1,6 @@
 'use client';
 
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
+import { useDashboard } from '@/lib/client/DashboardContext';
 import { DownloadBar } from '../DownloadBar';
 import { fl as flRaw, fn as fnRaw, pct, numTone, getFyLabel, getUnitHeader, unitSuffix } from '@/lib/utils/format';
 import { getCurrencyMeta } from '@/lib/services/currency';

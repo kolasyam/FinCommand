@@ -1,8 +1,8 @@
 'use client';
 
-import { useDashboard, type Granularity } from '@/lib/dashboard/DashboardContext';
+import { useDashboard, type Granularity } from '@/lib/client/DashboardContext';
 import type { Period, YearType } from '@/lib/financial/tb-engine';
-import type { FyLike } from '@/lib/dashboard/types';
+import type { FyLike } from '@/lib/types/dashboard';
 
 const QUARTERS: { key: Period; sub: string }[] = [
   { key: 'Q1', sub: 'Apr-Jun' }, { key: 'Q2', sub: 'Jul-Sep' }, { key: 'Q3', sub: 'Oct-Dec' }, { key: 'Q4', sub: 'Jan-Mar' },

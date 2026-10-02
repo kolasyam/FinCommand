@@ -2,7 +2,7 @@ import {
   resolveMetric, isValidGridBounds, parseWidgetsInput, METRIC_CATALOG, isTabKey, TAB_KEYS,
   thresholdStatus, ratioOf, WIDGET_KINDS, WIDGET_MIN_SERIES, WIDGET_MAX_SERIES,
 } from '@/lib/financial/dashboard-builder-engine';
-import type { ReportBundle } from '@/lib/dashboard/types';
+import type { ReportBundle } from '@/lib/types/dashboard';
 import type { MISColumn, AggregatedNote } from '@/lib/financial/tb-engine';
 
 function misColumn(rev: number, cos: number, ebitda: number, pat: number): MISColumn {

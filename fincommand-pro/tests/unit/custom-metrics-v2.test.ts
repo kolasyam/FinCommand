@@ -6,7 +6,7 @@ import {
   type FormulaExpr, type CustomMetricDefinition, type ChainStep,
 } from '@/lib/financial/custom-metric-engine';
 import { isKnownMetricKey } from '@/lib/financial/dashboard-builder-engine';
-import type { ReportBundle } from '@/lib/dashboard/types';
+import type { ReportBundle } from '@/lib/types/dashboard';
 import type { MISColumn } from '@/lib/financial/tb-engine';
 
 function col(rev: number, emp: number): MISColumn {

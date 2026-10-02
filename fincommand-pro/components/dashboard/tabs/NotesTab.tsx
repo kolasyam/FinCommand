@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
-import { useToast } from '@/lib/dashboard/ToastContext';
-import { apiFetch, ApiClientError } from '@/lib/dashboard/api-client';
+import { useDashboard } from '@/lib/client/DashboardContext';
+import { useToast } from '@/lib/client/ToastContext';
+import { apiFetch, ApiClientError } from '@/lib/client/api-client';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { Kpi } from '../Kpi';
 import { DownloadBar } from '../DownloadBar';

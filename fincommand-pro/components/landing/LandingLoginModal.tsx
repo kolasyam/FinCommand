@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { storeSession, type StoredUser } from '@/lib/dashboard/api-client';
+import { storeSession, type StoredUser } from '@/lib/client/api-client';
 import { PasswordInput } from '@/components/ui/PasswordInput';
 
 const passInputStyle: React.CSSProperties = {

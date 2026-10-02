@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import * as ExcelJS from 'exceljs';
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
-import { useToast } from '@/lib/dashboard/ToastContext';
-import { apiFetch, getToken, getRefreshToken, ApiClientError } from '@/lib/dashboard/api-client';
+import { useDashboard } from '@/lib/client/DashboardContext';
+import { useToast } from '@/lib/client/ToastContext';
+import { apiFetch, getToken, getRefreshToken, ApiClientError } from '@/lib/client/api-client';
 import ZohoDataPanel from '@/components/dashboard/ZohoDataPanel';
 import { CURRENCY_META, SUPPORTED_CURRENCIES, isCurrencyCode, type CurrencyCode } from '@/lib/services/currency';
 

@@ -11,11 +11,11 @@ import JSZip from 'jszip';
 import {
   buildLayoutExportModel, buildDashboardLayoutXlsx, buildDashboardLayoutCsv, buildDashboardLayoutPptx,
   formatNum, orderWidgets, ratioChangeText, CSV_HEADER, type ExportBlock,
-} from '@/lib/exports/dashboard-layout-export';
+} from '@/lib/client/exports/dashboard-layout-export';
 import type { ResolvedMetric } from '@/lib/financial/dashboard-builder-engine';
 import { resolveAnyMetric, type CustomMetricDefinition } from '@/lib/financial/custom-metric-engine';
 import { PERIOD_SUMMARY_METRIC_KEYS, type DashboardWidget, type WidgetKind } from '@/lib/financial/dashboard-builder-engine';
-import type { ReportBundle } from '@/lib/dashboard/types';
+import type { ReportBundle } from '@/lib/types/dashboard';
 import type { MISColumn } from '@/lib/financial/tb-engine';
 
 function col(rev: number, emp: number): MISColumn {

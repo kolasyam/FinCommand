@@ -1,7 +1,7 @@
 # HANDOVER.md — Project Continuity & Current State
 
 > [!NOTE]
-> This is a living document. Update it in place when the platform's state materially changes — don't let it go stale. See `fincommand-readme.md` (project root) for the deeper architecture/behavior reference this file summarizes from.
+> This is a living document. Update it in place when the platform's state materially changes — don't let it go stale. See `docs/PLATFORM-REFERENCE.md` for the deeper architecture/behavior reference this file summarizes from.
 
 ## 1. Stack & Server
 

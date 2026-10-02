@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
+import { useDashboard } from '@/lib/client/DashboardContext';
 import { Kpi } from '../Kpi';
 import { DownloadBar } from '../DownloadBar';
 import { TreasuryCompositionChart } from '@/components/charts/TreasuryCompositionChart';

@@ -30,7 +30,7 @@ import type {
   MISColumn, MISResult, AggregatedNote, BSResult, PLResult, TreasuryEntry, TreasuryResult,
   CashFlowResult, RatiosResult, TopCustomer,
 } from './tb-engine';
-import type { ReportBundle, ThreeYearBundle, ThreeYearEntry } from '@/lib/dashboard/types';
+import type { ReportBundle, ThreeYearBundle, ThreeYearEntry } from '@/lib/types/dashboard';
 
 /** Null-safe multiply — every optional monetary field (OCI, EPS, ocf_to_pat, ...) stays null when it was null; never turns "not derivable" into a fabricated 0. */
 function cv(n: number | null | undefined, rate: number): number | null {

@@ -1,7 +1,7 @@
 # CUSTOM-METRICS-UPGRADE.md — Implementation Log
 
 > [!NOTE]
-> This is an implementation log, not a living reference — it records what was built, why, and how it was verified, on the date below. For the ongoing architecture reference, see `fincommand-readme.md` and `HANDOVER.md`. For the competitive research that motivated this feature, see `ledgerframe-integration-blueprint.md` §3.2 item 1 and §3.2.2 ("used by" guard).
+> This is an implementation log, not a living reference — it records what was built, why, and how it was verified, on the date below. For the ongoing architecture reference, see `PLATFORM-REFERENCE.md` and `HANDOVER.md`. For the competitive research that motivated this feature, see `ledgerframe-integration-blueprint.md` §3.2 item 1 and §3.2.2 ("used by" guard).
 
 **Date**: 2026-09-17
 **Feature**: Closes the two real gaps `ledgerframe-integration-blueprint.md` identified in the existing custom-metric builder: (1) the formula builder was hard-capped at exactly two operands (`Metric A [op] Metric B`), and (2) there was no way to browse, edit, or safely delete a saved custom metric anywhere in the app.

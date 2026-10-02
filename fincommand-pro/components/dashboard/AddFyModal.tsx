@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useDashboard } from '@/lib/dashboard/DashboardContext';
-import { useToast } from '@/lib/dashboard/ToastContext';
-import { apiFetch, ApiClientError } from '@/lib/dashboard/api-client';
+import { useDashboard } from '@/lib/client/DashboardContext';
+import { useToast } from '@/lib/client/ToastContext';
+import { apiFetch, ApiClientError } from '@/lib/client/api-client';
 import { DatePicker } from '@/components/ui/DatePicker';
-import type { FyLike } from '@/lib/dashboard/types';
+import type { FyLike } from '@/lib/types/dashboard';
 
 interface AddFyModalProps {
   open: boolean;
