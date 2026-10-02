@@ -105,17 +105,16 @@ function toHashable(l: NormalizedLedger): HashableLedger {
 
 /** Fingerprint of an already-stored batch, from its own rows (for batches written before 0003). */
 async function hashStoredBatch(client: PoolClient, uploadId: string, currency: string): Promise<string> {
-  const [ledgers, rev, ven, cost] = await Promise.all([
-    // The monthly figures live in ledger_month_amounts (the deferred drop (db/deferred) removes the wide columns).
-    client.query(
+  // One transaction client runs one query at a time, so these go in sequence (pg@9 refuses overlapping queries).
+  // The monthly figures live in ledger_month_amounts (the deferred drop (db/deferred) removes the wide columns).
+  const ledgers = await client.query(
       `SELECT l.*,
               (SELECT array_agg(a.dr ORDER BY a.period_month) FROM ledger_month_amounts a WHERE a.ledger_id = l.id) AS month_dr,
               (SELECT array_agg(a.cr ORDER BY a.period_month) FROM ledger_month_amounts a WHERE a.ledger_id = l.id) AS month_cr
-         FROM tb_ledgers l WHERE l.upload_id=$1`, [uploadId]),
-    client.query(`SELECT zoho_customer_id, customer_name, m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12 FROM tb_customer_revenue WHERE upload_id=$1`, [uploadId]),
-    client.query(`SELECT zoho_vendor_id, vendor_name, m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12 FROM tb_vendor_expense WHERE upload_id=$1`, [uploadId]),
-    client.query(`SELECT zoho_customer_id, customer_name, m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12 FROM tb_customer_cost WHERE upload_id=$1`, [uploadId]),
-  ]);
+         FROM tb_ledgers l WHERE l.upload_id=$1`, [uploadId]);
+  const rev = await client.query(`SELECT zoho_customer_id, customer_name, m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12 FROM tb_customer_revenue WHERE upload_id=$1`, [uploadId]);
+  const ven = await client.query(`SELECT zoho_vendor_id, vendor_name, m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12 FROM tb_vendor_expense WHERE upload_id=$1`, [uploadId]);
+  const cost = await client.query(`SELECT zoho_customer_id, customer_name, m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12 FROM tb_customer_cost WHERE upload_id=$1`, [uploadId]);
   return contentHash({
     currency,
     ledgers: ledgers.rows.map((r) => {
